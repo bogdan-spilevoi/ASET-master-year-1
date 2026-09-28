@@ -1,0 +1,83 @@
+# Inactive example: complete docs/DEPLOYMENT.md before copying into .github/workflows/.
+name: Deploy validated release
+on:
+  workflow_dispatch:
+    inputs:
+      release-digest:
+        description: 'Verified immutable release manifest digest from successful main CI'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deployments
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    if: github.ref == 'refs/heads/main' && vars.DEPLOYMENTS_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_DIGEST: ${{ inputs.release-digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Verify successful main CI and release provenance
+        run: |
+          echo 'Not configured: verify the manifest digest, provenance and successful protected-main CI.' >&2
+          exit 1
+      - name: Authenticate using the cloud provider OIDC action
+        run: |
+          echo 'Not configured: add the pinned provider authentication action.' >&2
+          exit 1
+      - name: Deploy to staging
+        run: |
+          echo 'Not configured: deploy verified image digests with a bounded rollout timeout.' >&2
+          exit 1
+      - name: Smoke tests
+        run: |
+          echo 'Not configured: verify real staging routes and dependencies.' >&2
+          exit 1
+
+  production:
+    needs: staging
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Approval must be configured in GitHub, with self-review disabled.
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_DIGEST: ${{ inputs.release-digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Authenticate and record the previous healthy release
+        run: |
+          echo 'Not configured: authenticate through OIDC and persist previous healthy image digests.' >&2
+          exit 1
+      - name: Deploy the same immutable images
+        id: deploy
+        run: |
+          echo 'Not configured: deploy the staging-verified release with a bounded rollout timeout.' >&2
+          exit 1
+      - name: Health verification
+        id: health
+        run: |
+          echo 'Not configured: check rollout readiness and external health with bounded retries.' >&2
+          exit 1
+      - name: Roll back unhealthy release and verify recovery
+        if: ${{ failure() && (steps.deploy.outcome == 'failure' || steps.health.outcome == 'failure') }}
+        run: |
+          echo 'Not configured: restore the recorded healthy release and verify its health.' >&2
+          exit 1

@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# New pushes must not cancel validation of earlier commits.
+jobs:
+  revisions:
+    name: Select all commits
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.commits.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select every introduced commit and the PR merge candidate
+        id: commits
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $event = Get-Content $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+          $emptyTree = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+          $head = $env:GITHUB_SHA
+          $base = $emptyTree
+          function Test-GitRef([string] $ref) {
+            $PSNativeCommandUseErrorActionPreference = $false
+            git cat-file -e $ref 2>$null
+            return $LASTEXITCODE -eq 0
+          }
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            $head = $event.pull_request.head.sha
+            $base = (git merge-base $event.pull_request.base.sha $head).Trim()
+          } elseif ($env:GITHUB_EVENT_NAME -eq 'merge_group') {
+            $base = $event.merge_group.base_sha
+          } elseif ($event.before -and $event.before -notmatch '^0+$') {
+            # An unreachable pre-force-push tip means rechecking all current history.
+            if (Test-GitRef $event.before) { $base = $event.before }
+          } elseif ((Test-GitRef 'refs/remotes/origin/main') -and
+                    (git rev-parse origin/main).Trim() -ne $head) {
+            $base = (git merge-base origin/main $head).Trim()
+          }
+          $range = if ($base -eq $emptyTree) { $head } else { "$base..$head" }
+          $commits = @(git rev-list --reverse $range)
+          if ($head -notin $commits) { $commits += $head }
+          $include = @($commits | ForEach-Object { @{ sha = $_; base = $base } })
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request' -and $env:GITHUB_SHA -notin $commits) {
+            $include += @{ sha = $env:GITHUB_SHA; base = $event.pull_request.base.sha }
+          }
+          if ($include.Count -gt 256) {
+            throw 'More than 256 commits: split this push/PR; no commits were silently omitted.'
+          }
+          $matrix = @{ include = $include } | ConvertTo-Json -Compress -Depth 4
+          "matrix=$matrix" >> $env:GITHUB_OUTPUT
+          "Validating $($include.Count) revision(s)."
+
+  validate:
+    name: Validate ${{ matrix.sha }}
+    needs: revisions
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.revisions.outputs.matrix) }}
+    uses: ./.github/workflows/validate-commit.yml
+    with:
+      revision: ${{ matrix.sha }}
+      coverage-base: ${{ matrix.base }}
+
+  required:
+    name: CI / Required
+    if: ${{ always() }}
+    needs: [revisions, validate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      REVISIONS_RESULT: ${{ needs.revisions.result }}
+      VALIDATION_RESULT: ${{ needs.validate.result }}
+    steps:
+      - name: Require every revision and stage to succeed
+        run: |
+          test "$REVISIONS_RESULT" = success
+          test "$VALIDATION_RESULT" = success

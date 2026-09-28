@@ -1,0 +1,309 @@
+name: Validate commit
+
+on:
+  workflow_call:
+    inputs:
+      revision:
+        required: true
+        type: string
+      coverage-base:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+
+jobs:
+  build-test:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    defaults:
+      run:
+        working-directory: source
+        shell: pwsh
+    steps:
+      # Event-version coverage policy applies to every historical revision being checked.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: policy
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.revision }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: source/global.json
+      - name: Validate project inventory
+        id: projects
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = (Get-Location).Path
+          $projects = @(Get-ChildItem -Recurse -Filter *.csproj -File |
+            Where-Object { $_.FullName -notmatch '[/\\](bin|obj|\.git|artifacts)[/\\]' } |
+            ForEach-Object { [IO.Path]::GetRelativePath($root, $_.FullName).Replace('\', '/') } |
+            Sort-Object)
+          $names = @($projects | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension($_) })
+          if (@($names | Select-Object -Unique).Count -ne $projects.Count) {
+            throw 'Project names must be unique across the repository.'
+          }
+          [xml] $solution = Get-Content Aset.slnx -Raw
+          $listed = @($solution.SelectNodes('//Project') | ForEach-Object { $_.Path.Replace('\', '/') })
+          if ($listed.Count -ne $projects.Count -or
+              @($projects | Where-Object { $_ -cnotin $listed }).Count -gt 0) {
+            throw 'Aset.slnx must contain every .csproj exactly once. Use dotnet sln add.'
+          }
+          $production = @($projects | Where-Object { $_ -clike 'src/*' })
+          $unit = @($projects | Where-Object { $_ -clike 'tests/*.UnitTests.csproj' })
+          $integration = @($projects | Where-Object { $_ -clike 'tests/*.IntegrationTests.csproj' })
+          foreach ($project in $projects) {
+            if ($project -cnotin ($production + $unit + $integration)) {
+              throw "Invalid project location or test-project suffix: $project"
+            }
+            if (!(Test-Path (Join-Path (Split-Path $project) 'packages.lock.json'))) {
+              throw "Missing packages.lock.json for $project. Run dotnet restore locally."
+            }
+          }
+          if ($production.Count -gt 0 -and ($unit.Count -eq 0 -or $integration.Count -eq 0)) {
+            throw 'Application code requires both unit-test and integration-test projects.'
+          }
+          if ($production.Count -eq 0 -and (Test-Path src) -and
+              @(Get-ChildItem src -Recurse -Filter *.cs -File).Count -gt 0) {
+            throw 'Source files exist without a production project.'
+          }
+          "has-projects=$($projects.Count -gt 0)".ToLowerInvariant() >> $env:GITHUB_OUTPUT
+          "production=$(ConvertTo-Json -InputObject $production -Compress)" >> $env:GITHUB_OUTPUT
+          "unit=$(ConvertTo-Json -InputObject $unit -Compress)" >> $env:GITHUB_OUTPUT
+          "integration=$(ConvertTo-Json -InputObject $integration -Compress)" >> $env:GITHUB_OUTPUT
+          if ($projects.Count -eq 0) {
+            'Infrastructure only: no application build or test results to claim.'
+          }
+      - name: Restore locked dependencies and audit NuGet packages
+        if: steps.projects.outputs.has-projects == 'true'
+        run: dotnet restore Aset.slnx --locked-mode -p:NuGetAudit=true -p:NuGetAuditMode=all -p:NuGetAuditLevel=low -p:TreatWarningsAsErrors=true
+      - name: Build and static analysis
+        if: steps.projects.outputs.has-projects == 'true'
+        run: dotnet build Aset.slnx --no-restore --configuration Release --warnaserror
+      - name: Verify formatting and naming
+        if: steps.projects.outputs.has-projects == 'true'
+        run: dotnet format Aset.slnx --no-restore --verify-no-changes --severity info
+      - name: Unit tests with Coverlet
+        if: steps.projects.outputs.has-projects == 'true'
+        env:
+          UNIT_PROJECTS: ${{ steps.projects.outputs.unit }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          foreach ($project in (ConvertFrom-Json $env:UNIT_PROJECTS)) {
+            $name = [IO.Path]::GetFileNameWithoutExtension($project)
+            dotnet test $project --no-build --no-restore --configuration Release --logger trx `
+              --results-directory "artifacts/tests/unit/$name" `
+              --collect:'XPlat Code Coverage' --settings ../policy/coverage.runsettings
+          }
+      - name: Enforce overall and changed-line Coverlet coverage
+        if: steps.projects.outputs.production != '[]'
+        env:
+          PRODUCTION_PROJECTS: ${{ steps.projects.outputs.production }}
+          COVERAGE_BASE: ${{ inputs.coverage-base }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $reports = @(if (Test-Path artifacts/tests/unit) {
+            Get-ChildItem artifacts/tests/unit -Recurse -Filter coverage.cobertura.xml -File
+          })
+          if ($reports.Count -eq 0) { throw 'No unit-test coverage reports were produced.' }
+          $root = (Get-Location).Path
+          $hits = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
+          $modules = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+          foreach ($report in $reports) {
+            [xml] $xml = Get-Content $report.FullName -Raw
+            foreach ($package in $xml.SelectNodes('//package')) {
+              [void] $modules.Add($package.GetAttribute('name'))
+              foreach ($class in $package.SelectNodes('./classes/class')) {
+                $filename = $class.GetAttribute('filename').Replace('\', '/')
+                if ("/$filename" -match '/tests/') { continue }
+                $candidates = @($filename) + @($xml.SelectNodes('//sources/source') |
+                  ForEach-Object { Join-Path $_.InnerText $filename })
+                $relative = $null
+                foreach ($candidate in $candidates) {
+                  $path = [IO.Path]::GetRelativePath($root, [IO.Path]::GetFullPath($candidate, $root)).Replace('\', '/')
+                  if ($path.StartsWith('src/', [StringComparison]::Ordinal)) { $relative = $path; break }
+                }
+                if (!$relative) { throw "Cannot map production coverage file to src/: $filename" }
+                foreach ($line in $class.SelectNodes('./lines/line')) {
+                  $key = "$relative`:$($line.GetAttribute('number'))"
+                  $hits[$key] = ($hits.ContainsKey($key) -and $hits[$key]) -or [int]$line.GetAttribute('hits') -gt 0
+                }
+              }
+            }
+          }
+          foreach ($project in (ConvertFrom-Json $env:PRODUCTION_PROJECTS)) {
+            $assembly = (dotnet msbuild $project -getProperty:AssemblyName).Trim()
+            if (!$modules.Contains($assembly)) { throw "Production assembly missing from coverage: $assembly" }
+          }
+          if ($hits.Count -eq 0) { throw 'Production code exists but coverage contains no executable lines.' }
+          function Assert-Coverage([string] $label, [bool[]] $values) {
+            if ($values.Count -eq 0) { "$label`: N/A (no executable lines)"; return }
+            $covered = @($values | Where-Object { $_ }).Count
+            $percent = (100 * $covered / $values.Count).ToString('F2', [Globalization.CultureInfo]::InvariantCulture)
+            "$label`: $covered/$($values.Count) ($percent%; required >80%)"
+            if (100 * $covered -le 80 * $values.Count) { throw "$label must be strictly above 80%." }
+          }
+          Assert-Coverage 'Overall unit-test line coverage' @($hits.Values)
+          $changedHits = [Collections.Generic.List[bool]]::new()
+          $coveredFiles = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+          foreach ($key in $hits.Keys) { [void] $coveredFiles.Add($key.Substring(0, $key.LastIndexOf(':'))) }
+          $files = ((git diff --name-only -z --diff-filter=ACMR $env:COVERAGE_BASE HEAD -- src/) -join "`n").Split([char]0)
+          foreach ($file in $files | Where-Object { $_.EndsWith('.cs', [StringComparison]::Ordinal) }) {
+            $diff = (git diff --no-ext-diff --no-renames --unified=0 $env:COVERAGE_BASE HEAD -- $file) -join "`n"
+            foreach ($hunk in [regex]::Matches($diff, '(?m)^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@')) {
+              $start = [int]$hunk.Groups[1].Value
+              $count = if ($hunk.Groups[2].Success) { [int]$hunk.Groups[2].Value } else { 1 }
+              if ($count -gt 0 -and !$coveredFiles.Contains($file)) {
+                throw "Changed source file missing from coverage (review contract-only files explicitly): $file"
+              }
+              for ($number = $start; $number -lt $start + $count; $number++) {
+                $key = "$file`:$number"
+                if ($hits.ContainsKey($key)) { $changedHits.Add($hits[$key]) }
+              }
+            }
+          }
+          Assert-Coverage 'Changed executable line coverage' $changedHits.ToArray()
+      - name: Integration tests (Linux / Docker)
+        if: runner.os == 'Linux' && steps.projects.outputs.has-projects == 'true'
+        env:
+          INTEGRATION_PROJECTS: ${{ steps.projects.outputs.integration }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          foreach ($project in (ConvertFrom-Json $env:INTEGRATION_PROJECTS)) {
+            $name = [IO.Path]::GetFileNameWithoutExtension($project)
+            dotnet test $project --no-build --no-restore --configuration Release --logger trx `
+              --results-directory "artifacts/tests/integration/$name"
+          }
+      - name: Require nonempty, entirely passing test suites
+        if: steps.projects.outputs.has-projects == 'true'
+        env:
+          UNIT_PROJECTS: ${{ steps.projects.outputs.unit }}
+          INTEGRATION_PROJECTS: ${{ steps.projects.outputs.integration }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $suites = @{ unit = @(ConvertFrom-Json $env:UNIT_PROJECTS) }
+          if ($env:RUNNER_OS -eq 'Linux') { $suites.integration = @(ConvertFrom-Json $env:INTEGRATION_PROJECTS) }
+          foreach ($kind in $suites.Keys) {
+            foreach ($project in $suites[$kind]) {
+              $name = [IO.Path]::GetFileNameWithoutExtension($project)
+              $reports = @(if (Test-Path "artifacts/tests/$kind/$name") {
+                Get-ChildItem "artifacts/tests/$kind/$name" -Filter *.trx -File
+              })
+              if ($reports.Count -eq 0) { throw "No test results from $project." }
+              foreach ($report in $reports) {
+                [xml] $trx = Get-Content $report.FullName -Raw
+                $counters = $trx.SelectSingleNode('//*[local-name()="Counters"]')
+                if (!$counters -or [int]$counters.executed -eq 0) { throw "No tests executed in $project." }
+                if ([int]$counters.total -ne [int]$counters.passed) {
+                  throw "All tests must pass; failed, skipped, or inconclusive tests in $project."
+                }
+              }
+            }
+          }
+      - name: Preserve test and coverage reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tests-${{ inputs.revision }}-${{ matrix.os }}
+          path: source/artifacts/tests/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  security:
+    name: Security and container artifacts
+    needs: build-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: source
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: policy
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.revision }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install checksum-verified security tools
+        run: |
+          destination="$RUNNER_TEMP/aset-security-tools"
+          mkdir -p "$destination"
+          cd "$destination"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o gitleaks.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz' | sha256sum --check --strict
+          tar -xzf gitleaks.tar.gz gitleaks
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_Linux-64bit.tar.gz -o trivy.tar.gz
+          echo '2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a  trivy.tar.gz' | sha256sum --check --strict
+          tar -xzf trivy.tar.gz trivy
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o actionlint.tar.gz
+          echo '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tar.gz' | sha256sum --check --strict
+          tar -xzf actionlint.tar.gz actionlint
+          echo "$destination" >> "$GITHUB_PATH"
+      - name: Validate workflow syntax
+        run: actionlint -shellcheck=""
+      - name: Scan commit history for secrets (including removed secrets)
+        run: gitleaks git . --log-opts=HEAD --redact --no-banner --config ../policy/.gitleaks.toml
+      - name: Scan current files for secrets
+        run: gitleaks dir . --redact --no-banner --config ../policy/.gitleaks.toml
+      - name: Scan dependency locks, Dockerfiles and Kubernetes configuration
+        run: >-
+          trivy fs --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 1
+          --skip-dirs .git --skip-dirs .tools --skip-dirs artifacts .
+      - name: Build containers, scan images and generate SBOMs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $dockerfiles = @(if (Test-Path src) { Get-ChildItem src -Recurse -Filter Dockerfile -File | Sort-Object FullName })
+          if ($dockerfiles.Count -eq 0) {
+            'No Dockerfiles yet; container creation is not applicable.'
+            exit 0
+          }
+          $output = 'artifacts/containers'
+          New-Item -ItemType Directory -Force $output | Out-Null
+          $sha = (git rev-parse HEAD).Trim()
+          for ($index = 0; $index -lt $dockerfiles.Count; $index++) {
+            $tag = "aset-ci/service-$index`:$sha"
+            docker build --pull --file $dockerfiles[$index].FullName --tag $tag .
+            trivy image --exit-code 1 --severity HIGH,CRITICAL --scanners vuln,secret $tag
+            trivy image --format cyclonedx --output "$output/service-$index.sbom.json" $tag
+            docker save --output "$output/service-$index.tar" $tag
+          }
+          @{ commit = $sha; services = @($dockerfiles | ForEach-Object {
+            [IO.Path]::GetRelativePath((Get-Location).Path, $_.FullName).Replace('\', '/')
+          }) } | ConvertTo-Json -Depth 3 | Set-Content "$output/manifest.json"
+      - name: Store validated container artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: containers-${{ inputs.revision }}
+          path: source/artifacts/containers/
+          if-no-files-found: ignore
+          retention-days: 7

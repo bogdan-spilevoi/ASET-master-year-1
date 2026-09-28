@@ -1,0 +1,7 @@
+<Project>
+  <Target Name="EnforceRepositoryStandards" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(TargetFramework)' != 'net10.0'" Text="All projects must target net10.0." />
+    <Error Condition="'$(Nullable)' != 'enable'" Text="Nullable reference types must be enabled." />
+    <Error Condition="'$(TreatWarningsAsErrors)' != 'true'" Text="Warnings must be treated as errors." />
+  </Target>
+</Project>
