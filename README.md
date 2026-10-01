@@ -1,14 +1,24 @@
-# ASET — .NET 10 microservices
+# SmartLost — campus lost and found
 
-A learning project for C#/.NET 10 microservices. The repository currently provides development
-and GitHub Actions infrastructure; no application domain or service is implemented. Docker
-containers and Kubernetes orchestration are the intended deployment model, not a running stack.
+A learning project for a campus lost-and-found application that will suggest matches between
+listings using editable image-derived categories and photo similarity, with credibility points
+for confirmed recoveries. Qwen3-VL-4B-Instruct is selected for traits/categories and DINOv3
+ViT-L/16 for image similarity. The selected stack is .NET 10, Angular and PostgreSQL, with
+local model inference (ONNX Runtime integration still to validate) and Azure Blob Storage for
+photos. The repository currently provides development and GitHub Actions infrastructure;
+no application service is implemented. Docker and Azure Kubernetes Service are the intended
+deployment model, not a running stack.
 
 ## Architecture
 
 The intended architecture separates services by responsibility, with each service owning its
 data and communicating through explicit contracts. There are no runtime services, database
 connections, or API/application/domain/infrastructure layers yet.
+
+The [SmartLost project description](docs/SMARTLOST.md) documents the proposed Listings and
+Matching services, their data ownership, C4 diagrams, publication/matching flows and credibility
+rules. These are design
+proposals, not implemented components.
 
 The implemented dependency direction is **GitHub Actions workflow steps → .NET/Coverlet/security
 tools**. Repository build configuration applies to future projects in the empty
@@ -114,11 +124,12 @@ change as code/configuration, using relative links and verified, secret-safe exa
 
 ## Further reading
 
+- [SmartLost description, proposed C4 architecture and user flow](docs/SMARTLOST.md)
 - [Repository agent and documentation rules](AGENTS.md)
 - [Infrastructure, coverage and contributor onboarding](.github/README.md)
 - [C# coding standards](docs/CODING_STANDARDS.md)
 - [GitHub protections and security setup](docs/GITHUB_SETUP.md)
 - [Deployment plan and activation requirements](docs/DEPLOYMENT.md)
 
-There is no separate architecture specification, database schema, application roadmap, or API
-documentation yet; add links here when those documents exist.
+There is no implemented database schema or API documentation yet; add links here when those
+documents exist. The SmartLost description includes the proposed implementation sequence.
