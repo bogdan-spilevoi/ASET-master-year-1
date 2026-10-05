@@ -54,9 +54,15 @@ jobs:
           $range = if ($base -eq $emptyTree) { $head } else { "$base..$head" }
           $commits = @(git rev-list --reverse $range)
           if ($head -notin $commits) { $commits += $head }
-          $include = @($commits | ForEach-Object { @{ sha = $_; base = $base } })
+          function New-RevisionEntry([string] $sha, [string] $coverageBase) {
+            $short = (git rev-parse --short=7 $sha).Trim()
+            $subject = (git show --no-patch --format=%s $sha).Trim()
+            if ($subject.Length -gt 80) { $subject = $subject.Substring(0, 77) + '...' }
+            return @{ sha = $sha; base = $coverageBase; label = "$short — $subject" }
+          }
+          $include = @($commits | ForEach-Object { New-RevisionEntry $_ $base })
           if ($env:GITHUB_EVENT_NAME -eq 'pull_request' -and $env:GITHUB_SHA -notin $commits) {
-            $include += @{ sha = $env:GITHUB_SHA; base = $event.pull_request.base.sha }
+            $include += New-RevisionEntry $env:GITHUB_SHA $event.pull_request.base.sha
           }
           if ($include.Count -gt 256) {
             throw 'More than 256 commits: split this push/PR; no commits were silently omitted.'
@@ -66,7 +72,7 @@ jobs:
           "Validating $($include.Count) revision(s)."
 
   validate:
-    name: Validate ${{ matrix.sha }}
+    name: Validate ${{ matrix.label }}
     needs: revisions
     strategy:
       fail-fast: false

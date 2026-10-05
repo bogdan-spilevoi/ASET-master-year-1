@@ -1,0 +1,40 @@
+services:
+  auth-db:
+    image: postgres:16-alpine
+    container_name: aset-auth-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: authservice
+      POSTGRES_USER: authservice
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:-authservice-dev-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authservice -d authservice"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  auth-service:
+    container_name: aset-auth-service
+    build:
+      context: .
+      dockerfile: src/AuthService/SmartLost.AuthService.Api/Dockerfile
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__AuthDatabase: Host=auth-db;Port=5432;Database=authservice;Username=authservice;Password=${AUTH_DB_PASSWORD:-authservice-dev-password}
+      Jwt__Issuer: AuthService
+      Jwt__Audience: AuthService
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-change-me-to-a-long-random-signing-key-at-least-32-characters}
+      Jwt__ExpiryMinutes: 60
+    ports:
+      - "8080:8080"
+
+volumes:
+  auth-db-data:

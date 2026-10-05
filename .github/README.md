@@ -35,6 +35,12 @@ The final aggregate gate is unchanged by individual job or matrix names.
 
 ## Coverlet coverage and test gates
 
+Validation job labels show a short commit ID and commit title instead of the full commit hash.
+Every selected revision is still checked using its full ID. Fixes in later commits do not
+repair earlier revisions: commits introducing application code must also include test projects,
+and each revision's Dockerfile must build. Squash or amend broken feature commits before merging;
+preserve a backup and coordinate before force-pushing shared history.
+
 [Coverlet collector settings](../coverage.runsettings) produce Cobertura reports during unit
 execution through VSTest. Coverage collection uses Coverlet, and the inline workflow step reads
 those reports to enforce **strictly above 80%** overall and on changed executable lines. It
@@ -42,10 +48,13 @@ merges line hits across suites without averaging percentages or double-counting 
 external coverage service or access token is required.
 
 Every production assembly must appear in the reports, and every changed source file containing
-added lines must appear in coverage. Missing reports, absent assemblies, or empty executable
-coverage fail. Only instrumented executable C# lines count; comments and blank lines do not.
-Test assemblies and generated `bin`/`obj` files are excluded. Contract-only files with no
-executable code need explicit policy review rather than broad exclusions.
+added lines must appear in coverage, except interface-only contracts with no executable code.
+The changed-line gate recognizes these with the C# parser bundled with PowerShell,
+regardless of folder or filename, including historical commits. Mixed files and interfaces
+with executable bodies or initializers still require coverage. Coverlet already omits plain
+interface declarations from executable line counts. Missing reports, absent assemblies, or empty executable coverage fail.
+Only instrumented executable C# lines count; comments and blank lines do not. Test assemblies
+and generated `bin`/`obj` files are excluded.
 
 The comparison baseline is the pre-push revision for pushes, the merge base for PR commits,
 and the target branch for the PR merge candidate. New branches compare to the common ancestor
@@ -59,8 +68,8 @@ changing the coverage integration as well.
 
 ## Local .NET commands
 
-There are no application projects yet. Once projects exist, these are the exact restore/build/
-format commands used in the workflow, run from the repository root:
+These are the exact restore/build/format commands used in the workflow, run from the repository
+root:
 
 ```sh
 dotnet restore Aset.slnx --locked-mode -p:NuGetAudit=true -p:NuGetAuditMode=all -p:NuGetAuditLevel=low -p:TreatWarningsAsErrors=true
@@ -68,13 +77,12 @@ dotnet build Aset.slnx --no-restore --configuration Release --warnaserror
 dotnet format Aset.slnx --no-restore --verify-no-changes --severity info
 ```
 
-Use `dotnet format Aset.slnx` to apply formatting. The following commands show the exact test
-flags; replace `<unit-project.csproj>` / `<integration-project.csproj>` and `<project-name>`
-with actual paths/names after creating projects. They are templates, not existing test projects.
+Use `dotnet format Aset.slnx` to apply formatting. The following commands run the current test
+projects with the exact CI flags:
 
 ```sh
-dotnet test <unit-project.csproj> --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/<project-name> --collect:"XPlat Code Coverage" --settings coverage.runsettings
-dotnet test <integration-project.csproj> --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/<project-name>
+dotnet test tests/AuthService.UnitTests/AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/AuthService.IntegrationTests/AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/AuthService.IntegrationTests
 ```
 
 CI uses the same Coverlet settings from the event checkout (`../policy/coverage.runsettings`)
