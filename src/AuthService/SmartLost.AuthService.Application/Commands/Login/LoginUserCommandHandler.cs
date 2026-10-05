@@ -14,8 +14,8 @@ public sealed class LoginUserCommandHandler(
 {
     public async Task<Result<AuthResponse>> Handle(LoginUserCommand request, CancellationToken cancellationToken)
     {
-        UserAccount? userAccount = await userAccountRepository.FindByUserNameOrEmailAsync(
-            UserIdentityNormalizer.Normalize(request.UserNameOrEmail),
+        UserAccount? userAccount = await userAccountRepository.FindByEmailAsync(
+            UserIdentityNormalizer.Normalize(request.Email),
             cancellationToken);
 
         if (userAccount is null || !passwordService.Verify(userAccount, request.Password))

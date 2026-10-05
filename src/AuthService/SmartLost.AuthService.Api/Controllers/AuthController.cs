@@ -29,7 +29,7 @@ public sealed class AuthController(ISender sender) : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
-        Result<AuthResponse> result = await sender.Send(new LoginUserCommand(request.UserNameOrEmail, request.Password), cancellationToken);
+        Result<AuthResponse> result = await sender.Send(new LoginUserCommand(request.Email, request.Password), cancellationToken);
         return this.ToActionResult(result);
     }
 }

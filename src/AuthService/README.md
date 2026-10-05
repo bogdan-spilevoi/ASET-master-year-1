@@ -25,9 +25,9 @@ The database is not shared with other services.
 
 [`UserIdentityNormalizer`](SmartLost.AuthService.Domain/Identity/UserIdentityNormalizer.cs)
 defines the service's lookup policy: reject blank values, trim surrounding whitespace and
-apply `ToUpperInvariant()`. Both login and entity creation use this one policy. Username
-and email lookups are case-insensitive under that policy; stored display values retain
-their original casing after trimming.
+apply `ToUpperInvariant()`. Both login and entity creation use this one policy. Login uses
+email only. Normalized usernames and emails remain unique under that policy; stored display
+values retain their original casing after trimming.
 
 `UserAccount.Create(userName, email, createdAtUtc)` derives `NormalizedUserName` and
 `NormalizedEmail` internally. Callers cannot supply inconsistent normalized values.
@@ -35,6 +35,11 @@ their original casing after trimming.
 then changes the originals and their lookup keys together. This domain method is not
 exposed through an API endpoint; application code using it must handle uniqueness before
 persistence. The database retains unique indexes on both normalized columns.
+Registration rejects an existing normalized username or email with HTTP 409 and code
+`auth.account_exists`. If concurrent requests pass the initial check, the repository maps
+PostgreSQL violations of these unique indexes to a conflict through the exception-to-result
+pipeline. The response identifies `UserName` or `Email` for these database conflicts and
+does not expose database error details.
 
 The normalization policy belongs to AuthService's Domain, not the shared building blocks.
 The initial migration includes both normalized columns and their unique indexes.
@@ -221,7 +226,11 @@ Deployment remains inactive; no workflow currently applies migrations.
 | Method | Route | Description |
 | --- | --- | --- |
 | `POST` | `/api/auth/register` | Creates a new user and returns a JWT |
-| `POST` | `/api/auth/login` | Authenticates an existing user and returns a JWT |
+| `POST` | `/api/auth/login` | Authenticates by email and password and returns a JWT |
+
+Login accepts `{ "email": "user@example.com", "password": "your-password" }`; the previous
+`userNameOrEmail` field is no longer accepted as a login identifier. Email is required, must
+be a valid email address and contain at most 256 characters after trimming.
 
 Register returns 201 and login returns 200 with the existing `AuthResponse` body. Application
 errors return `ProblemDetails`: 400 validation, 409 duplicate account and 401 invalid credentials.

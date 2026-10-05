@@ -6,7 +6,7 @@ public interface IUserAccountRepository
 {
     Task<bool> ExistsAsync(string normalizedUserName, string normalizedEmail, CancellationToken cancellationToken);
 
-    Task<UserAccount?> FindByUserNameOrEmailAsync(string normalizedValue, CancellationToken cancellationToken);
+    Task<UserAccount?> FindByEmailAsync(string normalizedEmail, CancellationToken cancellationToken);
 
     void Add(UserAccount userAccount);
 

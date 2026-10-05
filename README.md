@@ -149,7 +149,12 @@ application is an explicit operation; no deployment workflow is active.
 | Method | Route | Description |
 | --- | --- | --- |
 | `POST` | `/api/auth/register` | Creates a new user and returns a JWT |
-| `POST` | `/api/auth/login` | Authenticates an existing user and returns a JWT |
+| `POST` | `/api/auth/login` | Authenticates by email and password and returns a JWT |
+
+Login accepts `{ "email": "user@example.com", "password": "your-password" }`.
+Email matching trims whitespace and ignores casing.
+Registration requires unique usernames and emails after trimming and case normalization.
+Duplicates return HTTP 409, including database conflicts during concurrent registrations.
 
 The OpenAPI document is available at `/openapi/v1.json` only in Development; there is no
 Swagger UI. Success bodies retain the auth response contract (register: 201, login: 200).

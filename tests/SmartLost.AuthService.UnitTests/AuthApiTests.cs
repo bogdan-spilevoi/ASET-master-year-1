@@ -54,18 +54,18 @@ public sealed class AuthApiTests : IClassFixture<AuthApiFactory>
 
         HttpResponseMessage invalidLoginResponse = await _client.PostAsJsonAsync(
             "/api/auth/login",
-            new LoginRequest { UserNameOrEmail = string.Empty, Password = string.Empty });
+            new LoginRequest { Email = string.Empty, Password = string.Empty });
         Assert.Equal(HttpStatusCode.BadRequest, invalidLoginResponse.StatusCode);
 
         HttpResponseMessage invalidPasswordResponse = await _client.PostAsJsonAsync(
             "/api/auth/login",
-            new LoginRequest { UserNameOrEmail = request.UserName, Password = "WrongPassword123!" });
+            new LoginRequest { Email = request.Email, Password = "WrongPassword123!" });
         Assert.Equal(HttpStatusCode.Unauthorized, invalidPasswordResponse.StatusCode);
         Assert.Equal("application/problem+json", invalidPasswordResponse.Content.Headers.ContentType!.MediaType);
 
         HttpResponseMessage loginResponse = await _client.PostAsJsonAsync(
             "/api/auth/login",
-            new LoginRequest { UserNameOrEmail = request.Email, Password = request.Password });
+            new LoginRequest { Email = request.Email, Password = request.Password });
         Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
         Assert.Equal(registered.UserId, (await loginResponse.Content.ReadFromJsonAsync<AuthResponse>())!.UserId);
     }
@@ -105,8 +105,42 @@ public sealed class AuthApiTests : IClassFixture<AuthApiFactory>
     public async Task UnknownUserReturnsUnauthorized()
     {
         HttpResponseMessage response = await _client.PostAsJsonAsync("/api/auth/login",
-            new LoginRequest { UserNameOrEmail = "unknown-user", Password = "password" });
+            new LoginRequest { Email = "unknown@example.com", Password = "password" });
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task LoginRejectsUserNameAndTheOldRequestField()
+    {
+        HttpResponseMessage userNameResponse = await _client.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest { Email = "maria.ionescu", Password = "P@ssw0rd123!" });
+        Assert.Equal(HttpStatusCode.BadRequest, userNameResponse.StatusCode);
+
+        HttpResponseMessage oldRequestResponse = await _client.PostAsJsonAsync("/api/auth/login",
+            new
+            {
+                userNameOrEmail = "maria.ionescu@example.com",
+                password = "P@ssw0rd123!"
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, oldRequestResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task EmailLookupDoesNotMatchAnotherAccountsUserName()
+    {
+        using AuthApiFactory factory = new();
+        using IServiceScope scope = factory.Services.CreateScope();
+        IUserAccountRepository repository = scope.ServiceProvider.GetRequiredService<IUserAccountRepository>();
+        var userNameMatch = UserAccount.Create("lookup@example.com", "different@example.com", DateTime.UtcNow);
+        var emailMatch = UserAccount.Create("lookup-user", "lookup@example.com", DateTime.UtcNow);
+        repository.Add(userNameMatch);
+        repository.Add(emailMatch);
+        await repository.SaveChangesAsync(CancellationToken.None);
+
+        UserAccount? found = await repository.FindByEmailAsync("LOOKUP@EXAMPLE.COM", CancellationToken.None);
+
+        Assert.NotNull(found);
+        Assert.Equal(emailMatch.Id, found.Id);
     }
 
     [Fact]
@@ -135,7 +169,7 @@ public sealed class AuthApiTests : IClassFixture<AuthApiFactory>
             throw new InvalidOperationException("internal-database-detail");
         }
 
-        public Task<UserAccount?> FindByUserNameOrEmailAsync(string normalizedValue, CancellationToken cancellationToken)
+        public Task<UserAccount?> FindByEmailAsync(string normalizedValue, CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
         }

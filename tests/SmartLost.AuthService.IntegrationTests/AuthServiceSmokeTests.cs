@@ -34,7 +34,7 @@ public sealed class AuthServiceSmokeTests : IClassFixture<AuthServiceFactory>
             Password = "P@ssw0rd123!"
         };
         HttpResponseMessage register = await _client.PostAsJsonAsync("/api/auth/register", request);
-        HttpResponseMessage login = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest { UserNameOrEmail = "  MARIA@EXAMPLE.COM  ", Password = request.Password });
+        HttpResponseMessage login = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest { Email = "  MARIA@EXAMPLE.COM  ", Password = request.Password });
         Assert.Equal(HttpStatusCode.Created, register.StatusCode);
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         AuthResponse? registered = await register.Content.ReadFromJsonAsync<AuthResponse>();
