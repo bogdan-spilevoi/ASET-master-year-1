@@ -31,7 +31,7 @@ Deployment is inactive; see the
 
 | Module | Responsibility | Documentation |
 | --- | --- | --- |
-| [`.github/`](.github/) | GitHub Actions workflows, per-commit validation, Coverlet gates, security and container checks | [CI guide](.github/README.md) |
+| [`.github/`](.github/) | GitHub Actions workflows, PR/main validation, Coverlet gates, security and container checks | [CI guide](.github/README.md) |
 | [`src/AuthService/SmartLost.AuthService.Api/`](src/AuthService/SmartLost.AuthService.Api/) | Authentication API with register/login endpoints, JWT issuance and an auth-only PostgreSQL database | [Module README](src/AuthService/README.md) |
 | [`src/BuildingBlocks/`](src/BuildingBlocks/) | Reusable entity/result/pagination primitives, application behaviors and HTTP adapters | [Building blocks guide](src/BuildingBlocks/README.md) |
 
@@ -156,8 +156,11 @@ Email matching trims whitespace and ignores casing.
 Registration requires unique usernames and emails after trimming and case normalization.
 Duplicates return HTTP 409, including database conflicts during concurrent registrations.
 
-The OpenAPI document is available at `/openapi/v1.json` only in Development; there is no
-Swagger UI. Success bodies retain the auth response contract (register: 201, login: 200).
+In Development, Swagger UI is available at `/swagger` and uses the OpenAPI document at
+`/openapi/v1.json`. Open `http://localhost:8080/swagger` with Compose or
+`http://localhost:5048/swagger` with the local HTTP launch profile to test endpoints using
+**Try it out**. Both documentation routes are disabled outside Development.
+Success bodies retain the auth response contract (register: 201, login: 200).
 Application failures use `application/problem+json` with an error code, trace identifier and
 field errors when applicable (400 validation, 409 duplicate account, 401 invalid credentials).
 Malformed request bodies use ASP.NET validation problems. Unexpected exceptions return a
@@ -176,10 +179,11 @@ sanitized 500 problem and are logged server-side.
 
 The configured workflows are:
 
-- [CI](.github/workflows/ci.yml): selects every introduced commit on pushes to **all branches**,
-  checks PR commits and the merge candidate, supports merge groups/manual runs, and exposes
-  the aggregate **`CI / Required`** gate. No path filters or automatic cancellation.
-  Validation jobs display a short commit ID and commit title; full IDs still identify the checked revisions.
+- [CI](.github/workflows/ci.yml): validates one current revision per run: the PR merge
+  candidate, the latest push to `main`, or the merge-group/manual target. New commits on a
+  PR cancel its superseded runs. Feature-branch pushes need an open PR to trigger CI.
+  The aggregate **`CI / Required`** gate requires all validation stages to pass; there are
+  no path filters. Job labels show a short commit ID and title.
 - [Validate commit](.github/workflows/validate-commit.yml): builds, checks formatting/analyzers,
   and runs unit tests on Linux, Windows and macOS; runs integration tests on Linux; then runs
   workflow/security scans and builds/scans any `src/**/Dockerfile`, retaining image archives

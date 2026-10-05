@@ -237,7 +237,11 @@ errors return `ProblemDetails`: 400 validation, 409 duplicate account and 401 in
 Extensions contain `code`, `traceId` and `errors` (including validation property names).
 Unexpected errors return a sanitized 500 problem; exception details remain in server logs.
 Malformed bodies/null required fields use ASP.NET validation problems.
-OpenAPI is exposed at `/openapi/v1.json` in Development only; no Swagger UI is installed.
+In Development, Swagger UI at `/swagger` loads the existing `/openapi/v1.json` document.
+Open `http://localhost:8080/swagger` with Compose or `http://localhost:5048/swagger` with
+the HTTP launch profile. Expand an endpoint, choose **Try it out**, enter the JSON body,
+and choose **Execute** to inspect its response. Both UI and OpenAPI are disabled outside
+Development. Swagger UI is served by the API through `Swashbuckle.AspNetCore.SwaggerUI`.
 
 ## Quality and CI
 

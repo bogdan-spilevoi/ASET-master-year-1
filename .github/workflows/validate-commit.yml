@@ -33,7 +33,7 @@ jobs:
         working-directory: source
         shell: pwsh
     steps:
-      # Event-version coverage policy applies to every historical revision being checked.
+      # Use the event checkout for coverage policy and the selected revision for source.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: policy

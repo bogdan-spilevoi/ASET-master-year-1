@@ -8,7 +8,10 @@ accurate entry point for developers.
 - Keep CI/CD orchestration in GitHub Actions workflow YAML, using Actions and inline native
   shell steps. Do not introduce standalone CI helper scripts or another build framework.
 - Use Coverlet for .NET coverage collection. Preserve the strictly-above-80% overall and
-  changed-code gates, all-branch/per-commit checks, and existing security/test failure gates.
+  changed-code gates and existing security/test failure gates.
+- Validate the latest PR merge candidate and pushes to `main`, plus merge groups and manual
+  runs. Do not enumerate intermediate commits. Cancel superseded runs for the same PR;
+  preserve Linux, Windows and macOS checks and the stable `CI / Required` gate.
 - Keep deployment inactive until real infrastructure and approval settings are configured.
 
 ## Before editing

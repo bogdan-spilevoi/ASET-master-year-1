@@ -224,6 +224,11 @@
           "Npgsql": "10.0.0"
         }
       },
+      "Swashbuckle.AspNetCore.SwaggerUI": {
+        "type": "Transitive",
+        "resolved": "10.2.3",
+        "contentHash": "nthWONRs/FJ4yyG206g1cC52WEG8EqrjuMWjGdR+5XG7lbjFto6NqcI9EMICgVFom/UivIjUVwI76ZHbHwTPfQ=="
+      },
       "System.IdentityModel.Tokens.Jwt": {
         "type": "Transitive",
         "resolved": "8.19.2",
@@ -280,7 +285,8 @@
           "Microsoft.AspNetCore.OpenApi": "[10.0.12, )",
           "SmartLost.AuthService.Application": "[1.0.0, )",
           "SmartLost.AuthService.Infrastructure": "[1.0.0, )",
-          "SmartLost.BuildingBlocks.AspNetCore": "[1.0.0, )"
+          "SmartLost.BuildingBlocks.AspNetCore": "[1.0.0, )",
+          "Swashbuckle.AspNetCore.SwaggerUI": "[10.2.3, )"
         }
       },
       "smartlost.authservice.application": {

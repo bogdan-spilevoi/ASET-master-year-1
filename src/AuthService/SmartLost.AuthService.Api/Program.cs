@@ -46,6 +46,11 @@ app.UseExceptionHandler();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("../openapi/v1.json", "SmartLost AuthService v1");
+        options.DocumentTitle = "SmartLost AuthService API";
+    });
 }
 
 if (!app.Environment.IsDevelopment())
