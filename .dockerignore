@@ -11,8 +11,7 @@ artifacts
 **/.env
 **/.env.*
 **/secrets.json
-**/appsettings.Local.json
-**/appsettings.*.Local.json
+**/appsettings*.json
 **/*.pfx
 **/*.p12
 **/*.pem

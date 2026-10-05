@@ -5,9 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="MediatR" Version="14.2.0" />
-  </ItemGroup>
-  <ItemGroup>
+    <ProjectReference Include="../../BuildingBlocks/SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
     <ProjectReference Include="../SmartLost.AuthService.Domain/SmartLost.AuthService.Domain.csproj" />
   </ItemGroup>
 </Project>

@@ -1,7 +1,9 @@
 using SmartLost.AuthService.Application.Commands.Login;
 using SmartLost.AuthService.Application.Commands.Register;
+using SmartLost.AuthService.Application.Contracts;
 using SmartLost.AuthService.Application.Interfaces;
 using SmartLost.AuthService.Domain.Entities;
+using SmartLost.BuildingBlocks.Core.Results;
 using Xunit;
 
 namespace SmartLost.AuthService.UnitTests;
@@ -14,8 +16,49 @@ public sealed class AuthCommandHandlerTests
         InMemoryUserAccountRepository repository = new();
         RegisterUserCommandHandler handler = new(repository, new TestPasswordService(), new TestTokenService());
 
-        await handler.Handle(new RegisterUserCommand("alex.popescu", "alex@example.com", "P@ssw0rd123!"), CancellationToken.None);
+        Result<AuthResponse> result = await handler.Handle(new RegisterUserCommand(" alex.popescu ", " alex@example.com ", "P@ssw0rd123!"), CancellationToken.None);
 
+        Assert.Single(repository.Users);
+        Assert.True(result.IsSuccess);
+        Assert.Equal("token", result.Value.AccessToken);
+        Assert.Equal("alex.popescu", result.Value.UserName);
+        Assert.Equal("alex@example.com", result.Value.Email);
+        Assert.Equal("ALEX.POPESCU", repository.Users[0].NormalizedUserName);
+        Assert.Equal("ALEX@EXAMPLE.COM", repository.Users[0].NormalizedEmail);
+    }
+
+    [Theory]
+    [InlineData("  ALEX.POPESCU  ")]
+    [InlineData("  ALEX@EXAMPLE.COM  ")]
+    public async Task LoginUsesTheSameNormalizationAsAccountCreation(string identity)
+    {
+        InMemoryUserAccountRepository repository = new();
+        RegisterUserCommandHandler registerHandler = new(repository, new TestPasswordService(), new TestTokenService());
+        Result<AuthResponse> registered = await registerHandler.Handle(
+            new RegisterUserCommand("Alex.Popescu", "Alex@Example.com", "P@ssw0rd123!"), CancellationToken.None);
+        LoginUserCommandHandler loginHandler = new(repository, new TestPasswordService(), new TestTokenService());
+
+        Result<AuthResponse> result = await loginHandler.Handle(new LoginUserCommand(identity, "P@ssw0rd123!"), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(registered.Value.UserId, result.Value.UserId);
+        Assert.Equal("Alex.Popescu", result.Value.UserName);
+        Assert.Equal("Alex@Example.com", result.Value.Email);
+    }
+
+    [Theory]
+    [InlineData(" ALEX.POPESCU ", "other@example.com")]
+    [InlineData("other-user", " ALEX@EXAMPLE.COM ")]
+    public async Task RegisterRejectsDuplicatesWithDifferentCasingAndWhitespace(string userName, string email)
+    {
+        InMemoryUserAccountRepository repository = new();
+        RegisterUserCommandHandler handler = new(repository, new TestPasswordService(), new TestTokenService());
+        await handler.Handle(new RegisterUserCommand("Alex.Popescu", "Alex@Example.com", "P@ssw0rd123!"), CancellationToken.None);
+
+        Result<AuthResponse> result = await handler.Handle(new RegisterUserCommand(userName, email, "P@ssw0rd123!"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("auth.account_exists", Assert.Single(result.Errors).Code);
         Assert.Single(repository.Users);
     }
 
@@ -27,7 +70,9 @@ public sealed class AuthCommandHandlerTests
         await registerHandler.Handle(new RegisterUserCommand("alex.popescu", "alex@example.com", "P@ssw0rd123!"), CancellationToken.None);
         LoginUserCommandHandler loginHandler = new(repository, new TestPasswordService(), new TestTokenService());
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => loginHandler.Handle(new LoginUserCommand("alex@example.com", "incorrect"), CancellationToken.None));
+        Result<AuthResponse> result = await loginHandler.Handle(new LoginUserCommand("alex@example.com", "incorrect"), CancellationToken.None);
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorKind.Unauthorized, Assert.Single(result.Errors).Kind);
     }
 
     private sealed class InMemoryUserAccountRepository : IUserAccountRepository

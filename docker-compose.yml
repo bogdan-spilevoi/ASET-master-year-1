@@ -6,13 +6,14 @@ services:
     environment:
       POSTGRES_DB: authservice
       POSTGRES_USER: authservice
-      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:-authservice-dev-password}
+      # Local development value; match the ignored appsettings.Docker.json.
+      POSTGRES_PASSWORD: change-me-dev-db-password
     ports:
       - "5432:5432"
     volumes:
       - auth-db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U authservice -d authservice"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -28,11 +29,13 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__AuthDatabase: Host=auth-db;Port=5432;Database=authservice;Username=authservice;Password=${AUTH_DB_PASSWORD:-authservice-dev-password}
-      Jwt__Issuer: AuthService
-      Jwt__Audience: AuthService
-      Jwt__SigningKey: ${JWT_SIGNING_KEY:-change-me-to-a-long-random-signing-key-at-least-32-characters}
-      Jwt__ExpiryMinutes: 60
+    volumes:
+      - type: bind
+        source: ./src/AuthService/SmartLost.AuthService.Api/appsettings.Docker.json
+        target: /app/appsettings.json
+        read_only: true
+        bind:
+          create_host_path: false
     ports:
       - "8080:8080"
 

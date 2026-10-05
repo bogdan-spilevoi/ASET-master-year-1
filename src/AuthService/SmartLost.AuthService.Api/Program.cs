@@ -1,28 +1,30 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using SmartLost.AuthService.Application.Commands.Login;
+using SmartLost.AuthService.Application;
 using SmartLost.AuthService.Infrastructure;
 using SmartLost.AuthService.Infrastructure.Authentication;
-using SmartLost.AuthService.Infrastructure.Persistence;
+using SmartLost.BuildingBlocks.AspNetCore;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+builder.Services.AddBuildingBlocksApi();
 
-JwtOptions jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
-    ?? throw new InvalidOperationException("JWT configuration was not found.");
-
-builder.Services.AddMediatR(configuration => configuration.RegisterServicesFromAssembly(typeof(LoginUserCommand).Assembly));
+builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
-
-var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey));
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+    .AddJwtBearer();
+
+builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IOptions<JwtOptions>>((options, settings) =>
     {
+        JwtOptions jwtOptions = settings.Value;
+        var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey));
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -39,13 +41,12 @@ builder.Services
 builder.Services.AddAuthorization();
 
 WebApplication app = builder.Build();
+app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
-
-await app.Services.EnsureCreatedAsync();
 
 if (!app.Environment.IsDevelopment())
 {

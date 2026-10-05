@@ -81,14 +81,21 @@ Use `dotnet format Aset.slnx` to apply formatting. The following commands run th
 projects with the exact CI flags:
 
 ```sh
-dotnet test tests/AuthService.UnitTests/AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
-dotnet test tests/AuthService.IntegrationTests/AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/AuthService.IntegrationTests
+dotnet test tests/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.BuildingBlocks.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
 ```
 
 CI uses the same Coverlet settings from the event checkout (`../policy/coverage.runsettings`)
 while checking each revision. Overall/changed-line and TRX pass/fail gates run directly inside
 GitHub Actions, not through a local runner script. Raw `dotnet test` collects coverage but does
 not by itself enforce those workflow gates.
+
+AuthService unit tests also check that the PostgreSQL model matches its migration snapshot
+and validate generated migration SQL without a live database. A model change without a
+corresponding migration fails the existing unit-test job. The local EF tooling and database
+commands are documented in the [AuthService guide](../src/AuthService/README.md#database-and-migrations);
+CI does not apply migrations to an application database.
 
 ## Adding the first service
 

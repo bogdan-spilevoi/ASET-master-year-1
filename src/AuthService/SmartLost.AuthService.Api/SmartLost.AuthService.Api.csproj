@@ -11,6 +11,7 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../../BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
     <ProjectReference Include="../SmartLost.AuthService.Application/SmartLost.AuthService.Application.csproj" />
     <ProjectReference Include="../SmartLost.AuthService.Infrastructure/SmartLost.AuthService.Infrastructure.csproj" />
   </ItemGroup>

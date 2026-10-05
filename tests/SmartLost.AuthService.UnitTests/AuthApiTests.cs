@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using MediatR;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -9,7 +12,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using SmartLost.AuthService.Api.Contracts;
+using SmartLost.AuthService.Application.Commands.Register;
+using SmartLost.AuthService.Application.Contracts;
+using SmartLost.AuthService.Application.Interfaces;
+using SmartLost.AuthService.Domain.Entities;
 using SmartLost.AuthService.Infrastructure.Persistence;
+using SmartLost.BuildingBlocks.Core.Results;
 using Xunit;
 
 namespace SmartLost.AuthService.UnitTests;
@@ -35,9 +43,14 @@ public sealed class AuthApiTests : IClassFixture<AuthApiFactory>
 
         HttpResponseMessage registerResponse = await _client.PostAsJsonAsync("/api/auth/register", request);
         Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
+        AuthResponse? registered = await registerResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(registered);
+        Assert.Equal(request.UserName, registered.UserName);
+        Assert.NotEmpty(registered.AccessToken);
 
         HttpResponseMessage duplicateResponse = await _client.PostAsJsonAsync("/api/auth/register", request);
         Assert.Equal(HttpStatusCode.Conflict, duplicateResponse.StatusCode);
+        Assert.Equal("auth.account_exists", (await duplicateResponse.Content.ReadFromJsonAsync<ProblemDetails>())!.Extensions["code"]!.ToString());
 
         HttpResponseMessage invalidLoginResponse = await _client.PostAsJsonAsync(
             "/api/auth/login",
@@ -48,11 +61,94 @@ public sealed class AuthApiTests : IClassFixture<AuthApiFactory>
             "/api/auth/login",
             new LoginRequest { UserNameOrEmail = request.UserName, Password = "WrongPassword123!" });
         Assert.Equal(HttpStatusCode.Unauthorized, invalidPasswordResponse.StatusCode);
+        Assert.Equal("application/problem+json", invalidPasswordResponse.Content.Headers.ContentType!.MediaType);
 
         HttpResponseMessage loginResponse = await _client.PostAsJsonAsync(
             "/api/auth/login",
             new LoginRequest { UserNameOrEmail = request.Email, Password = request.Password });
         Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        Assert.Equal(registered.UserId, (await loginResponse.Content.ReadFromJsonAsync<AuthResponse>())!.UserId);
+    }
+
+    [Fact]
+    public async Task ApplicationPipelineRejectsInvalidCommandsBeforePersistence()
+    {
+        using AuthApiFactory factory = new();
+        using IServiceScope scope = factory.Services.CreateScope();
+        ISender sender = scope.ServiceProvider.GetRequiredService<ISender>();
+        Result<AuthResponse> invalid = await sender.Send(new RegisterUserCommand("  x  ", "invalid-email", "short"));
+        Assert.True(invalid.IsFailure);
+        Assert.Equal(3, invalid.Errors.Count);
+        Assert.All(invalid.Errors, error => Assert.Equal(ErrorKind.Validation, error.Kind));
+        Assert.Contains(invalid.Errors, error => error.PropertyName == "UserName");
+        AuthDbContext database = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+        Assert.False(await database.Users.AnyAsync(user => user.UserName == "x"));
+    }
+
+    [Theory]
+    [InlineData("  x  ", "valid@example.com", "ValidPassword123!")]
+    [InlineData("valid-user", "invalid-email", "ValidPassword123!")]
+    [InlineData("valid-user", "valid@example.com", "short")]
+    public async Task InvalidRegistrationReturnsFieldErrors(string userName, string email, string password)
+    {
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/auth/register",
+            new RegisterRequest { UserName = userName, Email = email, Password = password });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        ProblemDetails? problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.NotNull(problem);
+        JsonElement errors = Assert.IsType<JsonElement>(problem.Extensions["errors"]);
+        Assert.NotEmpty(errors.EnumerateArray());
+        Assert.True(errors[0].TryGetProperty("propertyName", out _));
+    }
+
+    [Fact]
+    public async Task UnknownUserReturnsUnauthorized()
+    {
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest { UserNameOrEmail = "unknown-user", Password = "password" });
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UnexpectedExceptionsReturn500WithoutExposingTheirMessage()
+    {
+        using AuthApiFactory factory = new();
+        using WebApplicationFactory<Program> failingFactory = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IUserAccountRepository>();
+                services.AddScoped<IUserAccountRepository, FailingRepository>();
+            }));
+        using HttpClient client = failingFactory.CreateClient();
+        HttpResponseMessage response = await client.PostAsJsonAsync("/api/auth/register",
+            new RegisterRequest { UserName = "valid-user", Email = "valid@example.com", Password = "ValidPassword123!" });
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("internal-database-detail", body, StringComparison.Ordinal);
+        Assert.Contains("error.unexpected", body, StringComparison.Ordinal);
+    }
+
+    private sealed class FailingRepository : IUserAccountRepository
+    {
+        public Task<bool> ExistsAsync(string normalizedUserName, string normalizedEmail, CancellationToken cancellationToken)
+        {
+            throw new InvalidOperationException("internal-database-detail");
+        }
+
+        public Task<UserAccount?> FindByUserNameOrEmailAsync(string normalizedValue, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public void Add(UserAccount userAccount)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task SaveChangesAsync(CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
     }
 }
 
