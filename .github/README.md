@@ -11,7 +11,7 @@ and the hosted runners' native shells. Start with the [repository README](../REA
 | [`ci.yml`](workflows/ci.yml): `revisions` | Select the current revision and changed-code baseline |
 | [`ci.yml`](workflows/ci.yml): `validate` | Call the reusable workflow once for the selected revision |
 | [`ci.yml`](workflows/ci.yml): `required` | Expose the stable `CI / Required` merge gate |
-| [`validate-commit.yml`](workflows/validate-commit.yml): `build-test` | Inventory, locked restore, build, formatting/analyzers, Coverlet/unit tests, integration tests, passing-test checks |
+| [`validate-commit.yml`](workflows/validate-commit.yml): `build-test` | Microservice solution inventory, locked restore, build, formatting/analyzers, Coverlet/unit tests, integration tests, passing-test checks |
 | [`validate-commit.yml`](workflows/validate-commit.yml): `security` | Workflow lint, Gitleaks, Trivy, container creation and SBOMs |
 
 Pushes to `main`, PRs to all target branches, merge groups and manual dispatch are supported.
@@ -23,6 +23,11 @@ fails or is skipped; it is skipped when the whole run is cancelled so cancellati
 
 Each revision builds and runs unit tests on Linux, Windows and macOS; integration tests run on
 Linux with Docker available. Tests must provision isolated dependencies and clean them up.
+The standalone [AI solution](../AI%20models/README.md), `AI models/AIModels.slnx`,
+is excluded from CI project inventory, restore/build/format/CLI checks and tests.
+Microservices, libraries and their tests must belong to `Aset.slnx`; project name and
+package-lock checks cover that scope. Repository-wide Gitleaks and Trivy scans still
+include tracked AI source and dependency locks.
 AuthService integration tests provision PostgreSQL 16 through Testcontainers, apply EF migrations
 to that disposable instance and reset its data between tests. No manual test database setup
 or local settings file is required. Docker unavailability fails the suite; tests are not skipped.
@@ -105,7 +110,7 @@ CI does not apply migrations to an application database.
 
 1. Put production projects under `src/<Service>/` and test projects under
    `tests/<Service>.UnitTests/` and `tests/<Service>.IntegrationTests/`.
-2. Add every actual project to `Aset.slnx` with `dotnet sln Aset.slnx add <project.csproj>`.
+2. Add every microservice/library/test project to `Aset.slnx` with `dotnet sln Aset.slnx add <project.csproj>`.
    Project names must be unique, and all projects must target `net10.0`.
 3. Reference each service from its tests. Use VSTest-compatible projects with
    `Microsoft.NET.Test.Sdk` and a test framework/adapter such as xUnit. Unit projects must

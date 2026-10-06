@@ -1,0 +1,15 @@
+bin/
+obj/
+.vs/
+.idea/
+.DS_Store
+.venv/
+.cache/
+models/
+onnxruntime/
+*.onnx
+*.onnx.data
+appsettings*.json
+!appsettings*.example.json
+.env
+.env.*
