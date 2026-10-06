@@ -23,6 +23,9 @@ fails or is skipped; it is skipped when the whole run is cancelled so cancellati
 
 Each revision builds and runs unit tests on Linux, Windows and macOS; integration tests run on
 Linux with Docker available. Tests must provision isolated dependencies and clean them up.
+AuthService integration tests provision PostgreSQL 16 through Testcontainers, apply EF migrations
+to that disposable instance and reset its data between tests. No manual test database setup
+or local settings file is required. Docker unavailability fails the suite; tests are not skipped.
 The workflow does not connect to a shared application database. Missing projects are an explicit
 bootstrap state; once production code exists, both unit and integration suites are mandatory.
 Workflow lint and security scans still run in bootstrap. Trivy has no dependency/manifests to

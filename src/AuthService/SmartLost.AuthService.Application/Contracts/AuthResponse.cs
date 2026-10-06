@@ -5,4 +5,6 @@ public sealed record AuthResponse(
     string UserName,
     string Email,
     string AccessToken,
-    DateTime ExpiresAtUtc);
+    DateTime ExpiresAtUtc,
+    string RefreshToken,
+    DateTime RefreshTokenExpiresAtUtc);

@@ -9,17 +9,44 @@ The service has four projects:
 - `SmartLost.AuthService.Api`: HTTP contracts/controllers, authentication setup and composition.
 - `SmartLost.AuthService.Application`: MediatR commands, FluentValidation validators,
   auth responses and repository/password/token abstractions.
-- `SmartLost.AuthService.Domain`: `UserAccount`, derived from the shared `Entity<Guid>`.
-- `SmartLost.AuthService.Infrastructure`: EF Core/Npgsql, password hashing and JWT issuance.
+- `SmartLost.AuthService.Domain`: `UserAccount`, `RefreshSession` and `RefreshToken`,
+  derived from the shared `Entity<Guid>`.
+- `SmartLost.AuthService.Infrastructure`: EF Core/Npgsql, password hashing, JWT issuance
+  and persistent refresh-token sessions.
 
 Application depends on Domain; Infrastructure implements Application abstractions; API
 composes both. Each layer references the appropriate [building blocks](../BuildingBlocks/README.md).
 The pipeline is `ExceptionToResult → Validation → Handler`: expected duplicate/credential
 errors are returned as `Result<AuthResponse>`, and explicit domain exceptions can be mapped
 to results. Other exceptions propagate to the sanitized API error handler. Transactions are
-not enabled in this service; persistence remains in its repository.
+not enabled as a MediatR behavior in this service. EF Core commits registration/session
+creation and each refresh rotation with one `SaveChangesAsync` transaction.
 
 The database is not shared with other services.
+
+## Object mapping
+
+The API references `AutoMapper` 16.2.0. `Program.cs` calls `AddApiMapping`, defined in
+[`DependencyInjection`](SmartLost.AuthService.Api/DependencyInjection.cs), to register profiles
+from the API assembly through `AddAutoMapper`, using public constructors for record destinations. The core package
+includes dependency injection support; no separate DI package is needed.
+
+[`AuthMappingProfile`](SmartLost.AuthService.Api/Mapping/AuthMappingProfile.cs) maps
+`RegisterRequest` to `RegisterUserCommand` and `LoginRequest` to `LoginUserCommand`.
+It also maps `RefreshRequest` to `RefreshTokenCommand`.
+Controllers inject `IMapper` and send the mapped commands through the existing MediatR
+validation pipeline. Mapping copies input values; validation and normalization remain in
+Application and Domain. Domain entities are created through their factory methods.
+
+Add API contract mappings as `Profile` classes under the API's `Mapping` folder; profiles in
+that assembly are discovered automatically. If a future layer owns its own mappings, register
+its profile assembly explicitly at the composition root and reference AutoMapper there.
+
+AutoMapper uses a dual license. Configure a valid key, when required by its terms, through
+the `AUTOMAPPER_LICENSE_KEY` environment variable; never commit a key. For Compose, pass
+that variable into `auth-service` explicitly when using a key; host environment variables
+are not automatically forwarded to containers. See the official
+[license configuration](https://docs.automapper.io/en/stable/License-configuration.html).
 
 ## User identity normalization
 
@@ -144,9 +171,14 @@ needed; they take priority over JSON settings.
 `SmartLost.AuthService.Api` owns the `authservice` PostgreSQL database by default.
 `ConnectionStrings:AuthDatabase` in the local settings file configures its connection.
 [`Persistence/Migrations`](SmartLost.AuthService.Infrastructure/Persistence/Migrations/) contains
-`InitialCreate` and the model snapshot. The migration creates `Users`, its primary key and
+`InitialCreate`, `AddRefreshTokens` and the model snapshot. The initial migration creates `Users`, its primary key and
 unique indexes on `NormalizedUserName` and `NormalizedEmail`. EF tracks applied migrations
 in `__EFMigrationsHistory`.
+
+`AddRefreshTokens` creates `RefreshSessions` (user reference, current token hash, absolute
+expiry and revocation timestamp) and `RefreshTokens` (unique token hash and session reference).
+Old hashes are retained to detect reuse. Foreign keys cascade from Users to sessions to token
+history; these references are entirely within AuthService's database.
 
 [`UserAccountConfiguration`](SmartLost.AuthService.Infrastructure/Persistence/Configurations/UserAccountConfiguration.cs)
 implements `IEntityTypeConfiguration<UserAccount>` and defines the `Users` table, primary key,
@@ -225,14 +257,16 @@ Deployment remains inactive; no workflow currently applies migrations.
 
 | Method | Route | Description |
 | --- | --- | --- |
-| `POST` | `/api/auth/register` | Creates a new user and returns a JWT |
-| `POST` | `/api/auth/login` | Authenticates by email and password and returns a JWT |
+| `POST` | `/api/auth/register` | Creates a new user and returns access/refresh tokens |
+| `POST` | `/api/auth/login` | Authenticates by email and password and creates a token session |
+| `POST` | `/api/auth/refresh` | Rotates a refresh token and returns a new access/refresh pair |
 
 Login accepts `{ "email": "user@example.com", "password": "your-password" }`; the previous
 `userNameOrEmail` field is no longer accepted as a login identifier. Email is required, must
 be a valid email address and contain at most 256 characters after trimming.
 
-Register returns 201 and login returns 200 with the existing `AuthResponse` body. Application
+Register returns 201; login and refresh return 200 with `AuthResponse`: `userId`, `userName`,
+`email`, `accessToken`, `expiresAtUtc`, `refreshToken` and `refreshTokenExpiresAtUtc`. Application
 errors return `ProblemDetails`: 400 validation, 409 duplicate account and 401 invalid credentials.
 Extensions contain `code`, `traceId` and `errors` (including validation property names).
 Unexpected errors return a sanitized 500 problem; exception details remain in server logs.
@@ -243,7 +277,59 @@ the HTTP launch profile. Expand an endpoint, choose **Try it out**, enter the JS
 and choose **Execute** to inspect its response. Both UI and OpenAPI are disabled outside
 Development. Swagger UI is served by the API through `Swashbuckle.AspNetCore.SwaggerUI`.
 
+## Refresh tokens
+
+Register and login create independent sessions, allowing separate devices to sign in.
+Refresh tokens are opaque, cryptographically random 64-byte values encoded as base64url
+(86 characters). Only SHA-256 hashes are persisted; raw values appear only in success responses.
+Authentication responses set `Cache-Control: no-store`.
+
+Call `POST /api/auth/refresh` with `{ "refreshToken": "the-latest-issued-token" }`.
+An access token is not required, so refresh still works after the JWT expires. Each success
+returns a new JWT and refresh token. Replace the stored refresh token immediately and never
+reuse the previous value. The command validates the token's format (400); unknown, expired,
+revoked or reused tokens return 401 with `auth.invalid_refresh_token`.
+
+`Jwt:ExpiryMinutes` remains the access-token lifetime. `Jwt:RefreshTokenExpiryDays` defaults
+to 7 and accepts 1–90; existing local settings without this property use the default. Session
+expiry is absolute: refreshing does not extend it, and users must log in again after expiry.
+Session expiry is truncated to PostgreSQL's microsecond precision before persistence and
+the initial response, so its value remains identical after database reads and rotation.
+
+The session's current hash and revocation timestamp are EF concurrency tokens. A successful
+rotation changes the hash and inserts token history atomically. Replaying an old token revokes
+the entire session, including its latest refresh token. Concurrent refresh attempts also revoke
+the session; clients must serialize refresh requests, including across tabs sharing a session.
+Other login sessions are unaffected. Already-issued access JWTs remain valid until their expiry;
+session revocation does not revoke those JWTs. No logout endpoint or automatic session cleanup
+job is implemented. Expired sessions may be removed together with their cascading token history.
+
+### Apply the refresh-token migration yourself
+
+`AddRefreshTokens` is checked in with the EF migrations and model snapshot. Apply it through
+the EF CLI; already-applied migrations are tracked in `__EFMigrationsHistory` and skipped.
+No separate SQL export needs to be committed. If SQL is needed for review, generate it with
+the [SQL generation command](#review-generated-sql).
+
+Run from the repository root with a local `appsettings.json` whose database host is
+`localhost` (created from `appsettings.example.json`):
+
+```sh
+dotnet tool restore
+docker compose up -d --wait auth-db
+dotnet ef database update --project src/AuthService/SmartLost.AuthService.Infrastructure --startup-project src/AuthService/SmartLost.AuthService.Infrastructure --context AuthDbContext -- --SettingsFile src/AuthService/SmartLost.AuthService.Api/appsettings.json
+docker compose up --build
+```
+
+The database update command was not executed as part of this change.
+
 ## Quality and CI
+
+Refresh-token unit tests use an isolated SQLite in-memory database to exercise hash storage,
+rotation, absolute expiry, replay revocation, session isolation and a deterministic competing
+database update. They also verify malformed requests and concurrency rollback. These tests
+do not apply PostgreSQL migrations or establish PostgreSQL concurrency behavior; the production
+schema and scripts use Npgsql/PostgreSQL.
 
 The service uses the repository-wide .NET 10 SDK, nullable reference types, warnings as errors, and locked NuGet restore. Build and formatting checks run through the repository-level CI configuration.
 
@@ -260,10 +346,24 @@ plus startup without migration in both Development and Production. Configuration
 verify JSON loading, CLI overrides and JWT validation at startup.
 This includes generated migration/snapshot code
 in Coverlet coverage; the existing coverage gates remain unchanged.
-`SmartLost.AuthService.IntegrationTests` verifies the register/login flow and duplicate
-rejection with different casing/whitespace against a fresh in-memory database. These tests
-do not verify PostgreSQL unique constraints. Run both from the repository root after
-restore and build:
+`SmartLost.AuthService.IntegrationTests` uses Testcontainers 4.15.0 to start a disposable
+`postgres:16-alpine` instance. Its `Testing` environment configures EF Core's production
+Npgsql provider with the container connection string and test-only JWT settings. No local
+appsettings file or existing Compose database is used. The fixture applies the checked-in EF
+migrations to this test database, truncates data before each test and disposes the container
+after the suite. There are no persistent volumes or fixed host ports.
+
+The suite verifies migration application, register/login persistence and normalization,
+scoped EF seeding with real password hashes, independent database connections with an active reader,
+HTTP duplicate rejection, actual PostgreSQL unique-constraint mapping after competing
+preflight checks, refresh rotation/replay revocation, expiry and concurrent refresh rollback.
+The concurrency test synchronizes two HTTP requests before their database saves, so both read
+the same current token. Docker must be running; missing Docker fails the suite rather than
+skipping it. Development database migrations remain an explicit developer operation.
+See the [integration test guide](../../tests/SmartLost.AuthService.IntegrationTests/README.md).
+Its request factory and scoped data seeder provide reusable setup for future tests; test
+DbContexts own their connections, and database assertions use fresh async DI scopes.
+Run both suites from the repository root after restore and build:
 
 ```sh
 dotnet test tests/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings

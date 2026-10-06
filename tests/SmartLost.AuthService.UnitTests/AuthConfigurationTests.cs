@@ -80,6 +80,8 @@ public sealed class AuthConfigurationTests : IDisposable
     [InlineData("Jwt:SigningKey", "short-key")]
     [InlineData("Jwt:SigningKey", "")]
     [InlineData("Jwt:ExpiryMinutes", "0")]
+    [InlineData("Jwt:RefreshTokenExpiryDays", "0")]
+    [InlineData("Jwt:RefreshTokenExpiryDays", "91")]
     public async Task InvalidJwtConfigurationFailsAtStartup(string key, string value)
     {
         Dictionary<string, string?> settings = ValidSettings();

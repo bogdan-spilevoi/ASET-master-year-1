@@ -22,7 +22,7 @@ public sealed class AuthMigrationTests
         Assert.False(context.Database.HasPendingModelChanges());
 
         IMigrationsAssembly assembly = context.GetService<IMigrationsAssembly>();
-        KeyValuePair<string, System.Reflection.TypeInfo> entry = Assert.Single(assembly.Migrations);
+        KeyValuePair<string, System.Reflection.TypeInfo> entry = assembly.Migrations.First();
         Assert.EndsWith("_InitialCreate", entry.Key, StringComparison.Ordinal);
         Migration migration = assembly.CreateMigration(entry.Value, context.Database.ProviderName!);
         CreateTableOperation table = Assert.Single(migration.UpOperations.OfType<CreateTableOperation>());
@@ -57,7 +57,7 @@ public sealed class AuthMigrationTests
         Assert.Contains("CREATE UNIQUE INDEX \"IX_Users_NormalizedEmail\"", script, StringComparison.Ordinal);
         Assert.Contains("__EFMigrationsHistory", script, StringComparison.Ordinal);
 
-        string id = Assert.Single(context.GetService<IMigrationsAssembly>().Migrations).Key;
+        string id = context.GetService<IMigrationsAssembly>().Migrations.Last().Key;
         string rollback = migrator.GenerateScript(id, Migration.InitialDatabase);
         Assert.Contains("DROP TABLE \"Users\"", rollback, StringComparison.Ordinal);
         Assert.Contains("DELETE FROM \"__EFMigrationsHistory\"", rollback, StringComparison.Ordinal);
