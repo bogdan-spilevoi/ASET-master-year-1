@@ -51,20 +51,27 @@ jobs:
         id: projects
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           $root = (Get-Location).Path
           $projects = @(Get-ChildItem -Recurse -Filter *.csproj -File |
             Where-Object { $_.FullName -notmatch '[/\\](bin|obj|\.git|artifacts)[/\\]' } |
             ForEach-Object { [IO.Path]::GetRelativePath($root, $_.FullName).Replace('\', '/') } |
+            Where-Object { !($_.StartsWith('AI models/', [StringComparison]::Ordinal)) } |
             Sort-Object)
           $names = @($projects | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension($_) })
           if (@($names | Select-Object -Unique).Count -ne $projects.Count) {
-            throw 'Project names must be unique across the repository.'
+            throw 'Project names must be unique across the microservice solution.'
           }
           [xml] $solution = Get-Content Aset.slnx -Raw
           $listed = @($solution.SelectNodes('//Project') | ForEach-Object { $_.Path.Replace('\', '/') })
           if ($listed.Count -ne $projects.Count -or
               @($projects | Where-Object { $_ -cnotin $listed }).Count -gt 0) {
-            throw 'Aset.slnx must contain every .csproj exactly once. Use dotnet sln add.'
+            throw 'Aset.slnx must contain every microservice/library/test project exactly once; standalone AI models/ projects are excluded.'
+          }
+          foreach ($project in $projects) {
+            if (!(Test-Path (Join-Path (Split-Path $project) 'packages.lock.json'))) {
+              throw "Missing packages.lock.json for $project. Run dotnet restore locally."
+            }
           }
           $production = @($projects | Where-Object { $_ -clike 'src/*' })
           $unit = @($projects | Where-Object { $_ -clike 'tests/*.UnitTests.csproj' })
@@ -72,9 +79,6 @@ jobs:
           foreach ($project in $projects) {
             if ($project -cnotin ($production + $unit + $integration)) {
               throw "Invalid project location or test-project suffix: $project"
-            }
-            if (!(Test-Path (Join-Path (Split-Path $project) 'packages.lock.json'))) {
-              throw "Missing packages.lock.json for $project. Run dotnet restore locally."
             }
           }
           if ($production.Count -gt 0 -and ($unit.Count -eq 0 -or $integration.Count -eq 0)) {

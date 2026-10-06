@@ -4,7 +4,8 @@ A learning project for a campus lost-and-found application that will suggest mat
 listings using editable image-derived categories and photo similarity, with credibility points
 for confirmed recoveries. Qwen3-VL-4B-Instruct is selected for traits/categories and DINOv3
 ViT-L/16 for image similarity. The selected stack is .NET 10, Angular and PostgreSQL, with
-local model inference (ONNX Runtime integration still to validate) and Azure Blob Storage for
+local model inference (ONNX Runtime verified in a standalone CPU experiment; service integration
+is not implemented) and Azure Blob Storage for
 photos. The repository now includes the first runtime microservice: `SmartLost.AuthService.Api`, a dedicated
 authentication API with its own PostgreSQL database, Dockerfile and Compose setup.
 
@@ -23,7 +24,7 @@ Application depends on Domain and its repository/security abstractions; Infrastr
 implements those abstractions. API composes the service. Domain uses framework-free Core
 building blocks, Application uses MediatR/validation building blocks, and API uses the
 ASP.NET result adapter. Shared libraries never depend on a microservice or own its data.
-Repository build configuration applies to projects in the [solution](Aset.slnx).
+Repository build configuration applies to microservice projects in the [solution](Aset.slnx).
 Deployment is inactive; see the
 [deployment plan](docs/DEPLOYMENT.md).
 
@@ -34,6 +35,7 @@ Deployment is inactive; see the
 | [`.github/`](.github/) | GitHub Actions workflows, PR/main validation, Coverlet gates, security and container checks | [CI guide](.github/README.md) |
 | [`src/AuthService/SmartLost.AuthService.Api/`](src/AuthService/SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions and an auth-only PostgreSQL database | [Module README](src/AuthService/README.md) |
 | [`src/BuildingBlocks/`](src/BuildingBlocks/) | Reusable entity/result/pagination primitives, application behaviors and HTTP adapters | [Building blocks guide](src/BuildingBlocks/README.md) |
+| [`AI models/`](AI%20models/) | Standalone `AIModels.slnx`; Qwen console project for CPU image-label extraction from an editable prompt | [AI solution](AI%20models/README.md), [Qwen guide](AI%20models/Qwen3-VL-4B-Instruct-ONNX/README.md) |
 
 `SmartLost.AuthService.Api` owns its database. Additional application services are not implemented yet.
 
@@ -57,11 +59,20 @@ Use the .NET SDK specified in [global.json](global.json). Rider, Visual Studio a
 share the repository configuration. CI runs directly in GitHub Actions; no separate local
 CI runtime or helper scripts are required.
 
+The [local Qwen experiment](AI%20models/Qwen3-VL-4B-Instruct-ONNX/README.md) uses ONNX Runtime GenAI
+to load a local Qwen3-VL model on CPU and extract English JSON object labels from an image using an
+[editable prompt](AI%20models/Qwen3-VL-4B-Instruct-ONNX/Prompts/image-labels.txt). It belongs to
+[`AIModels.slnx`](AI%20models/AIModels.slnx), with independent build configuration and commands.
+Its source and configuration are versioned; model files and build outputs are ignored.
+The AI solution is excluded from CI restore/build/format/test checks; repository-wide security scans still apply.
+It has no HTTP API or tunnel configuration.
+
 Docker-related configuration includes [`.dockerignore`](.dockerignore),
 [`docker-compose.yml`](docker-compose.yml) and
 [`src/AuthService/SmartLost.AuthService.Api/Dockerfile`](src/AuthService/SmartLost.AuthService.Api/Dockerfile).
 The auth stack uses one application container and one PostgreSQL container.
 The API image uses locked restore and excludes local settings from its build context.
+The standalone `AI models/` folder is also excluded from the AuthService image build context.
 Compose mounts the ignored Docker settings file read-only at runtime.
 
 Copy the JSON setup templates from the repository root:
@@ -199,7 +210,7 @@ The configured workflows are:
   The aggregate **`CI / Required`** gate requires all validation stages to pass; there are
   no path filters. Job labels show a short commit ID and title.
 - [Validate commit](.github/workflows/validate-commit.yml): builds, checks formatting/analyzers,
-  and runs unit tests on Linux, Windows and macOS; runs integration tests on Linux; then runs
+  and runs unit tests on Linux, Windows and macOS for `Aset.slnx`; runs integration tests on Linux; then runs
   workflow/security scans and builds/scans any `src/**/Dockerfile`, retaining image archives
   and SBOMs.
 
@@ -263,8 +274,11 @@ AuthService centralizes username/email lookup normalization in its Domain using
 Display values retain their casing; normalized columns have unique database indexes.
 See [identity conventions](src/AuthService/README.md#user-identity-normalization).
 
-Projects live under `src/` or `tests/`, appear in `Aset.slnx`, have unique names and commit their
+Microservice/library/test projects live under `src/` or `tests/`, appear in `Aset.slnx`, have unique names and commit their
 package locks. Production code requires both unit and integration test projects.
+Standalone AI applications live under `AI models/` and appear only in `AIModels.slnx`, with
+their own configuration and package locks. CI excludes this folder from project inventory and
+restore/build/format/test checks. Repository-wide security scans still apply; AI inference is checked locally.
 See [adding the first service](.github/README.md#adding-the-first-service).
 Follow [AGENTS.md](AGENTS.md): update this README and the affected module README in the same
 change as code/configuration, using relative links and verified, secret-safe examples.
@@ -279,6 +293,7 @@ change as code/configuration, using relative links and verified, secret-safe exa
 - [Deployment plan and activation requirements](docs/DEPLOYMENT.md)
 - [AuthService module README](src/AuthService/README.md)
 - [Shared building blocks and reuse guide](src/BuildingBlocks/README.md)
+- [Standalone AI solution and local inference](AI%20models/README.md)
 
 The auth service database schema and API surface are documented above. The SmartLost description
 still includes the proposed implementation sequence for future services.
