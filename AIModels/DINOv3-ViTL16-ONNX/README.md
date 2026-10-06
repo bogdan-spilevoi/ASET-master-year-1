@@ -11,7 +11,10 @@ assets included. It has no prompt, text generation, HTTP/gRPC endpoint, tunnel o
 ```sh
 mkdir -p ~/models/dinov3-vitl16-onnx
 hf download onnx-community/dinov3-vitl16-pretrain-lvd1689m-ONNX \
-  --include 'onnx/model.onnx' 'onnx/model.onnx_data' 'config.json' 'preprocessor_config.json' \
+  onnx/model.onnx \
+  onnx/model.onnx_data \
+  config.json \
+  preprocessor_config.json \
   --local-dir ~/models/dinov3-vitl16-onnx
 ```
 
