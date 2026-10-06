@@ -1,8 +1,10 @@
 using System.Diagnostics;
-using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text;
+using Microsoft.Extensions.Configuration;
 using Microsoft.ML.OnnxRuntimeGenAI;
+using SmartLost.AI.Configuration;
 
 if (args.Length == 1 && args[0] is "--help" or "-h")
 {
@@ -19,7 +21,11 @@ if (args.Length is not (0 or 1 or 3) || (args.Length == 3 && args[1] != "--model
 
 try
 {
-    string promptPath = Path.Combine(AppContext.BaseDirectory, "Prompts", "image-labels.txt");
+    var configuration = new ConfigurationBuilder()
+        .SetBasePath(AppContext.BaseDirectory)
+        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+        .Build();
+    string promptPath = PathResolver.Resolve(configuration["Paths:PromptFile"]);
     string extractionPrompt = File.ReadAllText(promptPath);
     if (string.IsNullOrWhiteSpace(extractionPrompt))
     {
@@ -52,10 +58,8 @@ try
     }
 
     string modelDirectory = args.Length == 3
-        ? Path.GetFullPath(args[2])
-        : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            "Documents", "LocalAI", "QwenVision", "models", "qwen3-vl-4b",
-            "onnxruntime", "cpu_and_mobile", "cpu-int4-rtn-block-32");
+        ? PathResolver.Resolve(args[2], Environment.CurrentDirectory)
+        : PathResolver.Resolve(configuration["Paths:ModelDirectory"]);
     if (!File.Exists(Path.Combine(modelDirectory, "genai_config.json")))
     {
         Console.Error.WriteLine($"Model configuration not found in: {modelDirectory}");

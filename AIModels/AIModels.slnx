@@ -5,4 +5,5 @@
     <Platform Name="x86" />
   </Configurations>
   <Project Path="Qwen3-VL-4B-Instruct-ONNX/QwenVision.csproj" />
+  <Project Path="DINOv3-ViTL16-ONNX/DinoVision.csproj" />
 </Solution>
