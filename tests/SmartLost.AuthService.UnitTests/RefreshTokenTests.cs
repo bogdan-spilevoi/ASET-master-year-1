@@ -25,6 +25,7 @@ public sealed class RefreshTokenTests
         using SqliteAuthFixture fixture = new();
         AuthResponse registered = await RegisterAsync(fixture.Client);
         Assert.Equal(86, registered.RefreshToken.Length);
+        Assert.Equal(0L, registered.RefreshTokenExpiresAtUtc.Ticks % TimeSpan.TicksPerMicrosecond);
         Assert.True(registered.RefreshTokenExpiresAtUtc > registered.ExpiresAtUtc);
 
         using HttpResponseMessage login = await fixture.Client.PostAsJsonAsync("/api/auth/login",

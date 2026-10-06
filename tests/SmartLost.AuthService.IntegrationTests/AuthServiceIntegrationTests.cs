@@ -121,6 +121,13 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
     public async Task RefreshRotatesHashesAndReplayRevokesTheSession()
     {
         AuthResponse registered = await RegisterAsync();
+        Assert.Equal(0L, registered.RefreshTokenExpiresAtUtc.Ticks % TimeSpan.TicksPerMicrosecond);
+        await using (AsyncServiceScope scope = _factory.Services.CreateAsyncScope())
+        {
+            AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+            Assert.Equal(registered.RefreshTokenExpiresAtUtc, (await context.RefreshSessions.SingleAsync()).ExpiresAtUtc);
+        }
+
         using HttpResponseMessage refresh = await RefreshAsync(registered.RefreshToken);
         Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
         AuthResponse rotated = (await refresh.Content.ReadFromJsonAsync<AuthResponse>())!;

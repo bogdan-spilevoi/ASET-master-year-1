@@ -293,6 +293,8 @@ revoked or reused tokens return 401 with `auth.invalid_refresh_token`.
 `Jwt:ExpiryMinutes` remains the access-token lifetime. `Jwt:RefreshTokenExpiryDays` defaults
 to 7 and accepts 1–90; existing local settings without this property use the default. Session
 expiry is absolute: refreshing does not extend it, and users must log in again after expiry.
+Session expiry is truncated to PostgreSQL's microsecond precision before persistence and
+the initial response, so its value remains identical after database reads and rotation.
 
 The session's current hash and revocation timestamp are EF concurrency tokens. A successful
 rotation changes the hash and inserts token history atomically. Replaying an old token revokes

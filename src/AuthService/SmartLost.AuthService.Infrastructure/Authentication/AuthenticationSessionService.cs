@@ -21,7 +21,10 @@ public sealed class AuthenticationSessionService(
     {
         string refreshToken = CreateRefreshToken();
         string hash = HashToken(refreshToken);
-        var session = RefreshSession.Create(user, hash, DateTime.UtcNow.AddDays(options.Value.RefreshTokenExpiryDays));
+        DateTime expiresAtUtc = DateTime.UtcNow.AddDays(options.Value.RefreshTokenExpiryDays);
+        // PostgreSQL stores microseconds; return exactly the precision that will round-trip.
+        expiresAtUtc = expiresAtUtc.AddTicks(-(expiresAtUtc.Ticks % TimeSpan.TicksPerMicrosecond));
+        var session = RefreshSession.Create(user, hash, expiresAtUtc);
         AuthResponse response = CreateResponse(user, refreshToken, session.ExpiresAtUtc);
         dbContext.RefreshSessions.Add(session);
         dbContext.RefreshTokens.Add(RefreshToken.Create(session, hash));

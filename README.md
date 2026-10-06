@@ -171,6 +171,7 @@ Success bodies include `userId`, `userName`, `email`, `accessToken`, `expiresAtU
 Refresh accepts `{ "refreshToken": "the-latest-issued-token" }` without a valid access token.
 Refresh sessions expire after seven days by default (`Jwt:RefreshTokenExpiryDays`, range 1–90);
 rotation preserves that absolute expiry. Reusing an old token revokes its whole session.
+Expiry values use PostgreSQL's microsecond precision consistently in responses and storage.
 See [refresh token behavior and migration scripts](src/AuthService/README.md#refresh-tokens).
 Refresh-token tests use isolated SQLite databases for rotation, expiry, replay and competing
 updates; they do not apply migrations to the local PostgreSQL database.
