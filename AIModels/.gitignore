@@ -9,6 +9,7 @@ models/
 onnxruntime/
 *.onnx
 *.onnx.data
+*.onnx_data
 appsettings*.json
 !appsettings*.example.json
 .env

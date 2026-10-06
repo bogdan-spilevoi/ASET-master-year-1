@@ -15,10 +15,10 @@ CI does not build or test this project; repository-wide security scans still app
 
 ## Independent configuration
 
-The parent `AI models/` folder has its own `global.json` (SDK 10.0.401), `NuGet.Config`, `.gitignore` and
+The parent `AIModels/` folder has its own `global.json` (SDK 10.0.401), `NuGet.Config`, `.gitignore` and
 `Directory.Build.props` / `Directory.Build.targets`. The local MSBuild files stop the
 parent repository's build defaults and enforcement targets from being imported. There
-are no project references to AuthService or BuildingBlocks. The complete `AI models/` folder
+are no project references to AuthService or BuildingBlocks. The complete `AIModels/` folder
 can be moved into a separate repository and built independently. See the [AI solution guide](../README.md).
 
 ## Build and run
@@ -33,9 +33,25 @@ dotnet run --project QwenVision.csproj --no-build --configuration Release -- --h
 
 ## Analyze an image
 
-The default model directory is the download location used in the local setup:
-`~/Documents/LocalAI/QwenVision/models/qwen3-vl-4b/onnxruntime/cpu_and_mobile/cpu-int4-rtn-block-32`.
-You only need to supply an existing image path. From this folder:
+Copy the template from this project folder, then edit `Paths.ModelDirectory` to
+the folder containing `genai_config.json` and `Paths.PromptFile` to your prompt:
+
+```sh
+cp appsettings.example.json appsettings.json
+```
+
+The example model directory is
+`~/models/qwen3-vl-4b/onnxruntime/cpu_and_mobile/cpu-int4-rtn-block-32`.
+The example prompt path is `Prompts/image-labels.txt`, relative to the executable.
+Absolute paths and `~/` are also supported. Settings are copied to build/publish
+output and read there; local settings are ignored by Git. Only the example is
+versioned. Rebuild after changing settings before using `--no-build`.
+The standard .NET `ConfigurationBuilder` loads JSON; the shared `PathResolver`
+only expands `~/` and resolves relative paths.
+`--model` overrides only the configured model directory; the prompt still comes
+from settings. Model-internal graph/tokenizer paths remain governed by `genai_config.json`.
+
+Supply an existing image path. From this folder:
 
 ```sh
 dotnet run --project QwenVision.csproj --configuration Release -- "/absolute/path/to/image.jpg"
