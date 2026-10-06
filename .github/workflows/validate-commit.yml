@@ -33,7 +33,7 @@ jobs:
         working-directory: source
         shell: pwsh
     steps:
-      # Event-version coverage policy applies to every historical revision being checked.
+      # Use the event checkout for coverage policy and the selected revision for source.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: policy
@@ -163,11 +163,36 @@ jobs:
             if (100 * $covered -le 80 * $values.Count) { throw "$label must be strictly above 80%." }
           }
           Assert-Coverage 'Overall unit-test line coverage' @($hits.Values)
+          # PowerShell bundles Roslyn; inspect contracts regardless of their folder/name.
+          [void] [Reflection.Assembly]::LoadFrom((Join-Path $PSHOME 'Microsoft.CodeAnalysis.dll'))
+          [void] [Reflection.Assembly]::LoadFrom((Join-Path $PSHOME 'Microsoft.CodeAnalysis.CSharp.dll'))
+          function Test-InterfaceContract([string] $file) {
+            $tree = [Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([IO.File]::ReadAllText($file))
+            $syntax = $tree.GetRoot()
+            $nodes = @($syntax.DescendantNodes())
+            $interfaces = @($nodes | Where-Object { $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.InterfaceDeclarationSyntax] })
+            if ($interfaces.Count -eq 0) { return $false }
+            # Reject mixed files and interface members with executable bodies or initializers.
+            $implementation = @($nodes | Where-Object {
+              ($_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseTypeDeclarationSyntax] -and
+               $_ -isnot [Microsoft.CodeAnalysis.CSharp.Syntax.InterfaceDeclarationSyntax]) -or
+              $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.DelegateDeclarationSyntax] -or
+              $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.GlobalStatementSyntax] -or
+              $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.BlockSyntax] -or
+              $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.ArrowExpressionClauseSyntax] -or
+              $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.EqualsValueClauseSyntax]
+            })
+            return $implementation.Count -eq 0
+          }
           $changedHits = [Collections.Generic.List[bool]]::new()
           $coveredFiles = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
           foreach ($key in $hits.Keys) { [void] $coveredFiles.Add($key.Substring(0, $key.LastIndexOf(':'))) }
           $files = ((git diff --name-only -z --diff-filter=ACMR $env:COVERAGE_BASE HEAD -- src/) -join "`n").Split([char]0)
           foreach ($file in $files | Where-Object { $_.EndsWith('.cs', [StringComparison]::Ordinal) }) {
+            if (!$coveredFiles.Contains($file) -and (Test-InterfaceContract $file)) {
+              "Interface contract (no executable lines): $file"
+              continue
+            }
             $diff = (git diff --no-ext-diff --no-renames --unified=0 $env:COVERAGE_BASE HEAD -- $file) -join "`n"
             foreach ($hunk in [regex]::Matches($diff, '(?m)^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@')) {
               $start = [int]$hunk.Groups[1].Value

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
     branches: ['**']
   merge_group:
@@ -11,21 +11,27 @@ on:
 permissions:
   contents: read
 
-# New pushes must not cancel validation of earlier commits.
+# New PR updates replace obsolete validation; main/manual/merge-group runs are retained.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   revisions:
-    name: Select all commits
+    name: Select validation target
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
-      matrix: ${{ steps.commits.outputs.matrix }}
+      revision: ${{ steps.target.outputs.revision }}
+      coverage-base: ${{ steps.target.outputs.coverage-base }}
+      label: ${{ steps.target.outputs.label }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Select every introduced commit and the PR merge candidate
-        id: commits
+      - name: Select current revision and changed-code baseline
+        id: target
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -40,46 +46,36 @@ jobs:
             return $LASTEXITCODE -eq 0
           }
           if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
-            $head = $event.pull_request.head.sha
-            $base = (git merge-base $event.pull_request.base.sha $head).Trim()
+            # GITHUB_SHA is the PR merge candidate, including its current target branch.
+            $base = $event.pull_request.base.sha
           } elseif ($env:GITHUB_EVENT_NAME -eq 'merge_group') {
             $base = $event.merge_group.base_sha
           } elseif ($event.before -and $event.before -notmatch '^0+$') {
-            # An unreachable pre-force-push tip means rechecking all current history.
+            # An unavailable previous tip uses the empty tree for changed-code coverage.
             if (Test-GitRef $event.before) { $base = $event.before }
-          } elseif ((Test-GitRef 'refs/remotes/origin/main') -and
-                    (git rev-parse origin/main).Trim() -ne $head) {
+          } elseif ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and
+                    (Test-GitRef 'refs/remotes/origin/main')) {
             $base = (git merge-base origin/main $head).Trim()
           }
-          $range = if ($base -eq $emptyTree) { $head } else { "$base..$head" }
-          $commits = @(git rev-list --reverse $range)
-          if ($head -notin $commits) { $commits += $head }
-          $include = @($commits | ForEach-Object { @{ sha = $_; base = $base } })
-          if ($env:GITHUB_EVENT_NAME -eq 'pull_request' -and $env:GITHUB_SHA -notin $commits) {
-            $include += @{ sha = $env:GITHUB_SHA; base = $event.pull_request.base.sha }
-          }
-          if ($include.Count -gt 256) {
-            throw 'More than 256 commits: split this push/PR; no commits were silently omitted.'
-          }
-          $matrix = @{ include = $include } | ConvertTo-Json -Compress -Depth 4
-          "matrix=$matrix" >> $env:GITHUB_OUTPUT
-          "Validating $($include.Count) revision(s)."
+          $short = (git rev-parse --short=7 $head).Trim()
+          $subject = (git show --no-patch --format=%s $head).Trim()
+          if ($subject.Length -gt 80) { $subject = $subject.Substring(0, 77) + '...' }
+          "revision=$head" >> $env:GITHUB_OUTPUT
+          "coverage-base=$base" >> $env:GITHUB_OUTPUT
+          "label=$short — $subject" >> $env:GITHUB_OUTPUT
+          "Validating one revision: $head; changed-code baseline: $base"
 
   validate:
-    name: Validate ${{ matrix.sha }}
+    name: Validate ${{ needs.revisions.outputs.label }}
     needs: revisions
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix: ${{ fromJSON(needs.revisions.outputs.matrix) }}
     uses: ./.github/workflows/validate-commit.yml
     with:
-      revision: ${{ matrix.sha }}
-      coverage-base: ${{ matrix.base }}
+      revision: ${{ needs.revisions.outputs.revision }}
+      coverage-base: ${{ needs.revisions.outputs.coverage-base }}
 
   required:
     name: CI / Required
-    if: ${{ always() }}
+    if: ${{ !cancelled() }}
     needs: [revisions, validate]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -87,7 +83,7 @@ jobs:
       REVISIONS_RESULT: ${{ needs.revisions.result }}
       VALIDATION_RESULT: ${{ needs.validate.result }}
     steps:
-      - name: Require every revision and stage to succeed
+      - name: Require target selection and every validation stage to succeed
         run: |
           test "$REVISIONS_RESULT" = success
           test "$VALIDATION_RESULT" = success

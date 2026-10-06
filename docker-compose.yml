@@ -1,0 +1,43 @@
+services:
+  auth-db:
+    image: postgres:16-alpine
+    container_name: aset-auth-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: authservice
+      POSTGRES_USER: authservice
+      # Local development value; match the ignored appsettings.Docker.json.
+      POSTGRES_PASSWORD: change-me-dev-db-password
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  auth-service:
+    container_name: aset-auth-service
+    build:
+      context: .
+      dockerfile: src/AuthService/SmartLost.AuthService.Api/Dockerfile
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+    volumes:
+      - type: bind
+        source: ./src/AuthService/SmartLost.AuthService.Api/appsettings.Docker.json
+        target: /app/appsettings.json
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "8080:8080"
+
+volumes:
+  auth-db-data:

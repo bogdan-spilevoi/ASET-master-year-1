@@ -1,0 +1,22 @@
+@SmartLost.AuthService.Api_HostAddress = http://localhost:5048
+
+POST {{SmartLost.AuthService.Api_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "userName": "alex.popescu",
+  "email": "alex.popescu@example.com",
+  "password": "P@ssw0rd123!"
+}
+
+###
+
+POST {{SmartLost.AuthService.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "userNameOrEmail": "alex.popescu",
+  "password": "P@ssw0rd123!"
+}
+
+###

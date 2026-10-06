@@ -26,9 +26,11 @@ Un alt student publică un ghiozdan găsit în aceeași zonă. SmartLost poate s
 asocierea pe baza categoriei, culorii, datei, locului și asemănării fotografiilor.
 Confirmarea identității obiectului și recuperarea rămân în responsabilitatea oamenilor.
 
-**Stadiu actual:** repository-ul conține configurație de dezvoltare și CI. Serviciile,
-interfața, bazele de date, modelele vizuale și infrastructura cloud descrise mai jos
-reprezintă arhitectura propusă; nu sunt implementate.
+**Stadiu actual:** repository-ul conține AuthService (register/login, JWT, EF Core și
+configurație PostgreSQL/Docker), biblioteci comune pentru entități, rezultate și pipeline,
+teste și CI. Listings, Matching, interfața, modelele vizuale și infrastructura cloud
+descrise mai jos reprezintă arhitectura propusă; nu sunt implementate.
+Detaliile operaționale sunt în [README](../README.md).
 
 ## Funcționalitățile MVP
 
@@ -45,16 +47,17 @@ Chat-ul, notificările prin email/push și moderarea avansată nu fac parte din 
 Sugestiile sunt comunicate în interfața aplicației; canalul de notificare externă
 nu este ales. Se folosesc cele două modele preantrenate; nu se antrenează un model
 de la zero. Categoriile sugerate de Qwen sunt verificate și confirmate de student.
-Autentificarea și regulile de acces trebuie definite înainte
-de expunerea aplicației: numai autorul autorizat poate modifica sau închide anunțul.
-Furnizorul de identitate nu este încă ales.
+AuthService implementează autentificare locală cu username/email, parole hash-uite și JWT.
+Regulile de acces pentru anunțuri trebuie implementate înainte de expunerea aplicației:
+numai autorul autorizat poate modifica sau închide anunțul. Integrarea cu identitatea
+campusului nu este implementată.
 
 ## Stack tehnologic și stocarea imaginilor
 
 | Componentă | Alegere propusă | Rol |
 | --- | --- | --- |
 | Frontend | Angular | Fotografie, categorii editabile, sugestii, recuperare și credibilitate |
-| Backend | .NET 10 / ASP.NET Core | Două microservicii cu responsabilități și date proprii |
+| Backend | .NET 10 / ASP.NET Core | AuthService existent; Listings și Matching propuse, cu date proprii |
 | Similaritate vizuală | [`facebook/dinov3-vitl16-pretrain-lvd1689m`](https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m) | Embedding-uri pentru compararea fotografiilor |
 | Trăsături și categorii | [`Qwen/Qwen3-VL-4B-Instruct`](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct) | Analiza imaginii și propuneri editabile de categorii și trăsături |
 | Inferență locală | ONNX Runtime ca direcție inițială | Exportul și execuția ambelor modele trebuie validate; runtime-ul Qwen nu este încă stabilit |
@@ -307,14 +310,14 @@ nu presupune că există deja reduceri, privilegii sau integrări cu sistemele c
 
 | Zonă | Implementat/configurat în repository | De construit |
 | --- | --- | --- |
-| .NET | SDK 10.0.401, net10.0, C# 14, analyzers, nullable, warnings ca erori; soluție goală | Cele două servicii, modulul de credibilitate și suitele de teste |
+| .NET | SDK 10.0.401, net10.0, C# 14, AuthService și biblioteci comune Core/Application/AspNetCore | Listings, Matching și modulul de credibilitate |
 | Modele | Fără modele descărcate sau integrare de inferență în repository | Qwen pentru trăsături/categorii, DINOv3 pentru similaritate și validarea runtime-urilor locale |
 | CI | Toate branch-urile, fiecare commit introdus, candidatul de merge și gate-ul `CI / Required` | Verificări Angular și verificări dedicate infrastructurii când aceasta apare |
-| Testare | Coverlet și praguri strict peste 80% pentru acoperirea globală și codul executabil modificat; respingerea suitelor goale sau cu teste nepromovate | Teste unitare și de integrare reale |
+| Testare | Teste pentru AuthService și building blocks; Coverlet, praguri strict peste 80% și respingerea suitelor goale/nepromovate | Integrare pe PostgreSQL real și testele viitoarelor servicii |
 | Securitate | Gitleaks, Trivy, actionlint, audit NuGet, Dependabot | Validarea noilor dependențe și configurații prin aceleași gate-uri |
-| Docker | `.dockerignore` și pași CI pentru viitoare Dockerfiles din `src/`, scanare imagini și SBOM | Dockerfiles, Compose și `.env.example` |
+| Docker | Dockerfile AuthService, Compose cu API/PostgreSQL, exemple `appsettings`, `.dockerignore`, pași CI pentru scanare imagini și SBOM | Containere pentru viitoarele servicii |
 | CD | Plan și template inactiv în `docs/examples/deploy.yml` | Registry, OIDC, infrastructură, aprobări, deploy, smoke tests și rollback |
-| Cloud/date | Fără resurse/configurații implementate | PostgreSQL, Blob Storage, Terraform și AKS |
+| Cloud/date | PostgreSQL configurat local pentru AuthService; fără resurse cloud implementate | Bazele Listings/Matching, Blob Storage, Terraform și AKS |
 
 Build-ul, formatarea și unit tests sunt configurate pentru Linux, Windows și macOS;
 integration tests sunt configurate pentru Linux. Pașii aplicației sunt omiși cât timp

@@ -41,10 +41,8 @@ _ReSharper*/
 # Local secrets and credentials; commit sanitized *.example files only
 .env
 .env.*
-!.env.example
-!**/.env.example
-**/appsettings.Local.json
-**/appsettings.*.Local.json
+**/appsettings*.json
+!**/appsettings*.example.json
 secrets.json
 *.pfx
 *.p12
