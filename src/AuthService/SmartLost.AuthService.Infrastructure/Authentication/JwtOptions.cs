@@ -17,4 +17,7 @@ public sealed class JwtOptions
 
     [Range(1, int.MaxValue)]
     public int ExpiryMinutes { get; init; } = 60;
+
+    [Range(1, 90)]
+    public int RefreshTokenExpiryDays { get; init; } = 7;
 }

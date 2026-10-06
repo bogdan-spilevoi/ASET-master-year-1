@@ -32,7 +32,7 @@ Deployment is inactive; see the
 | Module | Responsibility | Documentation |
 | --- | --- | --- |
 | [`.github/`](.github/) | GitHub Actions workflows, PR/main validation, Coverlet gates, security and container checks | [CI guide](.github/README.md) |
-| [`src/AuthService/SmartLost.AuthService.Api/`](src/AuthService/SmartLost.AuthService.Api/) | Authentication API with register/login endpoints, JWT issuance and an auth-only PostgreSQL database | [Module README](src/AuthService/README.md) |
+| [`src/AuthService/SmartLost.AuthService.Api/`](src/AuthService/SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions and an auth-only PostgreSQL database | [Module README](src/AuthService/README.md) |
 | [`src/BuildingBlocks/`](src/BuildingBlocks/) | Reusable entity/result/pagination primitives, application behaviors and HTTP adapters | [Building blocks guide](src/BuildingBlocks/README.md) |
 
 `SmartLost.AuthService.Api` owns its database. Additional application services are not implemented yet.
@@ -121,7 +121,8 @@ Local `dotnet run` still uses the launch profile ports in
 
 `SmartLost.AuthService.Api` owns the `authservice` PostgreSQL database. The service uses EF Core with a
 dedicated connection string named `AuthDatabase`. Its [Infrastructure migrations](src/AuthService/SmartLost.AuthService.Infrastructure/Persistence/Migrations/)
-contain `InitialCreate`, which creates `Users` and the unique normalized-identity indexes.
+contain `InitialCreate`, which creates `Users` and the unique normalized-identity indexes,
+and `AddRefreshTokens`, which creates per-login sessions and hashed refresh-token history.
 The `Users` mapping lives in [UserAccountConfiguration](src/AuthService/SmartLost.AuthService.Infrastructure/Persistence/Configurations/UserAccountConfiguration.cs);
 `AuthDbContext` automatically applies entity configurations from its Infrastructure assembly.
 Migrations are applied explicitly through `dotnet ef database update` before starting the
@@ -142,14 +143,19 @@ connection setup, migration creation/application and SQL generation commands. De
 commands use the Infrastructure factory without running API startup. Migration
 application is an explicit operation; no deployment workflow is active.
 
+The checked-in [idempotent PostgreSQL script](docs/sql/auth-migrations.sql) includes both
+migrations. See [manual application commands](src/AuthService/README.md#apply-the-refresh-token-migration-yourself);
+the script has been generated, not applied to a database.
+
 ## API surface
 
 `SmartLost.AuthService.Api` exposes these endpoints:
 
 | Method | Route | Description |
 | --- | --- | --- |
-| `POST` | `/api/auth/register` | Creates a new user and returns a JWT |
-| `POST` | `/api/auth/login` | Authenticates by email and password and returns a JWT |
+| `POST` | `/api/auth/register` | Creates a new user and returns access/refresh tokens |
+| `POST` | `/api/auth/login` | Authenticates by email and password and creates a token session |
+| `POST` | `/api/auth/refresh` | Rotates a refresh token and returns a new access/refresh pair |
 
 Login accepts `{ "email": "user@example.com", "password": "your-password" }`.
 Email matching trims whitespace and ignores casing.
@@ -160,7 +166,14 @@ In Development, Swagger UI is available at `/swagger` and uses the OpenAPI docum
 `/openapi/v1.json`. Open `http://localhost:8080/swagger` with Compose or
 `http://localhost:5048/swagger` with the local HTTP launch profile to test endpoints using
 **Try it out**. Both documentation routes are disabled outside Development.
-Success bodies retain the auth response contract (register: 201, login: 200).
+Success bodies include `userId`, `userName`, `email`, `accessToken`, `expiresAtUtc`,
+`refreshToken` and `refreshTokenExpiresAtUtc` (register: 201; login/refresh: 200).
+Refresh accepts `{ "refreshToken": "the-latest-issued-token" }` without a valid access token.
+Refresh sessions expire after seven days by default (`Jwt:RefreshTokenExpiryDays`, range 1–90);
+rotation preserves that absolute expiry. Reusing an old token revokes its whole session.
+See [refresh token behavior and migration scripts](src/AuthService/README.md#refresh-tokens).
+Refresh-token tests use isolated SQLite databases for rotation, expiry, replay and competing
+updates; they do not apply migrations to the local PostgreSQL database.
 Application failures use `application/problem+json` with an error code, trace identifier and
 field errors when applicable (400 validation, 409 duplicate account, 401 invalid credentials).
 Malformed request bodies use ASP.NET validation problems. Unexpected exceptions return a

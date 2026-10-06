@@ -27,6 +27,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher<UserAccount>, PasswordHasher<UserAccount>>();
         services.AddScoped<IPasswordService, PasswordService>();
         services.AddSingleton<ITokenService, TokenService>();
+        services.AddScoped<IAuthenticationSessionService, AuthenticationSessionService>();
         return services;
     }
 }

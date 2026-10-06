@@ -15,8 +15,18 @@ POST {{SmartLost.AuthService.Api_HostAddress}}/api/auth/login
 Content-Type: application/json
 
 {
-  "userNameOrEmail": "alex.popescu",
+  "email": "alex.popescu@example.com",
   "password": "P@ssw0rd123!"
+}
+
+###
+
+# Replace with the latest refreshToken returned by register, login or refresh.
+POST {{SmartLost.AuthService.Api_HostAddress}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "paste-the-latest-refresh-token-here"
 }
 
 ###

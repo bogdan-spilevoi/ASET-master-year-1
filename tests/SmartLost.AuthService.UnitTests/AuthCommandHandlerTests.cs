@@ -126,11 +126,17 @@ public sealed class AuthCommandHandlerTests
         }
     }
 
-    private sealed class TestTokenService : ITokenService
+    private sealed class TestTokenService : IAuthenticationSessionService
     {
-        public TokenResult CreateToken(UserAccount userAccount)
+        public Task<AuthResponse> CreateAsync(UserAccount user, CancellationToken cancellationToken)
         {
-            return new("token", DateTime.UtcNow.AddHours(1));
+            return Task.FromResult(new AuthResponse(user.Id, user.UserName, user.Email, "token",
+                DateTime.UtcNow.AddHours(1), "test-refresh-token", DateTime.UtcNow.AddDays(7)));
+        }
+
+        public Task<Result<AuthResponse>> RefreshAsync(string refreshToken, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
         }
     }
 }
