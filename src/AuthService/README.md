@@ -344,10 +344,24 @@ plus startup without migration in both Development and Production. Configuration
 verify JSON loading, CLI overrides and JWT validation at startup.
 This includes generated migration/snapshot code
 in Coverlet coverage; the existing coverage gates remain unchanged.
-`SmartLost.AuthService.IntegrationTests` verifies the register/login flow and duplicate
-rejection with different casing/whitespace against a fresh in-memory database. These tests
-do not verify PostgreSQL unique constraints. Run both from the repository root after
-restore and build:
+`SmartLost.AuthService.IntegrationTests` uses Testcontainers 4.15.0 to start a disposable
+`postgres:16-alpine` instance. Its `Testing` environment configures EF Core's production
+Npgsql provider with the container connection string and test-only JWT settings. No local
+appsettings file or existing Compose database is used. The fixture applies the checked-in EF
+migrations to this test database, truncates data before each test and disposes the container
+after the suite. There are no persistent volumes or fixed host ports.
+
+The suite verifies migration application, register/login persistence and normalization,
+scoped EF seeding with real password hashes, independent database connections with an active reader,
+HTTP duplicate rejection, actual PostgreSQL unique-constraint mapping after competing
+preflight checks, refresh rotation/replay revocation, expiry and concurrent refresh rollback.
+The concurrency test synchronizes two HTTP requests before their database saves, so both read
+the same current token. Docker must be running; missing Docker fails the suite rather than
+skipping it. Development database migrations remain an explicit developer operation.
+See the [integration test guide](../../tests/SmartLost.AuthService.IntegrationTests/README.md).
+Its request factory and scoped data seeder provide reusable setup for future tests; test
+DbContexts own their connections, and database assertions use fresh async DI scopes.
+Run both suites from the repository root after restore and build:
 
 ```sh
 dotnet test tests/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings

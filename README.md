@@ -210,6 +210,14 @@ dotnet build Aset.slnx --no-restore --configuration Release --warnaserror
 dotnet format Aset.slnx --no-restore --verify-no-changes --severity info
 ```
 
+AuthService integration tests require a running Docker engine. Testcontainers starts isolated
+PostgreSQL 16, applies EF migrations only there, resets data between tests and removes the
+container afterward. The suite runs the API in `Testing`, using Npgsql and test-only settings;
+it does not use the development database or EF's in-memory provider. See the
+[integration test guide](tests/SmartLost.AuthService.IntegrationTests/README.md).
+Reusable request/seeding helpers use scoped EF contexts; connection-isolation tests verify
+independent connections while another scope has an active reader.
+
 The current test commands are:
 
 ```sh
