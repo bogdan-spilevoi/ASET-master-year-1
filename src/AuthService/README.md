@@ -304,29 +304,22 @@ job is implemented. Expired sessions may be removed together with their cascadin
 
 ### Apply the refresh-token migration yourself
 
-The migration and [idempotent PostgreSQL script](../../docs/sql/auth-migrations.sql) are
-generated files; neither is applied by API startup. The script includes both migrations and
-skips migrations already recorded in `__EFMigrationsHistory`, supporting an empty database or
-one with `InitialCreate` already applied.
+`AddRefreshTokens` is checked in with the EF migrations and model snapshot. Apply it through
+the EF CLI; already-applied migrations are tracked in `__EFMigrationsHistory` and skipped.
+No separate SQL export needs to be committed. If SQL is needed for review, generate it with
+the [SQL generation command](#review-generated-sql).
 
-Run from the repository root. Start the database, then apply the checked-in SQL yourself:
-
-```sh
-docker compose up -d --wait auth-db
-docker compose exec -T auth-db psql -v ON_ERROR_STOP=1 -U authservice -d authservice < docs/sql/auth-migrations.sql
-docker compose up --build
-```
-
-The input redirection command above is for zsh/bash. Alternatively, on any platform use the
-EF CLI with a local settings file whose database host is `localhost`:
+Run from the repository root with a local `appsettings.json` whose database host is
+`localhost` (created from `appsettings.example.json`):
 
 ```sh
 dotnet tool restore
+docker compose up -d --wait auth-db
 dotnet ef database update --project src/AuthService/SmartLost.AuthService.Infrastructure --startup-project src/AuthService/SmartLost.AuthService.Infrastructure --context AuthDbContext -- --SettingsFile src/AuthService/SmartLost.AuthService.Api/appsettings.json
+docker compose up --build
 ```
 
-Use either SQL or the EF update command. The JSON file is unnecessary for the Compose SQL
-option. Neither command was executed as part of this change.
+The database update command was not executed as part of this change.
 
 ## Quality and CI
 

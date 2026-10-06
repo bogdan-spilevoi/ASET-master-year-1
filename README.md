@@ -143,9 +143,9 @@ connection setup, migration creation/application and SQL generation commands. De
 commands use the Infrastructure factory without running API startup. Migration
 application is an explicit operation; no deployment workflow is active.
 
-The checked-in [idempotent PostgreSQL script](docs/sql/auth-migrations.sql) includes both
-migrations. See [manual application commands](src/AuthService/README.md#apply-the-refresh-token-migration-yourself);
-the script has been generated, not applied to a database.
+The checked-in EF migrations are the source of truth. See
+[manual application commands](src/AuthService/README.md#apply-the-refresh-token-migration-yourself).
+Generate SQL on demand for review; SQL exports do not need to be committed.
 
 ## API surface
 
