@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using SmartLost.AuthService.Api;
 using SmartLost.AuthService.Application;
 using SmartLost.AuthService.Infrastructure;
 using SmartLost.AuthService.Infrastructure.Authentication;
@@ -10,6 +11,7 @@ using SmartLost.BuildingBlocks.AspNetCore;
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddApiMapping();
 builder.Services.AddOpenApi();
 builder.Services.AddBuildingBlocksApi();
 

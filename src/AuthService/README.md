@@ -21,6 +21,29 @@ not enabled in this service; persistence remains in its repository.
 
 The database is not shared with other services.
 
+## Object mapping
+
+The API references `AutoMapper` 16.2.0. `Program.cs` calls `AddApiMapping`, defined in
+[`DependencyInjection`](SmartLost.AuthService.Api/DependencyInjection.cs), to register profiles
+from the API assembly through `AddAutoMapper`, using public constructors for record destinations. The core package
+includes dependency injection support; no separate DI package is needed.
+
+[`AuthMappingProfile`](SmartLost.AuthService.Api/Mapping/AuthMappingProfile.cs) maps
+`RegisterRequest` to `RegisterUserCommand` and `LoginRequest` to `LoginUserCommand`.
+Controllers inject `IMapper` and send the mapped commands through the existing MediatR
+validation pipeline. Mapping copies input values; validation and normalization remain in
+Application and Domain. Domain entities are created through their factory methods.
+
+Add API contract mappings as `Profile` classes under the API's `Mapping` folder; profiles in
+that assembly are discovered automatically. If a future layer owns its own mappings, register
+its profile assembly explicitly at the composition root and reference AutoMapper there.
+
+AutoMapper uses a dual license. Configure a valid key, when required by its terms, through
+the `AUTOMAPPER_LICENSE_KEY` environment variable; never commit a key. For Compose, pass
+that variable into `auth-service` explicitly when using a key; host environment variables
+are not automatically forwarded to containers. See the official
+[license configuration](https://docs.automapper.io/en/stable/License-configuration.html).
+
 ## User identity normalization
 
 [`UserIdentityNormalizer`](SmartLost.AuthService.Domain/Identity/UserIdentityNormalizer.cs)

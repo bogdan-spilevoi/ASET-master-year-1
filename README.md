@@ -219,6 +219,10 @@ outside `.github/workflows/` and its unfinished inline steps fail until implemen
 
 ## Development conventions
 
+AuthService uses AutoMapper 16.2.0 to map API request DTOs to Application commands.
+Profiles are registered through the API's `AddApiMapping` extension; domain entities retain their factory
+methods and invariants. See [mapping setup](src/AuthService/README.md#object-mapping).
+
 Use PascalCase types/methods, `I`-prefixed interfaces, camelCase locals/parameters, `_camelCase`
 private fields, Allman braces, four spaces and file-scoped namespaces. Detailed enforced rules
 and review conventions are in [coding standards](docs/CODING_STANDARDS.md).
