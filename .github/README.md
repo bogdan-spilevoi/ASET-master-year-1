@@ -1,3 +1,5 @@
+State of the art document: https://docs.google.com/document/d/1nekTY-JLJy6yUd-d2oyPpD-WZMmQjLqb/edit
+
 # GitHub Actions infrastructure
 
 All CI orchestration lives directly in [workflow YAML](workflows/). There are no standalone
