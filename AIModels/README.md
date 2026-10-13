@@ -65,6 +65,14 @@ dotnet run --project DINOv3-ViTL16-ONNX/DinoVision.csproj --configuration Releas
 Its example model root is `~/models/dinov3-vitl16-onnx`; the [DINO guide](DINOv3-ViTL16-ONNX/README.md)
 documents downloads and `--model`. Unlike Qwen, DINO returns a normalized numeric
 vector, not generated labels, and uses ONNX Runtime without GenAI.
+Its download is pinned to a fixed Hugging Face revision; the versioned
+[manifest](DINOv3-ViTL16-ONNX/model-manifest.json) and
+[checksums](DINOv3-ViTL16-ONNX/SHA256SUMS) record the verified graph, weights and
+configuration files. See the DINO guide for local checksum verification.
+The local [reference tool](DINOv3-ViTL16-ONNX/Validation/README.md) ran the pinned
+model with Hugging Face preprocessing on 15 real dataset images and saved 60 arrays.
+Its versioned run record captures the environment and image/output checksums;
+C# preprocessing/output comparison is the next step.
 
 ## CI boundaries
 

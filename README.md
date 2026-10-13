@@ -78,11 +78,23 @@ The [DINOv3 application](AIModels/DINOv3-ViTL16-ONNX/README.md) in the same solu
 loads the community ONNX export on CPU and returns a normalized 1024-value image
 embedding. It reads the downloaded preprocessing configuration and supports an
 interactive image path or a `--model` override. Its Release build succeeded locally;
-inference and preprocessing parity have not been verified. From `AIModels/`:
+C# inference and preprocessing parity have not been verified. From `AIModels/`:
 
 ```sh
 dotnet run --project DINOv3-ViTL16-ONNX/DinoVision.csproj --configuration Release -- "/absolute/path/to/image.jpg"
 ```
+
+The DINO community download is pinned to revision
+`9f74690bbbba9d76c4cce9062195fc7c95e23bb5`. Required files matched upstream
+metadata and passed local checksums/ONNX structural validation on 2026-10-13.
+The [model manifest](AIModels/DINOv3-ViTL16-ONNX/model-manifest.json) and
+[checksum instructions](AIModels/DINOv3-ViTL16-ONNX/README.md#verify-a-downloaded-copy)
+record that verification; it does not establish image-score quality or performance.
+The [reference generation](AIModels/DINOv3-ViTL16-ONNX/Validation/README.md) also
+completed Python CPU inference on 15 real JPEG/PNG images from `~/models/dataset`,
+saving validated input/output arrays under ignored `artifacts/reference/`.
+The run record pins image checksums and dependency versions; C# parity and
+matching-quality evaluation remain pending.
 
 Docker-related configuration includes [`.dockerignore`](.dockerignore),
 [`docker-compose.yml`](docker-compose.yml) and

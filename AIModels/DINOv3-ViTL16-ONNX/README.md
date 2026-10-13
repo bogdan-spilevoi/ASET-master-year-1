@@ -15,6 +15,7 @@ hf download onnx-community/dinov3-vitl16-pretrain-lvd1689m-ONNX \
   onnx/model.onnx_data \
   config.json \
   preprocessor_config.json \
+  --revision 9f74690bbbba9d76c4cce9062195fc7c95e23bb5 \
   --local-dir ~/models/dinov3-vitl16-onnx
 ```
 
@@ -23,9 +24,28 @@ The example root directory is `~/models/dinov3-vitl16-onnx`. This program does n
 This is the community export, not the earlier custom normalized `embedding` export.
 The graph's metadata was inspected: input `pixel_values`, outputs `last_hidden_state`
 and `pooler_output`, and external weights named `model.onnx_data`.
-For reproducibility across machines, download a fixed Hugging Face commit with
-`--revision <commit-SHA>` and use the same files everywhere. Download revisions
-are not inferred or reported by this application.
+The download is pinned to revision `9f74690bbbba9d76c4cce9062195fc7c95e23bb5`.
+The versioned [model manifest](model-manifest.json) records SHA-256 checksums and
+byte sizes for the graph, weights and both configuration files, plus inspected graph
+inputs/outputs, opset and external tensor references. Model binaries remain outside Git.
+The console application does not automatically verify or report the revision/checksums.
+
+### Verify a downloaded copy
+
+From the repository root on macOS, run:
+
+```sh
+dino_manifest="$(pwd)/AIModels/DINOv3-ViTL16-ONNX/SHA256SUMS"
+(
+  cd ~/models/dinov3-vitl16-onnx || exit 1
+  shasum -a 256 -c "$dino_manifest"
+)
+```
+
+All four files must print `OK`. Use your configured model root if it differs from
+the example. Missing files or different bytes fail this check. `SHA256SUMS` records
+relative paths under the model root; it must be the version committed for the
+selected revision. On Linux, `sha256sum -c` can read the same file.
 
 ## Build and run
 
@@ -104,8 +124,25 @@ Sources: [selected model](https://huggingface.co/onnx-community/dinov3-vitl16-pr
 
 ## Verification status
 
+The [reference-generation guide](Validation/README.md) documents real-image Python
+reference arrays and their environment. This validation tool is not deployed.
+
 On 2026-10-06, dependency restore and Release compilation of the complete AI solution
 succeeded with zero warnings/errors. Community graph metadata and local processor
 configuration were inspected. No inference or tests were run for this project.
-The inspected default download contained `model.onnx_data` but lacked `model.onnx`;
-run the download command above to complete it before inference.
+
+On 2026-10-13, all four required files were present in the local model directory
+and matched the fixed upstream revision. Graph and weights SHA-256/size matched
+Hugging Face LFS metadata; configuration files matched upstream Git blob hashes
+and sizes, and their SHA-256 checksums were calculated locally. The ONNX checker
+passed, and all 366 external tensor offset/length ranges were within the
+1,212,317,696-byte `model.onnx_data` file. Graph opset: 20; input: float32
+`pixel_values`; outputs: `last_hidden_state` and `pooler_output` (1024 features).
+This validates file identity and structure only.
+
+Later on 2026-10-13, Python ONNX Runtime with Hugging Face preprocessing ran the pinned
+model on all 15 JPEG/PNG images in `~/models/dataset`. All reference generations
+succeeded; all 60 saved arrays passed shape/dtype, checksum, finite-value and
+embedding-norm checks. The [run record](Validation/reference-run-2026-10-13.json)
+records dataset checksums and library versions. C# preprocessing/output parity,
+matching quality, cold/warm latency and peak memory remain unverified.
