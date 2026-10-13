@@ -201,3 +201,5 @@ and C# comparison passed for all 15 images with unchanged tolerances and normal 
 exit. The new reference arrays matched the historical arrays exactly. Seven Python
 checks and the CI-pinned Trivy filesystem scan passed locally; see the
 [dependency update record](Validation/README.md#dependency-security-update-on-2026-10-13).
+The [results table](Validation/README.md#recorded-comparison-and-test-results) preserves
+the measured differences, acceptance tolerances and local test outcomes in Git.

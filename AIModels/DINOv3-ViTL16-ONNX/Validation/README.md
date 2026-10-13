@@ -244,3 +244,33 @@ or misconfiguration findings using the workflow's scanners and severity gate. It
 report is `artifacts/validation/trivy-dependencies-2026-10-13.json`. This verifies that
 security step locally, not a complete hosted CI/container run. Historical 4.57.6 processor
 source links explain the original parity implementation; new validation uses 5.19.0.
+
+### Recorded comparison and test results
+
+Local macOS CPU run on 2026-10-13 using Transformers 5.19.0, ONNX Runtime 1.30.0
+and C# preprocessing `rgb-rescale-bilinear-antialias-f32-v2`. Error values below
+are the largest absolute differences across the 15-image dataset; cosine is the minimum.
+
+| Comparison | Recorded value | Acceptance criterion | Result |
+| --- | --- | --- | --- |
+| Decoded RGB: C# vs reference | Max difference `0` | Exact bytes and matching shapes | 15/15 passed |
+| Preprocessed input: C# vs reference | Max difference `1.6689300537109375e-6` | `atol=1e-6`, `rtol=1e-5` | 15/15 passed |
+| Raw inference: C# vs Python with identical C# input | Max difference `0` | `atol=1e-4`, `rtol=1e-4` | 15/15 passed |
+| Normalized embedding: C# vs reference | Max difference `5.140900611877441e-7` | `atol=1e-4`, `rtol=1e-4` | 15/15 passed |
+| Embedding cosine: C# vs reference for the same image | Minimum `0.9999999999923097` | At least `0.9999` | 15/15 passed |
+| New Transformers 5.19.0 reference vs historical 4.57.6 reference | Max difference `0` in all four array types | Exact equality | 60/60 arrays matched |
+
+Input acceptance uses `abs(actual-reference) <= atol + rtol*abs(reference)`;
+the maximum absolute difference alone is not the pass/fail criterion.
+
+| Validation | Recorded outcome |
+| --- | --- |
+| Reference generation | 15 succeeded, 0 failed; exit 0 |
+| Complete C# comparison | 15 passed, 0 failed; exit 0 |
+| Python comparator/startup regression tests | 7 passed |
+| C# preprocessing regression tests | 9 passed in the earlier run on the same date; not rerun for the Python dependency upgrade |
+| Python dependency consistency (`pip check`) | No broken requirements |
+| Trivy 0.74.0 filesystem scan, HIGH/CRITICAL gate | 0 vulnerability findings, 0 misconfiguration failures; exit 0 |
+
+These results establish local integration parity on this dataset. Object-matching
+accuracy, latency, peak memory and a complete hosted CI run are not established by them.
