@@ -8,6 +8,7 @@ have no project references to the microservices and are not included in the Auth
 | --- | --- | --- |
 | [QwenVision.csproj](Qwen3-VL-4B-Instruct-ONNX/QwenVision.csproj) | CPU image-label extraction using ONNX Runtime GenAI and an editable English prompt | [Qwen guide](Qwen3-VL-4B-Instruct-ONNX/README.md) |
 | [DinoVision.csproj](DINOv3-ViTL16-ONNX/DinoVision.csproj) | CPU image embeddings from the community DINOv3 ONNX export, with RGB preprocessing and L2 normalization | [DINO guide](DINOv3-ViTL16-ONNX/README.md) |
+| [DinoVision.Tests.csproj](DINOv3-ViTL16-ONNX.Tests/DinoVision.Tests.csproj) | Local preprocessing regression tests without model downloads | [Test guide](DINOv3-ViTL16-ONNX.Tests/README.md) |
 
 The solution, project, source, prompt, configuration and package lock are versioned.
 Downloaded models, local settings and build outputs are ignored by [.gitignore](.gitignore).
@@ -65,6 +66,41 @@ dotnet run --project DINOv3-ViTL16-ONNX/DinoVision.csproj --configuration Releas
 Its example model root is `~/models/dinov3-vitl16-onnx`; the [DINO guide](DINOv3-ViTL16-ONNX/README.md)
 documents downloads and `--model`. Unlike Qwen, DINO returns a normalized numeric
 vector, not generated labels, and uses ONNX Runtime without GenAI.
+Its download is pinned to a fixed Hugging Face revision; the versioned
+[manifest](DINOv3-ViTL16-ONNX/model-manifest.json) and
+[checksums](DINOv3-ViTL16-ONNX/SHA256SUMS) record the verified graph, weights and
+configuration files. See the DINO guide for local checksum verification.
+The local [reference tool](DINOv3-ViTL16-ONNX/Validation/README.md) ran the pinned
+model with Hugging Face preprocessing on 15 real dataset images and saved 60 arrays.
+Its local ignored run record captures the environment and image/output checksums.
+The [C# comparison](DINOv3-ViTL16-ONNX/Validation/README.md#compare-the-c-integration)
+retains the failed v1 baseline. The revised float32 v2 pipeline passed all four
+stages for all 15 images without relaxing tolerances. Nine C# preprocessing
+regression tests passed; see the test guide for the exact local command.
+
+## Local DINO validation
+
+The [validation guide](DINOv3-ViTL16-ONNX/Validation/README.md) covers the isolated
+Python environment, reference generation, C# comparison, tolerances and shutdown
+investigation. Python is used only for these local checks; the console applications
+use NuGet libraries. No model download or Python execution is part of deployment.
+
+Generated reports, arrays, embeddings and diagnostics belong in ignored repository
+`artifacts/`. Python `--output` paths are restricted to that tree and relative output
+paths resolve from the repository root. Other relative CLI paths still resolve from
+the working directory. Use a new or empty output folder per run; do not commit run
+JSON files. Model manifests/checksums, settings examples and dependency locks remain
+versioned inputs. The C# `--diagnostics` option accepts an explicit directory; use
+`artifacts/` for it as shown in the DINO guide.
+
+The latest v3 report passed 15/15 images with exact decoding and identical-input
+runtime outputs. Embeddings passed the recorded tolerances; this validates integration
+on the dataset, not same/different-object ranking quality. Seven Python checks and
+nine C# preprocessing cases passed locally. AI checks remain outside hosted CI.
+The validation environment now pins Transformers 5.19.0. After the security upgrade,
+15 regenerated references matched the historical arrays exactly, the C# comparison
+passed 15/15, and the CI-pinned Trivy filesystem scan passed locally. See the validation
+guide for environment update commands and verification scope.
 
 ## CI boundaries
 

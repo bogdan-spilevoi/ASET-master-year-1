@@ -5,7 +5,7 @@ namespace DinoVision;
 
 internal static class ImagePreprocessor
 {
-    public static (float[] Pixels, int Height, int Width) Process(string imagePath, JsonElement config)
+    public static (float[] Pixels, int Height, int Width) Process(string imagePath, JsonElement config, string? diagnosticsDirectory = null)
     {
         // Reject different processor configurations rather than silently changing embeddings.
         if (!config.GetProperty("do_resize").GetBoolean()
@@ -35,34 +35,54 @@ internal static class ImagePreprocessor
 
         using SKBitmap source = SKBitmap.Decode(imagePath)
             ?? throw new ArgumentException("Image could not be decoded.");
-        // Full-image resize, as configured by the HF processor; no implicit center crop.
-        // Widen the triangular filter when downsampling to provide antialiasing.
-        (int Index, double Weight)[][] xWeights = BuildWeights(source.Width, width);
-        (int Index, double Weight)[][] yWeights = BuildWeights(source.Height, height);
-        float[] pixels = new float[3 * height * width];
-        for (int y = 0; y < height; y++)
+        if (diagnosticsDirectory is not null)
+        {
+            DiagnosticWriter.WriteDecoded(diagnosticsDirectory, source);
+        }
+        // Hugging Face DINOv3 fast processing: rescale -> antialiased resize -> normalize.
+        // Like PyTorch's CPU AA kernel, resize width first and then height using float32.
+        (int Index, float Weight)[][] xWeights = BuildWeights(source.Width, width);
+        (int Index, float Weight)[][] yWeights = BuildWeights(source.Height, height);
+        float[] horizontal = new float[checked(3 * source.Height * width)];
+        int horizontalPlane = source.Height * width;
+        for (int y = 0; y < source.Height; y++)
         {
             for (int x = 0; x < width; x++)
             {
-                double red = 0;
-                double green = 0;
-                double blue = 0;
-                foreach ((int sourceY, double yWeight) in yWeights[y])
+                float red = 0;
+                float green = 0;
+                float blue = 0;
+                foreach ((int sourceX, float weight) in xWeights[x])
                 {
-                    foreach ((int sourceX, double xWeight) in xWeights[x])
-                    {
-                        SKColor color = source.GetPixel(sourceX, sourceY);
-                        double weight = xWeight * yWeight;
-                        red += color.Red * weight;
-                        green += color.Green * weight;
-                        blue += color.Blue * weight;
-                    }
+                    SKColor color = source.GetPixel(sourceX, y);
+                    red += (color.Red * scale) * weight;
+                    green += (color.Green * scale) * weight;
+                    blue += (color.Blue * scale) * weight;
                 }
 
                 int index = (y * width) + x;
-                pixels[index] = ((float)red * scale - mean[0]) / std[0];
-                pixels[(height * width) + index] = ((float)green * scale - mean[1]) / std[1];
-                pixels[(2 * height * width) + index] = ((float)blue * scale - mean[2]) / std[2];
+                horizontal[index] = red;
+                horizontal[horizontalPlane + index] = green;
+                horizontal[(2 * horizontalPlane) + index] = blue;
+            }
+        }
+
+        float[] pixels = new float[3 * height * width];
+        int plane = height * width;
+        for (int channel = 0; channel < 3; channel++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    float value = 0;
+                    foreach ((int sourceY, float weight) in yWeights[y])
+                    {
+                        value += horizontal[(channel * horizontalPlane) + (sourceY * width) + x] * weight;
+                    }
+
+                    pixels[(channel * plane) + (y * width) + x] = (value - mean[channel]) / std[channel];
+                }
             }
         }
 
@@ -74,29 +94,43 @@ internal static class ImagePreprocessor
         return config.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.True;
     }
 
-    private static (int Index, double Weight)[][] BuildWeights(int inputSize, int outputSize)
+    private static (int Index, float Weight)[][] BuildWeights(int inputSize, int outputSize)
     {
-        double scale = (double)inputSize / outputSize;
-        double support = Math.Max(1, scale);
-        var result = new (int Index, double Weight)[outputSize][];
-        for (int index = 0; index < outputSize; index++)
+        var result = new (int Index, float Weight)[outputSize][];
+        if (inputSize == outputSize)
         {
-            double center = ((index + 0.5) * scale) - 0.5;
-            var samples = new List<(int Index, double Weight)>();
-            double total = 0;
-            int start = Math.Max(0, (int)Math.Ceiling(center - support));
-            int end = Math.Min(inputSize - 1, (int)Math.Floor(center + support));
-            for (int sample = start; sample <= end; sample++)
+            for (int index = 0; index < outputSize; index++)
             {
-                double weight = Math.Max(0, 1 - (Math.Abs(sample - center) / support));
-                if (weight > 0)
-                {
-                    samples.Add((sample, weight));
-                    total += weight;
-                }
+                result[index] = [(index, 1f)];
             }
 
-            result[index] = samples.Select(sample => (sample.Index, sample.Weight / total)).ToArray();
+            return result;
+        }
+
+        float scale = (float)inputSize / outputSize;
+        float support = Math.Max(1f, scale);
+        float inverseScale = scale >= 1f ? (float)(1.0 / scale) : 1f;
+        for (int index = 0; index < outputSize; index++)
+        {
+            float center = (float)(scale * (index + 0.5));
+            int start = Math.Max(0, (int)(center - support + 0.5));
+            int end = Math.Min(inputSize, (int)(center + support + 0.5));
+            var samples = new (int Index, float Weight)[end - start];
+            float total = 0;
+            for (int sample = start; sample < end; sample++)
+            {
+                float distance = (float)((sample - center + 0.5) * inverseScale);
+                float weight = Math.Max(0f, 1f - Math.Abs(distance));
+                samples[sample - start] = (sample, weight);
+                total += weight;
+            }
+
+            for (int sample = 0; sample < samples.Length; sample++)
+            {
+                samples[sample].Weight /= total;
+            }
+
+            result[index] = samples;
         }
 
         return result;

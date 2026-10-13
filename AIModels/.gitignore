@@ -5,6 +5,11 @@ obj/
 .DS_Store
 .venv/
 .cache/
+__pycache__/
+# Local validation run records (not model/configuration manifests)
+DINOv3-ViTL16-ONNX/Validation/reference-run-*.json
+DINOv3-ViTL16-ONNX/Validation/csharp-comparison-*.json
+DINOv3-ViTL16-ONNX/Validation/shutdown-investigation-*.json
 models/
 onnxruntime/
 *.onnx

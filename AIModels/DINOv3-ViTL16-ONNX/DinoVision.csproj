@@ -12,6 +12,7 @@
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="DinoVision.Tests" />
     <Compile Include="../Configuration/PathResolver.cs" Link="Configuration/PathResolver.cs" />
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Update="appsettings.example.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />

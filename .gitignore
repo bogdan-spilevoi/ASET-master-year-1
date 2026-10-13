@@ -59,6 +59,7 @@ kubeconfig.*
 # Tools / OS
 .tools/
 .DS_Store
+:memory:.ses
 Thumbs.db
 Desktop.ini
 *.log

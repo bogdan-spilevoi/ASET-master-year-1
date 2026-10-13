@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "repository": "onnx-community/dinov3-vitl16-pretrain-lvd1689m-ONNX",
+  "revision": "9f74690bbbba9d76c4cce9062195fc7c95e23bb5",
+  "variant": "onnx/model.onnx (unquantized)",
+  "verified_on": "2026-10-13",
+  "files": {
+    "onnx/model.onnx": {
+      "size_bytes": 269737,
+      "sha256": "f81e34930ac50985b8ee7d71cbd93bf36cf07e94bb85e016cfbd5d157688e5b1",
+      "upstream_verification": "SHA-256 and size match Hugging Face LFS metadata"
+    },
+    "onnx/model.onnx_data": {
+      "size_bytes": 1212317696,
+      "sha256": "cbb0241f84041fae7e4237110c88b42aff17e1e7cbb290cdbda4bbd73c60a5c8",
+      "upstream_verification": "SHA-256 and size match Hugging Face LFS metadata"
+    },
+    "config.json": {
+      "size_bytes": 837,
+      "sha256": "03ae5427456a0b521bd5b4cd09daae4cca6358796e01755054abea9ef4bbf37e",
+      "upstream_git_blob_sha1": "b5360becd658fe3092f1a5ecebe37d5025a27be9",
+      "upstream_verification": "Git blob SHA-1 and size match Hugging Face metadata; SHA-256 computed locally"
+    },
+    "preprocessor_config.json": {
+      "size_bytes": 585,
+      "sha256": "960c41d1f3a7778b936365769a2d90550b318a6c0a53a0296957adacfe5e0dd7",
+      "upstream_git_blob_sha1": "0126173c1ab7b75bbd9102e37de8a56ffe0a012b",
+      "upstream_verification": "Git blob SHA-1 and size match Hugging Face metadata; SHA-256 computed locally"
+    }
+  },
+  "graph": {
+    "inputs": [
+      {
+        "name": "pixel_values",
+        "type": "FLOAT, s99x3xs100xs4"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "last_hidden_state",
+        "type": "FLOAT, s99x((s100//16))*((s4//16)) + 5x1024"
+      },
+      {
+        "name": "pooler_output",
+        "type": "FLOAT, s99x1024"
+      }
+    ],
+    "opsets": [
+      {
+        "domain": "",
+        "version": 20
+      }
+    ],
+    "external_tensor_count": 366,
+    "external_files": [
+      "model.onnx_data"
+    ],
+    "onnx_checker": "passed"
+  },
+  "verification_scope": "File identity, external tensor bounds and ONNX structure only. No inference, preprocessing parity, similarity evaluation or performance measurements."
+}

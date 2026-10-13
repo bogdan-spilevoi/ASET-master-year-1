@@ -15,6 +15,7 @@ hf download onnx-community/dinov3-vitl16-pretrain-lvd1689m-ONNX \
   onnx/model.onnx_data \
   config.json \
   preprocessor_config.json \
+  --revision 9f74690bbbba9d76c4cce9062195fc7c95e23bb5 \
   --local-dir ~/models/dinov3-vitl16-onnx
 ```
 
@@ -23,9 +24,28 @@ The example root directory is `~/models/dinov3-vitl16-onnx`. This program does n
 This is the community export, not the earlier custom normalized `embedding` export.
 The graph's metadata was inspected: input `pixel_values`, outputs `last_hidden_state`
 and `pooler_output`, and external weights named `model.onnx_data`.
-For reproducibility across machines, download a fixed Hugging Face commit with
-`--revision <commit-SHA>` and use the same files everywhere. Download revisions
-are not inferred or reported by this application.
+The download is pinned to revision `9f74690bbbba9d76c4cce9062195fc7c95e23bb5`.
+The versioned [model manifest](model-manifest.json) records SHA-256 checksums and
+byte sizes for the graph, weights and both configuration files, plus inspected graph
+inputs/outputs, opset and external tensor references. Model binaries remain outside Git.
+The console application does not automatically verify or report the revision/checksums.
+
+### Verify a downloaded copy
+
+From the repository root on macOS, run:
+
+```sh
+dino_manifest="$(pwd)/AIModels/DINOv3-ViTL16-ONNX/SHA256SUMS"
+(
+  cd ~/models/dinov3-vitl16-onnx || exit 1
+  shasum -a 256 -c "$dino_manifest"
+)
+```
+
+All four files must print `OK`. Use your configured model root if it differs from
+the example. Missing files or different bytes fail this check. `SHA256SUMS` records
+relative paths under the model root; it must be the version committed for the
+selected revision. On Linux, `sha256sum -c` can read the same file.
 
 ## Build and run
 
@@ -71,18 +91,40 @@ dotnet run --project DINOv3-ViTL16-ONNX/DinoVision.csproj --configuration Releas
 `--help` describes the CLI. Save JSON after building using:
 
 ```sh
-dotnet run --project DINOv3-ViTL16-ONNX/DinoVision.csproj --no-build --configuration Release -- "/absolute/path/to/image.jpg" > embedding.json
+mkdir -p ../artifacts/embeddings
+dotnet run --project DINOv3-ViTL16-ONNX/DinoVision.csproj --no-build --configuration Release -- "/absolute/path/to/image.jpg" > ../artifacts/embeddings/embedding.json
 ```
+
+Optional `--diagnostics <new-or-empty-directory>` writes decoded RGB bytes, float32
+little-endian input/raw-output/normalized-embedding arrays and shape/image-checksum
+metadata for local validation. This does not change the normal JSON output.
+The [comparison guide](Validation/README.md#compare-the-c-integration) documents the
+dataset runner. Diagnostic output should be saved under ignored `artifacts/`.
+
+From `AIModels/`, after building Release, capture one image's diagnostics with:
+
+```sh
+dotnet run --project DINOv3-ViTL16-ONNX/DinoVision.csproj --no-build --no-restore --configuration Release -- "/absolute/path/to/image.jpg" --diagnostics ../artifacts/validation/dinov3-single-image
+```
+
+Choose a new or empty diagnostics directory. Unlike the Python output guard, the
+C# option accepts any explicit directory; the example keeps generated files out of source.
 
 ## Model-specific processing
 
-Decode the image to RGB, resize the entire image to the processor's 224x224 size
-using a bilinear triangular filter with antialiasing for downsampling, rescale pixels
-and normalize each channel using the downloaded means and standard deviations.
+Decode the image to RGB, rescale pixels using float32, resize the entire image to
+224x224 with float32 bilinear antialiasing (horizontal then vertical), and normalize
+each channel using the downloaded means and standard deviations. Filter coordinates,
+weights, boundary normalization and pass order follow the pinned PyTorch CPU AA
+implementation used by Hugging Face's fast processor.
 The tensor layout is float32 `[1,3,224,224]`. This processor does not crop or pad.
 Unexpected resize/crop/pad/normalization configurations are rejected.
-This local implementation has not been numerically compared with Hugging Face's
-processor; exact parity, including decoding/color management, is not claimed.
+Version `rgb-rescale-bilinear-antialias-f32-v2` passed the recorded Python-reference
+tolerances on all 15 dataset images. Bit-identical output across platforms, decoders,
+image formats or different library versions is not claimed. See
+[preprocessing regression tests](../DINOv3-ViTL16-ONNX.Tests/README.md).
+The output version label changed from v1; regenerate any cached v1 embeddings before
+using a consistent v2 matching index.
 
 Only `pooler_output` is requested, giving one `[1,1024]` global CLS vector. The
 application checks its dimensions and finite values, then L2-normalizes it in C#.
@@ -101,11 +143,63 @@ CI does not build the standalone solution; repository-wide security scans still 
 Sources: [selected model](https://huggingface.co/onnx-community/dinov3-vitl16-pretrain-lvd1689m-ONNX),
 [DINOv3 outputs](https://huggingface.co/docs/transformers/model_doc/dinov3),
 [C# ONNX Runtime](https://onnxruntime.ai/docs/tutorials/csharp/basic_csharp.html).
+Preprocessing reference: [Transformers 4.57.6 DINOv3 fast processor](https://github.com/huggingface/transformers/blob/v4.57.6/src/transformers/models/dinov3_vit/image_processing_dinov3_vit_fast.py)
+and [PyTorch 2.14.1 CPU resize](https://github.com/pytorch/pytorch/blob/v2.14.1/aten/src/ATen/native/cpu/UpSampleKernel.cpp).
 
 ## Verification status
+
+The [reference-generation guide](Validation/README.md) documents real-image Python
+reference arrays and their environment. This validation tool is not deployed.
+Generated validation JSON records and arrays are kept in ignored `artifacts/`,
+and Python output paths are restricted to that tree. The pinned `model-manifest.json`,
+configuration example and NuGet lock remain versioned inputs.
 
 On 2026-10-06, dependency restore and Release compilation of the complete AI solution
 succeeded with zero warnings/errors. Community graph metadata and local processor
 configuration were inspected. No inference or tests were run for this project.
-The inspected default download contained `model.onnx_data` but lacked `model.onnx`;
-run the download command above to complete it before inference.
+
+On 2026-10-13, all four required files were present in the local model directory
+and matched the fixed upstream revision. Graph and weights SHA-256/size matched
+Hugging Face LFS metadata; configuration files matched upstream Git blob hashes
+and sizes, and their SHA-256 checksums were calculated locally. The ONNX checker
+passed, and all 366 external tensor offset/length ranges were within the
+1,212,317,696-byte `model.onnx_data` file. Graph opset: 20; input: float32
+`pixel_values`; outputs: `last_hidden_state` and `pooler_output` (1024 features).
+This validates file identity and structure only.
+
+Later on 2026-10-13, Python ONNX Runtime with Hugging Face preprocessing ran the pinned
+model on all 15 JPEG/PNG images in `~/models/dataset`. All reference generations
+succeeded; all 60 saved arrays passed shape/dtype, checksum, finite-value and
+embedding-norm checks. The local run record under `artifacts/reference/dinov3-2026-10-13/`
+records dataset checksums and library versions.
+
+The original v1 C# comparison ran the same 15 images. RGB decoding matched exactly,
+same-input ONNX raw outputs matched exactly, and all final embeddings passed the
+recorded tolerances. Strict input-tensor comparison failed on all images: maximum
+absolute difference `3.644824028015137e-5`. The largest final embedding difference
+was `5.532056093215942e-7`; minimum cosine was `0.9999999999890854`.
+No tolerances were relaxed. See the local comparison record under `artifacts/validation/dinov3-csharp-2026-10-13/`.
+That failed baseline remains recorded.
+
+The v2 implementation then passed every stage for all 15 images, using the same
+tolerances: input max error `1.6689300537109375e-6`, embedding max error
+`5.140900611877441e-7`. Exact decoded RGB and same-input ONNX raw inference matched.
+See the local v2 comparison record under `artifacts/validation/dinov3-csharp-f32-v2-final-2026-10-13/`.
+Nine C# preprocessing regression tests and seven Python comparator/startup tests passed.
+An intermittent Python native shutdown abort was investigated separately; three
+full reruns exited normally after disabling runtime telemetry before initialization.
+The exact cause remains unconfirmed. See the [investigation](Validation/README.md#native-shutdown-abort-investigation).
+Matching quality, cold/warm latency and peak memory remain unverified.
+
+The subsequent local `artifacts/validation/dinov3-csharp-new-run-v3/report.json`
+also recorded 15 passes and zero failures. Saved arrays, normalized embedding norms,
+source-image hashes, reference-report identity and C# DLL identity were checked.
+The report alone does not record the parent Python process's shutdown exit status.
+
+After upgrading validation dependencies to Transformers 5.19.0, reference generation
+and C# comparison passed for all 15 images with unchanged tolerances and normal process
+exit. The new reference arrays matched the historical arrays exactly. Seven Python
+checks and the CI-pinned Trivy filesystem scan passed locally; see the
+[dependency update record](Validation/README.md#dependency-security-update-on-2026-10-13).
+The [results table](Validation/README.md#recorded-comparison-and-test-results) preserves
+the measured differences, acceptance tolerances and local test outcomes in Git.
