@@ -78,7 +78,8 @@ The [DINOv3 application](AIModels/DINOv3-ViTL16-ONNX/README.md) in the same solu
 loads the community ONNX export on CPU and returns a normalized 1024-value image
 embedding. It reads the downloaded preprocessing configuration and supports an
 interactive image path or a `--model` override. Its Release build succeeded locally;
-C# inference and preprocessing parity have not been verified. From `AIModels/`:
+C# inference and revised float32 preprocessing passed the recorded tolerances
+on 15 reference images. From `AIModels/`:
 
 ```sh
 dotnet run --project DINOv3-ViTL16-ONNX/DinoVision.csproj --configuration Release -- "/absolute/path/to/image.jpg"
@@ -93,8 +94,23 @@ record that verification; it does not establish image-score quality or performan
 The [reference generation](AIModels/DINOv3-ViTL16-ONNX/Validation/README.md) also
 completed Python CPU inference on 15 real JPEG/PNG images from `~/models/dataset`,
 saving validated input/output arrays under ignored `artifacts/reference/`.
-The run record pins image checksums and dependency versions; C# parity and
-matching-quality evaluation remain pending.
+Generated AI validation reports and diagnostics stay in ignored `artifacts/`;
+the Python tools enforce this location for output. Model manifests, configuration
+examples and dependency locks remain tracked.
+The run record pins image checksums and dependency versions. The
+C# v2 comparison report under `artifacts/validation/dinov3-csharp-f32-v2-final-2026-10-13/`
+records passed decoding/input/runtime/embedding checks with unchanged tolerances;
+the failed v1 baseline is retained. Nine local
+[preprocessing regression tests](AIModels/DINOv3-ViTL16-ONNX.Tests/README.md) passed.
+The local Python validation tools disable ONNX telemetry before initialization;
+three full reruns exited normally after a reported intermittent native shutdown abort.
+Its exact cause remains unconfirmed; see the
+[validation guide](AIModels/DINOv3-ViTL16-ONNX/Validation/README.md#native-shutdown-abort-investigation).
+Matching-quality evaluation remains pending.
+The latest v3 report also passed 15/15 images; its saved arrays and file identities
+were checked. See the [validation guide](AIModels/DINOv3-ViTL16-ONNX/Validation/README.md)
+for reference/comparison commands, tolerances, artifact locations and seven Python
+checks. Use the DINO `--diagnostics` option to capture binary stages for a single image.
 
 Docker-related configuration includes [`.dockerignore`](.dockerignore),
 [`docker-compose.yml`](docker-compose.yml) and

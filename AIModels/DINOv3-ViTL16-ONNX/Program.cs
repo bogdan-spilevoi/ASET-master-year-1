@@ -5,7 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.ML.OnnxRuntime;
 using SmartLost.AI.Configuration;
 
-const string Usage = "Usage: DinoVision [image-path] [--model model-directory]";
+const string Usage = "Usage: DinoVision [image-path] [--model model-directory] [--diagnostics output-directory]";
 if (args.Length == 1 && args[0] is "--help" or "-h")
 {
     Console.WriteLine(Usage);
@@ -13,7 +13,7 @@ if (args.Length == 1 && args[0] is "--help" or "-h")
     return 0;
 }
 
-if (args.Length is not (0 or 1 or 3) || (args.Length == 3 && args[1] != "--model"))
+if (args.Length > 0 && args.Length % 2 == 0)
 {
     Console.Error.WriteLine(Usage);
     return 1;
@@ -21,6 +21,22 @@ if (args.Length is not (0 or 1 or 3) || (args.Length == 3 && args[1] != "--model
 
 try
 {
+    string? modelOverride = null;
+    string? diagnosticsDirectory = null;
+    for (int index = 1; index < args.Length; index += 2)
+    {
+        switch (args[index])
+        {
+            case "--model" when modelOverride is null:
+                modelOverride = args[index + 1];
+                break;
+            case "--diagnostics" when diagnosticsDirectory is null:
+                diagnosticsDirectory = Path.GetFullPath(args[index + 1]);
+                break;
+            default:
+                throw new ArgumentException(Usage);
+        }
+    }
     var configuration = new ConfigurationBuilder()
         .SetBasePath(AppContext.BaseDirectory)
         .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
@@ -47,8 +63,8 @@ try
         throw new FileNotFoundException("Image not found.", imagePath);
     }
 
-    string modelDirectory = args.Length == 3
-        ? PathResolver.Resolve(args[2], Environment.CurrentDirectory)
+    string modelDirectory = modelOverride is not null
+        ? PathResolver.Resolve(modelOverride, Environment.CurrentDirectory)
         : PathResolver.Resolve(configuration["Paths:ModelDirectory"]);
     string modelPath = PathResolver.Resolve(configuration["Paths:ModelFile"], modelDirectory);
     string preprocessorPath = PathResolver.Resolve(configuration["Paths:PreprocessorFile"], modelDirectory);
@@ -72,8 +88,18 @@ try
 
     Console.Error.WriteLine($"Model loaded in {timer.Elapsed.TotalSeconds:F1}s.");
     timer.Restart();
+    if (diagnosticsDirectory is not null)
+    {
+        if (Directory.Exists(diagnosticsDirectory) && Directory.EnumerateFileSystemEntries(diagnosticsDirectory).Any())
+        {
+            throw new ArgumentException("Diagnostics directory must be new or empty.");
+        }
+
+        Directory.CreateDirectory(diagnosticsDirectory);
+    }
+
     using var config = JsonDocument.Parse(File.ReadAllText(preprocessorPath));
-    (float[] pixels, int height, int width) = ImagePreprocessor.Process(imagePath, config.RootElement);
+    (float[] pixels, int height, int width) = ImagePreprocessor.Process(imagePath, config.RootElement, diagnosticsDirectory);
     using var tensor = OrtValue.CreateTensorValueFromMemory(pixels, [1, 3, height, width]);
     using var options = new RunOptions();
     using IDisposableReadOnlyCollection<OrtValue> outputs = session.Run(options, new Dictionary<string, OrtValue> { ["pixel_values"] = tensor }, outputNames);
@@ -83,6 +109,12 @@ try
         || embedding.Any(value => !float.IsFinite(value)))
     {
         throw new ArgumentException("Model returned an invalid image embedding.");
+    }
+
+    if (diagnosticsDirectory is not null)
+    {
+        DiagnosticWriter.WriteFloat(diagnosticsDirectory, "pixel_values", pixels);
+        DiagnosticWriter.WriteFloat(diagnosticsDirectory, "pooler_output", embedding);
     }
 
     double norm = Math.Sqrt(embedding.Sum(value => (double)value * value));
@@ -96,11 +128,17 @@ try
         embedding[index] = (float)(embedding[index] / norm);
     }
 
+    if (diagnosticsDirectory is not null)
+    {
+        DiagnosticWriter.WriteFloat(diagnosticsDirectory, "embedding", embedding);
+        DiagnosticWriter.WriteMetadata(diagnosticsDirectory, imagePath, height, width);
+    }
+
     Console.WriteLine(JsonSerializer.Serialize(new
     {
         model = "onnx-community/dinov3-vitl16-pretrain-lvd1689m-ONNX",
         embeddingType = "L2-normalized pooler_output (CLS)",
-        preprocessingVersion = "rgb-bilinear-antialias-v1",
+        preprocessingVersion = "rgb-rescale-bilinear-antialias-f32-v2",
         dimensions = embedding.Length,
         embedding
     }, new JsonSerializerOptions { WriteIndented = true }));

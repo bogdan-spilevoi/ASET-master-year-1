@@ -91,18 +91,40 @@ dotnet run --project DINOv3-ViTL16-ONNX/DinoVision.csproj --configuration Releas
 `--help` describes the CLI. Save JSON after building using:
 
 ```sh
-dotnet run --project DINOv3-ViTL16-ONNX/DinoVision.csproj --no-build --configuration Release -- "/absolute/path/to/image.jpg" > embedding.json
+mkdir -p ../artifacts/embeddings
+dotnet run --project DINOv3-ViTL16-ONNX/DinoVision.csproj --no-build --configuration Release -- "/absolute/path/to/image.jpg" > ../artifacts/embeddings/embedding.json
 ```
+
+Optional `--diagnostics <new-or-empty-directory>` writes decoded RGB bytes, float32
+little-endian input/raw-output/normalized-embedding arrays and shape/image-checksum
+metadata for local validation. This does not change the normal JSON output.
+The [comparison guide](Validation/README.md#compare-the-c-integration) documents the
+dataset runner. Diagnostic output should be saved under ignored `artifacts/`.
+
+From `AIModels/`, after building Release, capture one image's diagnostics with:
+
+```sh
+dotnet run --project DINOv3-ViTL16-ONNX/DinoVision.csproj --no-build --no-restore --configuration Release -- "/absolute/path/to/image.jpg" --diagnostics ../artifacts/validation/dinov3-single-image
+```
+
+Choose a new or empty diagnostics directory. Unlike the Python output guard, the
+C# option accepts any explicit directory; the example keeps generated files out of source.
 
 ## Model-specific processing
 
-Decode the image to RGB, resize the entire image to the processor's 224x224 size
-using a bilinear triangular filter with antialiasing for downsampling, rescale pixels
-and normalize each channel using the downloaded means and standard deviations.
+Decode the image to RGB, rescale pixels using float32, resize the entire image to
+224x224 with float32 bilinear antialiasing (horizontal then vertical), and normalize
+each channel using the downloaded means and standard deviations. Filter coordinates,
+weights, boundary normalization and pass order follow the pinned PyTorch CPU AA
+implementation used by Hugging Face's fast processor.
 The tensor layout is float32 `[1,3,224,224]`. This processor does not crop or pad.
 Unexpected resize/crop/pad/normalization configurations are rejected.
-This local implementation has not been numerically compared with Hugging Face's
-processor; exact parity, including decoding/color management, is not claimed.
+Version `rgb-rescale-bilinear-antialias-f32-v2` passed the recorded Python-reference
+tolerances on all 15 dataset images. Bit-identical output across platforms, decoders,
+image formats or different library versions is not claimed. See
+[preprocessing regression tests](../DINOv3-ViTL16-ONNX.Tests/README.md).
+The output version label changed from v1; regenerate any cached v1 embeddings before
+using a consistent v2 matching index.
 
 Only `pooler_output` is requested, giving one `[1,1024]` global CLS vector. The
 application checks its dimensions and finite values, then L2-normalizes it in C#.
@@ -121,11 +143,16 @@ CI does not build the standalone solution; repository-wide security scans still 
 Sources: [selected model](https://huggingface.co/onnx-community/dinov3-vitl16-pretrain-lvd1689m-ONNX),
 [DINOv3 outputs](https://huggingface.co/docs/transformers/model_doc/dinov3),
 [C# ONNX Runtime](https://onnxruntime.ai/docs/tutorials/csharp/basic_csharp.html).
+Preprocessing reference: [Transformers 4.57.6 DINOv3 fast processor](https://github.com/huggingface/transformers/blob/v4.57.6/src/transformers/models/dinov3_vit/image_processing_dinov3_vit_fast.py)
+and [PyTorch 2.14.1 CPU resize](https://github.com/pytorch/pytorch/blob/v2.14.1/aten/src/ATen/native/cpu/UpSampleKernel.cpp).
 
 ## Verification status
 
 The [reference-generation guide](Validation/README.md) documents real-image Python
 reference arrays and their environment. This validation tool is not deployed.
+Generated validation JSON records and arrays are kept in ignored `artifacts/`,
+and Python output paths are restricted to that tree. The pinned `model-manifest.json`,
+configuration example and NuGet lock remain versioned inputs.
 
 On 2026-10-06, dependency restore and Release compilation of the complete AI solution
 succeeded with zero warnings/errors. Community graph metadata and local processor
@@ -143,6 +170,28 @@ This validates file identity and structure only.
 Later on 2026-10-13, Python ONNX Runtime with Hugging Face preprocessing ran the pinned
 model on all 15 JPEG/PNG images in `~/models/dataset`. All reference generations
 succeeded; all 60 saved arrays passed shape/dtype, checksum, finite-value and
-embedding-norm checks. The [run record](Validation/reference-run-2026-10-13.json)
-records dataset checksums and library versions. C# preprocessing/output parity,
-matching quality, cold/warm latency and peak memory remain unverified.
+embedding-norm checks. The local run record under `artifacts/reference/dinov3-2026-10-13/`
+records dataset checksums and library versions.
+
+The original v1 C# comparison ran the same 15 images. RGB decoding matched exactly,
+same-input ONNX raw outputs matched exactly, and all final embeddings passed the
+recorded tolerances. Strict input-tensor comparison failed on all images: maximum
+absolute difference `3.644824028015137e-5`. The largest final embedding difference
+was `5.532056093215942e-7`; minimum cosine was `0.9999999999890854`.
+No tolerances were relaxed. See the local comparison record under `artifacts/validation/dinov3-csharp-2026-10-13/`.
+That failed baseline remains recorded.
+
+The v2 implementation then passed every stage for all 15 images, using the same
+tolerances: input max error `1.6689300537109375e-6`, embedding max error
+`5.140900611877441e-7`. Exact decoded RGB and same-input ONNX raw inference matched.
+See the local v2 comparison record under `artifacts/validation/dinov3-csharp-f32-v2-final-2026-10-13/`.
+Nine C# preprocessing regression tests and seven Python comparator/startup tests passed.
+An intermittent Python native shutdown abort was investigated separately; three
+full reruns exited normally after disabling runtime telemetry before initialization.
+The exact cause remains unconfirmed. See the [investigation](Validation/README.md#native-shutdown-abort-investigation).
+Matching quality, cold/warm latency and peak memory remain unverified.
+
+The subsequent local `artifacts/validation/dinov3-csharp-new-run-v3/report.json`
+also recorded 15 passes and zero failures. Saved arrays, normalized embedding norms,
+source-image hashes, reference-report identity and C# DLL identity were checked.
+The report alone does not record the parent Python process's shutdown exit status.

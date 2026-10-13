@@ -5,10 +5,16 @@ from datetime import datetime, timezone
 import hashlib
 from importlib.metadata import version
 import json
+import os
 from pathlib import Path
 import platform
 import subprocess
 import sys
+
+from artifact_paths import artifact_output
+
+# Suppress the native telemetry uploader before ONNX Runtime initializes.
+os.environ["ORT_DISABLE_TELEMETRY"] = "1"
 
 import numpy as np
 import onnxruntime as ort
@@ -33,7 +39,7 @@ def main():
     args = parser.parse_args()
     dataset = args.dataset.expanduser().resolve()
     model_dir = args.model_dir.expanduser().resolve()
-    output_dir = args.output.expanduser().resolve()
+    output_dir = artifact_output(args.output)
     if not dataset.is_dir():
         raise ValueError(f"Dataset directory not found: {dataset}")
     if output_dir == dataset or dataset in output_dir.parents:
