@@ -43,7 +43,7 @@ public sealed class HttpResultTests
         {
             Assert.Equal(error.Message, problem.Detail);
             Assert.Equal(error.Code, problem.Extensions["code"]);
-            Assert.Equal(error, Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<Error>>(problem.Extensions["errors"])));
+            Assert.Equal(error, Assert.Single(Assert.IsType<IReadOnlyList<Error>>(problem.Extensions["errors"], exactMatch: false)));
         }
 
         Assert.Equal(status, Assert.IsType<ObjectResult>(controller.ToActionResult(Result.Failure(error))).StatusCode);
