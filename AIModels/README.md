@@ -97,6 +97,10 @@ The latest v3 report passed 15/15 images with exact decoding and identical-input
 runtime outputs. Embeddings passed the recorded tolerances; this validates integration
 on the dataset, not same/different-object ranking quality. Seven Python checks and
 nine C# preprocessing cases passed locally. AI checks remain outside hosted CI.
+The validation environment now pins Transformers 5.19.0. After the security upgrade,
+15 regenerated references matched the historical arrays exactly, the C# comparison
+passed 15/15, and the CI-pinned Trivy filesystem scan passed locally. See the validation
+guide for environment update commands and verification scope.
 
 ## CI boundaries
 

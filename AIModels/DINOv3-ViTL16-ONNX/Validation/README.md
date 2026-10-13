@@ -26,7 +26,9 @@ conda create --prefix .tools/dinov3-export python=3.11 pip -y
 
 Skip environment creation if it already exists. [requirements.txt](requirements.txt)
 pins direct dependencies; [requirements-reference.lock.txt](requirements-reference.lock.txt)
-records all installed package versions used on this Mac. Native package availability
+records current installed package versions used on this Mac, including Transformers
+5.19.0 and updated Hub/tokenizer dependencies. Earlier run reports retain their
+original environment under ignored artifacts. Native package availability
 on other operating systems must be checked separately.
 
 ## Generate reference arrays
@@ -218,3 +220,27 @@ All these outputs are ignored by Git. The source directory contains scripts,
 documentation and pinned Python dependency lists. The parent module retains the
 versioned model manifest/checksums, NuGet lock and configuration example. Recorded
 execution summaries remain in documentation; generated JSON run records stay local.
+
+## Dependency security update on 2026-10-13
+
+Transformers was upgraded from 4.57.6 to 5.19.0 after CI reported four HIGH advisories.
+Both dependency lists were synchronized. Scanner exclusions and severity gates were
+unchanged. To update an existing environment, run from the repository root:
+
+```sh
+.tools/dinov3-export/bin/python -m pip install -r AIModels/DINOv3-ViTL16-ONNX/Validation/requirements-reference.lock.txt
+.tools/dinov3-export/bin/python -m pip check
+```
+
+Installation, `pip check`, seven comparator/startup tests, offline reference generation
+and C# comparison all passed locally. Both image runs covered 15 images and exited 0.
+New reference RGB/input/raw-output/embedding arrays matched the historical arrays exactly
+for every image. C# comparison tolerances were unchanged. Results are under
+`artifacts/reference/dinov3-transformers-5.19.0/` and
+`artifacts/validation/dinov3-transformers-5.19.0/`.
+
+The CI-pinned Trivy 0.74.0 filesystem scan exited 0 with no HIGH/CRITICAL vulnerability
+or misconfiguration findings using the workflow's scanners and severity gate. Its local
+report is `artifacts/validation/trivy-dependencies-2026-10-13.json`. This verifies that
+security step locally, not a complete hosted CI/container run. Historical 4.57.6 processor
+source links explain the original parity implementation; new validation uses 5.19.0.

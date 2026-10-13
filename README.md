@@ -111,6 +111,9 @@ The latest v3 report also passed 15/15 images; its saved arrays and file identit
 were checked. See the [validation guide](AIModels/DINOv3-ViTL16-ONNX/Validation/README.md)
 for reference/comparison commands, tolerances, artifact locations and seven Python
 checks. Use the DINO `--diagnostics` option to capture binary stages for a single image.
+The validation environment now pins Transformers 5.19.0 with synchronized dependencies.
+Its 15-image reference/comparison checks and the CI-pinned Trivy filesystem scan passed
+locally after the upgrade; hosted CI and container verification remain separate.
 
 Docker-related configuration includes [`.dockerignore`](.dockerignore),
 [`docker-compose.yml`](docker-compose.yml) and

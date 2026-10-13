@@ -195,3 +195,9 @@ The subsequent local `artifacts/validation/dinov3-csharp-new-run-v3/report.json`
 also recorded 15 passes and zero failures. Saved arrays, normalized embedding norms,
 source-image hashes, reference-report identity and C# DLL identity were checked.
 The report alone does not record the parent Python process's shutdown exit status.
+
+After upgrading validation dependencies to Transformers 5.19.0, reference generation
+and C# comparison passed for all 15 images with unchanged tolerances and normal process
+exit. The new reference arrays matched the historical arrays exactly. Seven Python
+checks and the CI-pinned Trivy filesystem scan passed locally; see the
+[dependency update record](Validation/README.md#dependency-security-update-on-2026-10-13).
