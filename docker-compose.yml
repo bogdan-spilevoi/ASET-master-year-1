@@ -22,7 +22,7 @@ services:
     container_name: aset-auth-service
     build:
       context: .
-      dockerfile: src/AuthService/SmartLost.AuthService.Api/Dockerfile
+      dockerfile: SmartLost.AuthService.Api/Dockerfile
     depends_on:
       auth-db:
         condition: service_healthy
@@ -31,7 +31,7 @@ services:
       ASPNETCORE_URLS: http://+:8080
     volumes:
       - type: bind
-        source: ./src/AuthService/SmartLost.AuthService.Api/appsettings.Docker.json
+        source: ./SmartLost.AuthService.Api/appsettings.Docker.json
         target: /app/appsettings.json
         read_only: true
         bind:
