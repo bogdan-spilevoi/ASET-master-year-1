@@ -25,7 +25,7 @@ fails or is skipped; it is skipped when the whole run is cancelled so cancellati
 
 Each revision builds and runs unit tests on Linux, Windows and macOS; integration tests run on
 Linux with Docker available. Tests must provision isolated dependencies and clean them up.
-The standalone [AI solution](../AI%20models/README.md), `AI models/AIModels.slnx`,
+The standalone [AI solution](../AIModels/README.md), `AIModels/AIModels.slnx`,
 is excluded from CI project inventory, restore/build/format/CLI checks and tests.
 Microservices, libraries and their tests must belong to `Aset.slnx`; project name and
 package-lock checks cover that scope. Repository-wide Gitleaks and Trivy scans still
@@ -40,7 +40,7 @@ assess until those files exist.
 
 TRX and Coverlet Cobertura reports are retained as `tests-<commit>-<OS>` for 14 days. If Dockerfiles
 exist, scanned image archives, CycloneDX SBOMs and a manifest mapping the commit to Dockerfiles
-are retained as `containers-<commit>` for 7 days. Packaging builds every `src/**/Dockerfile` with
+are retained as `containers-<commit>` for 7 days. Packaging builds every `SmartLost.*/Dockerfile` with
 the repository root as build context. It does not push images to a registry or deploy them.
 The final aggregate gate is unchanged by individual job or matrix names.
 
@@ -105,12 +105,12 @@ not by itself enforce those workflow gates.
 AuthService unit tests also check that the PostgreSQL model matches its migration snapshot
 and validate generated migration SQL without a live database. A model change without a
 corresponding migration fails the existing unit-test job. The local EF tooling and database
-commands are documented in the [AuthService guide](../src/AuthService/README.md#database-and-migrations);
+commands are documented in the [AuthService guide](../docs/AUTHSERVICE.md#database-and-migrations);
 CI does not apply migrations to an application database.
 
 ## Adding the first service
 
-1. Put production projects under `src/<Service>/` and test projects under
+1. Put each production project in a root-level `<ProjectName>/` folder and test projects under
    `tests/<Service>.UnitTests/` and `tests/<Service>.IntegrationTests/`.
 2. Add every microservice/library/test project to `Aset.slnx` with `dotnet sln Aset.slnx add <project.csproj>`.
    Project names must be unique, and all projects must target `net10.0`.
@@ -124,7 +124,7 @@ CI does not apply migrations to an application database.
 6. Add a service Dockerfile when ready: multi-stage .NET 10 build, digest-pinned base images,
    non-root runtime user, no credentials, and repository-root build context.
 7. Add the module README and update the root README with verified responsibilities, ownership,
-   API/configuration and commands in the same change. Shared production libraries belong in `src/`.
+   API/configuration and commands in the same change. Shared production libraries also use root-level project folders.
 
 ## Maintenance and deployment
 

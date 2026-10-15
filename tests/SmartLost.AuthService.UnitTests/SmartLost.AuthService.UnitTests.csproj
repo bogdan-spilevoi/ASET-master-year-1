@@ -24,10 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/AuthService/SmartLost.AuthService.Api/SmartLost.AuthService.Api.csproj" />
-    <ProjectReference Include="../../src/AuthService/SmartLost.AuthService.Application/SmartLost.AuthService.Application.csproj" />
-    <ProjectReference Include="../../src/AuthService/SmartLost.AuthService.Domain/SmartLost.AuthService.Domain.csproj" />
-    <ProjectReference Include="../../src/AuthService/SmartLost.AuthService.Infrastructure/SmartLost.AuthService.Infrastructure.csproj" />
+    <ProjectReference Include="../../SmartLost.AuthService.Api/SmartLost.AuthService.Api.csproj" />
+    <ProjectReference Include="../../SmartLost.AuthService.Application/SmartLost.AuthService.Application.csproj" />
+    <ProjectReference Include="../../SmartLost.AuthService.Domain/SmartLost.AuthService.Domain.csproj" />
+    <ProjectReference Include="../../SmartLost.AuthService.Infrastructure/SmartLost.AuthService.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

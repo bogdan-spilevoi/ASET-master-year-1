@@ -3,9 +3,9 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/BuildingBlocks/SmartLost.BuildingBlocks.Core/SmartLost.BuildingBlocks.Core.csproj" />
-    <ProjectReference Include="../../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
-    <ProjectReference Include="../../src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
+    <ProjectReference Include="../../SmartLost.BuildingBlocks.Core/SmartLost.BuildingBlocks.Core.csproj" />
+    <ProjectReference Include="../../SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
+    <ProjectReference Include="../../SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="coverlet.collector" Version="10.1.0">
       <PrivateAssets>all</PrivateAssets>

@@ -1,10 +1,10 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401 AS build
 WORKDIR /src
 
 COPY . .
-RUN dotnet restore "src/AuthService/SmartLost.AuthService.Api/SmartLost.AuthService.Api.csproj" --locked-mode
+RUN dotnet restore "SmartLost.AuthService.Api/SmartLost.AuthService.Api.csproj" --locked-mode
 
-WORKDIR /src/src/AuthService/SmartLost.AuthService.Api
+WORKDIR /src/SmartLost.AuthService.Api
 RUN dotnet publish "SmartLost.AuthService.Api.csproj" --no-restore -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

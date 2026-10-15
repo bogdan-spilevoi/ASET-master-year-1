@@ -8,9 +8,9 @@ They contain technical primitives and own no database, service entities or busin
 
 | Library | Contents | Dependencies |
 | --- | --- | --- |
-| [Core](SmartLost.BuildingBlocks.Core/) | `Entity<TId>`, `Result`, `Result<T>`, `IResult`, `Error`, `ErrorKind`, `DomainException`, `PageSlice<T>`, `PagedResult<T>`, `PagedDataGuard` | .NET only |
-| [Application](SmartLost.BuildingBlocks.Application/) | Validation/exception/optional transaction behaviors, transaction contracts, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.1.1, DI/logging abstractions |
-| [AspNetCore](SmartLost.BuildingBlocks.AspNetCore/) | `ToActionResult`, `ProblemDetails`, unexpected-exception handler, API registration | Core, ASP.NET Core framework |
+| [Core](../SmartLost.BuildingBlocks.Core/) | `Entity<TId>`, `Result`, `Result<T>`, `IResult`, `Error`, `ErrorKind`, `DomainException`, `PageSlice<T>`, `PagedResult<T>`, `PagedDataGuard` | .NET only |
+| [Application](../SmartLost.BuildingBlocks.Application/) | Validation/exception/optional transaction behaviors, transaction contracts, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.1.1, DI/logging abstractions |
+| [AspNetCore](../SmartLost.BuildingBlocks.AspNetCore/) | `ToActionResult`, `ProblemDetails`, unexpected-exception handler, API registration | Core, ASP.NET Core framework |
 
 Service Domain projects reference Core; service Application projects reference Application;
 service API projects reference AspNetCore. Infrastructure implements service persistence
@@ -143,7 +143,7 @@ errors retain the framework's validation-problem contract.
 
 ## Tests and local verification
 
-[BuildingBlocks.UnitTests](../../tests/SmartLost.BuildingBlocks.UnitTests/) covers result
+[BuildingBlocks.UnitTests](../tests/SmartLost.BuildingBlocks.UnitTests/) covers result
 invariants, entity equality, pagination snapshots/counts/limits/mapping, derived-validator
 discovery through MediatR, pipeline ordering, sequential validation, exception propagation,
 commit/rollback/disposal and HTTP mapping. AuthService's API tests cover actual wiring and
@@ -159,5 +159,5 @@ dotnet test tests/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.Un
 The existing CI discovers the new test project and requires all production assemblies in
 coverage. The strictly-above-80% overall and changed-code gates remain unchanged.
 
-See the [root README](../../README.md) for all build/test/container commands and
-[AuthService](../AuthService/README.md) for the consuming service.
+See the [root README](../README.md) for all build/test/container commands and
+[AuthService](AUTHSERVICE.md) for the consuming service.

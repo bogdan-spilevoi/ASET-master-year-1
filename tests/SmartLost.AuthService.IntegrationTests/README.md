@@ -63,4 +63,4 @@ CI runs this suite on Linux with Docker available.
 - Login with real EF-seeded password hashes, and independent scoped connections with an active reader.
 
 Unit tests remain separate and collect Coverlet coverage. These integration tests exercise
-PostgreSQL behavior; see the [AuthService guide](../../src/AuthService/README.md).
+PostgreSQL behavior; see the [AuthService guide](../../docs/AUTHSERVICE.md).

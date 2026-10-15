@@ -5,6 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../BuildingBlocks/SmartLost.BuildingBlocks.Core/SmartLost.BuildingBlocks.Core.csproj" />
+    <ProjectReference Include="../SmartLost.BuildingBlocks.Core/SmartLost.BuildingBlocks.Core.csproj" />
   </ItemGroup>
 </Project>
