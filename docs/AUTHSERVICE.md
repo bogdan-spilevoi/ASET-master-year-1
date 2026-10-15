@@ -80,6 +80,10 @@ The initial migration includes both normalized columns and their unique indexes.
 - [`appsettings.example.json`](../SmartLost.AuthService.Api/appsettings.example.json) is the local API/EF configuration template.
 - [`appsettings.Docker.example.json`](../SmartLost.AuthService.Api/appsettings.Docker.example.json) is the container configuration template.
 
+The Docker build image is `mcr.microsoft.com/dotnet/sdk:10.0.401`, matching the exact SDK
+required by `global.json`. Update both together when changing the SDK; the floating `sdk:10.0`
+tag can advance to an incompatible patch while SDK roll-forward is disabled.
+
 The Dockerfile uses the repository root as its build context so the API's Application,
 Domain and Infrastructure references, shared build configuration and package locks are
 available during restore. It uses locked restore and starts `SmartLost.AuthService.Api.dll`.

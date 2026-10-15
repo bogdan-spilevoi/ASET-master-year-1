@@ -248,7 +248,7 @@ sanitized 500 problem and are logged server-side.
 
 | Area | Current configuration |
 | --- | --- |
-| SDK / target | SDK **10.0.401** pinned exactly; `SmartLost.AuthService.Api` targets `net10.0`; no application/runtime image patch is pinned separately |
+| SDK / target | SDK **10.0.401** pinned exactly in `global.json` and the Docker build image; `SmartLost.AuthService.Api` targets `net10.0`; the runtime image uses `aspnet:10.0` |
 | Style / analysis | `.editorconfig`, .NET 10 recommended analyzers, nullable references, warnings as errors |
 | Dependencies | Locked restore and direct/transitive NuGet auditing; lock files required with projects; local `dotnet-ef` 10.0.12 pinned in `.config/dotnet-tools.json` |
 | Tests / coverage | All tests must pass; unit tests check migration/model drift and PostgreSQL SQL generation without a database; **Coverlet** collects unit line coverage; inline workflow gates require **strictly above 80%** overall and on changed executable code; interface-only contracts without executable code are exempt from the changed-file coverage requirement regardless of their location |
