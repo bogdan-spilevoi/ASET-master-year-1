@@ -25,9 +25,10 @@ implements those abstractions. API composes the service. Domain uses framework-f
 building blocks, Application uses MediatR/validation building blocks, and API uses the
 ASP.NET result adapter. Shared libraries never depend on a microservice or own its data.
 Repository build configuration applies to microservice projects in the [solution](Aset.slnx).
-The IDE solution groups projects into `BuildingBlocks` and `Services/Auth`, each with its own
-`Tests` folder. Each future service can have its own folder under `Services` with tests grouped
-alongside its production projects. These solution folders organize
+The IDE solution groups production projects into `BuildingBlocks` and `Services/Auth`.
+A separate `Tests` solution folder groups AuthService unit/integration tests under `Auth`
+and shared-library tests under `BuildingBlocks`. Future services follow the same grouping.
+These solution folders organize
 the IDE view; production project folders remain at the repository root and tests under `tests/`.
 Deployment is inactive; see the
 [deployment plan](docs/DEPLOYMENT.md).
