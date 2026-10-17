@@ -1,7 +1,17 @@
 # Deployment extension points
 
-Deployment is intentionally inactive. There is no cloud account, registry, Kubernetes cluster,
-namespace or application to deploy yet. `docs/examples/deploy.yml` lives outside the workflow
+Deployment is intentionally inactive. This repository has no provisioned/verified Azure
+infrastructure or active deployment workflow. The
+[Azure student architecture proposal](AZURE_STUDENT_ARCHITECTURE.md) targets cloud
+applications in Switzerland North and local AI through an authenticated tunnel,
+with HTTP scale-to-zero and at most one month in the shared student subscription.
+Active free benefits and shared capacity still require verification.
+Kubernetes is not a selected requirement.
+
+[Member 6's UML and C4 deployment diagrams](diagrams/member-6/README.md) show the
+proposed CI infrastructure and Azure/local runtime placement as editable sources.
+
+`docs/examples/deploy.yml` lives outside the workflow
 directory, and every unimplemented step exits with a failure directly in the workflow YAML.
 A missing deployment implementation must never produce a successful deployment.
 
@@ -21,12 +31,14 @@ successful main CI → publish immutable scanned images → verify release prove
 
 Before activating the template:
 
-1. Choose the cloud provider, container registry and Kubernetes distribution/version, plus
-   deployment tooling (Helm or Kustomize). Keep versioned manifests under `deploy/`.
+1. Select the hosting resources, registry and deployment tooling after availability and
+   budget checks. The student proposal is not provisioned infrastructure. If Kubernetes
+   is selected instead, choose its distribution/version and Helm or Kustomize explicitly.
+   Keep versioned deployment configuration under `deploy/`.
 2. Build .NET 10 Linux containers with multi-stage Dockerfiles, non-root users, small runtime
-   images and pinned base-image digests. Declare resource requests/limits, readiness/liveness/
-   startup probes, security contexts and restricted service accounts in Kubernetes manifests.
-   Validate manifests against the selected Kubernetes version; none is assumed at bootstrap.
+   images and pinned base-image digests. Configure runtime limits, dependency readiness,
+   startup/liveness checks and restricted identities for the selected host. Kubernetes
+   manifests and version validation apply only if that hosting option is selected.
 3. Add a trusted `main` publishing job after **`CI / Required`**. Push once with commit/digest
    identifiers, generate attestations and publish a manifest mapping each service to its image
    digest and SBOM. Never rebuild between staging and production.

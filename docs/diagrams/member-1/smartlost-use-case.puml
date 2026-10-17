@@ -1,0 +1,86 @@
+@startuml SmartLost_Use_Case
+title SmartLost - UML Use Case Diagram\nTarget application: semester MVP and future extensions
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  BackgroundColor<<Future>> #FAF5FF
+  BorderColor<<Future>> #7E22CE
+}
+
+actor "A01 Visitor" as Visitor
+actor "A02 Registered User" as User
+actor "A03 Lost Item Owner" as Owner
+actor "A04 Finder" as Finder
+actor "A05 Deployment Operator" as Operator
+actor "A06 Moderator" as Moderator <<Future>>
+actor "A07 Campus Benefits Manager" as Benefits <<Future>>
+actor "A08 Campus Identity Provider" as Identity <<Future>>
+actor "A09 Notification Provider" as Notifications <<Future>>
+
+User <|-- Owner
+User <|-- Finder
+
+rectangle "SmartLost" {
+  usecase "UC01\nRegister account" as UC01
+  usecase "UC02\nSign in" as UC02
+  usecase "UC03\nSign out" as UC03
+  usecase "UC04\nPublish lost/found listing" as UC04
+  usecase "UC05\nAnalyse listing photograph" as UC05
+  usecase "UC06\nBrowse and inspect listings" as UC06
+  usecase "UC07\nManage owned listing" as UC07
+  usecase "UC08\nView match suggestions" as UC08
+  usecase "UC09\nReview a suggestion" as UC09
+  usecase "UC10\nConfirm matched recovery" as UC10
+  usecase "UC10a\nAward credibility" as UC10a
+  usecase "UC11\nView credibility and contributions" as UC11
+  usecase "UC12\nDeploy and verify Azure release" as UC12
+  usecase "UC13a\nReport a listing" as UC13a <<Future>>
+  usecase "UC13b\nReview reported content" as UC13b <<Future>>
+  usecase "UC14\nSign in with campus identity" as UC14 <<Future>>
+  usecase "UC15\nReceive external updates" as UC15 <<Future>>
+  usecase "UC16\nRedeem campus benefit" as UC16 <<Future>>
+  usecase "UC17\nMessage another user" as UC17 <<Future>>
+}
+
+Visitor -- UC01
+Visitor -- UC02
+Visitor -- UC14
+User -- UC03
+User -- UC04
+User -- UC06
+User -- UC07
+User -- UC08
+User -- UC11
+User -- UC13a
+User -- UC15
+User -- UC16
+User -- UC17
+Owner -- UC09
+Owner -- UC10
+Finder -- UC08
+Operator -- UC12
+Moderator -- UC13b
+Benefits -- UC16
+Identity -- UC14
+Notifications -- UC15
+
+UC05 .> UC04 : <<extend>>\n[image analysis requested]
+UC09 .> UC08 : <<extend>>\n[owner chooses to review]
+UC10 .> UC10a : <<include>>
+
+note bottom of UC10a
+  One eligible helper award per matched recovery.
+  Manual closure does not award credibility.
+end note
+
+legend bottom
+  Blue use cases: semester MVP, including Azure delivery.
+  <<Future>>: planned beyond this semester.
+  Owner and Finder inherit Registered User interactions.
+  Sign in is a precondition for authenticated business goals.
+  UC10a and UC13a/UC13b refine UC10 and UC13 in the requirements.
+endlegend
+@enduml

@@ -1,0 +1,44 @@
+@startuml SmartLost_Auth_Components
+!include <C4/C4_Component>
+
+title SmartLost - C4 Component Diagram\nAuth Service API container - semester target and current implementation
+LAYOUT_LEFT_RIGHT()
+AddElementTag("PlannedSemester", $bgColor="#FAF5FF", $fontColor="#6B21A8", $borderColor="#7E22CE", $legendText="Planned for this semester; not yet implemented")
+AddRelTag("PlannedSemester", $textColor="#6B21A8", $lineColor="#7E22CE", $lineStyle=DashedLine())
+
+Container(web, "Angular Web App", "Angular / TypeScript", "Registration, sign-in and sign-out screens; manages the browser session.", $tags="PlannedSemester")
+ContainerDb(db, "Auth Database", "PostgreSQL", "Owned exclusively by Auth Service. Users, RefreshSessions and RefreshTokens; password and refresh-token hashes.")
+
+Container_Boundary(auth, "Auth Service API [.NET 10 / ASP.NET Core]") {
+  Component(api, "Auth HTTP API", "AuthController / AutoMapper / ASP.NET Core", "Maps register, login and refresh requests to commands. Converts results into HTTP responses and ProblemDetails.")
+  Component(pipeline, "Command Pipeline", "MediatR / FluentValidation / shared BuildingBlocks", "Runs validation before dispatch; converts explicit domain exceptions to results.")
+  Component(handlers, "Auth Command Handlers", "Application / C#", "RegisterUserCommandHandler, LoginUserCommandHandler and RefreshTokenCommandHandler. Coordinates account creation, credential checks and renewal.")
+  Component(passwords, "Password Service", "Infrastructure / ASP.NET Core Identity", "Implements IPasswordService. Hashes passwords and verifies stored password hashes.")
+  Component(sessions, "Authentication Session Service", "Infrastructure / C#", "Implements IAuthenticationSessionService. Creates sessions; rotates hashed refresh tokens; revokes sessions on replay or concurrency failure.")
+  Component(tokens, "JWT Token Service", "Infrastructure / HMAC-SHA256", "Implements ITokenService. Issues signed access tokens with user claims and expiry.")
+  Component(persistence, "Auth Persistence", "Infrastructure / EF Core / Npgsql", "UserAccountRepository implements IUserAccountRepository. AuthDbContext owns tracked users, refresh sessions and token history.")
+  Component(signout, "Sign-out Command Handling", "Planned Application extension", "Requests revocation of the caller's current refresh session. Detailed command and API contract remain to be designed.", $tags="PlannedSemester")
+}
+
+Rel(web, api, "Registers, signs in and renews sessions", "HTTP JSON; HTTPS required for Azure", $tags="PlannedSemester")
+Rel(api, pipeline, "Dispatches mapped commands", "In-process")
+Rel(pipeline, handlers, "Invokes valid register, login or refresh commands", "In-process")
+Rel(handlers, passwords, "Hashes or verifies passwords via IPasswordService", "In-process")
+Rel(handlers, persistence, "Checks unique identities, loads and tracks accounts via IUserAccountRepository", "In-process")
+Rel(handlers, sessions, "Creates or renews sessions via IAuthenticationSessionService", "In-process")
+Rel(sessions, tokens, "Creates signed access tokens via ITokenService", "In-process")
+Rel(sessions, persistence, "Uses AuthDbContext for session state and rotation; repository for creation save", "In-process")
+Rel(persistence, db, "Reads/writes owned data; enforces uniqueness and rotation concurrency", "PostgreSQL protocol")
+
+Rel(web, api, "Requests current-session sign out; route not defined yet", "Planned HTTP contract", $tags="PlannedSemester")
+Rel(pipeline, signout, "Validates and dispatches planned sign-out command", "In-process", $tags="PlannedSemester")
+Rel(signout, sessions, "Requests current-session revocation through a planned interface extension", "In-process", $tags="PlannedSemester")
+
+' All components inside the boundary run in one API application process.
+' Arrows show runtime calls. Application references abstractions implemented
+' by Infrastructure; these arrows do not reverse compile-time dependency rules.
+' Domain entities and identity normalization are internal implementation details.
+' No campus identity provider is required for the semester's local-account flow.
+' Azure hosting topology belongs in a separate deployment diagram.
+SHOW_LEGEND()
+@enduml

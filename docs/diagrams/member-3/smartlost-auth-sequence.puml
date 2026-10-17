@@ -1,0 +1,125 @@
+@startuml SmartLost_Authentication_Sequence
+title SmartLost - UML Authentication Sequence\nUC02 Sign in, session renewal and UC03 Sign out
+autonumber
+hide footbox
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 65
+
+actor "Campus User" as User
+boundary "Angular Web App\n[Planned semester work]" as Web #FAF5FF
+box "Auth Service API - one application process" #EFF6FF
+  boundary "Auth API\nController, mapping and validation pipeline" as API
+  control "Auth Command Handlers" as Commands
+  participant "UserAccountRepository" as Repository
+  participant "PasswordService" as Passwords
+  control "AuthenticationSessionService" as Sessions
+  participant "TokenService" as Tokens
+end box
+database "Auth Database\nPostgreSQL" as DB
+
+note over API, DB
+  Existing backend: register, login and refresh.
+  Database operations use EF Core / AuthDbContext.
+  Purple messages describe planned semester additions.
+end note
+
+== UC02 - Sign in ==
+User -> Web : Enter email and password
+Web -> API : POST /api/auth/login\n{ email, password }
+API -> API : Map request to LoginUserCommand\nValidate email and password
+alt Invalid command
+  API --> Web : 400 Bad Request / ProblemDetails
+  Web --> User : Display validation errors
+else Valid command
+  API -> Commands : Handle LoginUserCommand
+  Commands -> Repository : FindByEmailAsync(normalizedEmail)\nTrim + ToUpperInvariant
+  Repository -> DB : Find user by normalized email
+  DB --> Repository : UserAccount or no account
+  Repository --> Commands : UserAccount or null
+  opt Account exists
+    Commands -> Passwords : Verify(userAccount, password)
+    Passwords --> Commands : Password verification result
+  end
+  alt Unknown email or incorrect password
+    Commands --> API : Unauthorized result\nauth.invalid_credentials
+    API --> Web : 401 Unauthorized / ProblemDetails\nSame credentials error in both cases
+    Web --> User : Display sign-in error
+  else Valid credentials
+    Commands -> Sessions : CreateAsync(userAccount)
+    Sessions -> Sessions : Generate cryptographically random refresh token\nCompute SHA-256 hash and absolute session expiry
+    Sessions -> Tokens : CreateToken(userAccount)
+    Tokens --> Sessions : Signed JWT and access-token expiry
+    Sessions -> Repository : SaveChangesAsync()\nCommit tracked session and token history
+    Repository -> DB : Insert RefreshSession and RefreshToken\nPersist refresh-token hashes only
+    DB --> Repository : Committed
+    Repository --> Sessions : Saved
+    Sessions --> Commands : AuthResponse
+    Commands --> API : Success result
+    API --> Web : 200 OK / AuthResponse\nUser details, access token, refresh token and expiries
+    Web --> User : Display authenticated application
+  end
+end
+
+== Session renewal - separate request after successful sign in ==
+note over Web, API
+  A refresh request does not require a valid access token.
+  This interaction supports FR03; it is not a separate user goal.
+end note
+Web -> API : POST /api/auth/refresh\n{ refreshToken }
+API -> API : Map RefreshTokenCommand and validate token format
+alt Invalid token format
+  API --> Web : 400 Bad Request / ProblemDetails
+else Valid format
+  API -> Commands : Handle RefreshTokenCommand
+  Commands -> Sessions : RefreshAsync(refreshToken)
+  Sessions -> Sessions : Compute SHA-256 hash
+  Sessions -> DB : Find token history with session and user\nvia AuthDbContext
+  DB --> Sessions : Stored token, session and user, or no match
+  alt Unknown token, expired session or revoked session
+    Sessions --> Commands : Unauthorized result\nauth.invalid_refresh_token
+  else Previously used token in an active session
+    Sessions -> DB : Revoke that refresh session
+    DB --> Sessions : Revocation persisted
+    Sessions --> Commands : Unauthorized result\nauth.invalid_refresh_token
+  else Current token in an active session
+    Sessions -> Sessions : Generate replacement refresh token and hash\nKeep the original absolute session expiry
+    Sessions -> Tokens : CreateToken(user)
+    Tokens --> Sessions : New JWT and access-token expiry
+    Sessions -> DB : Atomically update current token hash and insert history\nCheck current hash and revocation concurrency tokens
+    alt Rotation committed
+      DB --> Sessions : Saved
+      Sessions --> Commands : Success with new AuthResponse
+    else Concurrent refresh or revocation detected
+      DB --> Sessions : DbUpdateConcurrencyException
+      Sessions -> DB : Revoke that refresh session
+      DB --> Sessions : Revocation persisted or already revoked
+      Sessions --> Commands : Unauthorized result\nauth.invalid_refresh_token
+    end
+  end
+  Commands --> API : Result<AuthResponse>
+  API --> Web : 200 OK with replacement tokens\nor 401 Unauthorized / ProblemDetails
+  Web -> Web : On success, replace the previous token pair
+end
+
+== UC03 - Sign out [Planned semester work] ==
+note over Web, Sessions #FAF5FF
+  Target behaviour from FR03 / UC03, not an existing endpoint.
+  The route and detailed revocation contract are not defined yet.
+end note
+User -[#7E22CE]> Web : Select Sign out
+Web -[#7E22CE]> API : Request revocation of the current refresh session
+API -[#7E22CE]> Commands : Dispatch planned sign-out command\nValidate the caller's authority over the session
+Commands -[#7E22CE]> Sessions : Request current-session revocation
+Sessions -[#7E22CE]> DB : Persist revocation for that session only
+DB -[#7E22CE]-> Sessions : Revocation outcome
+Sessions -[#7E22CE]-> Commands : Outcome
+Commands -[#7E22CE]-> API : Result
+API -[#7E22CE]-> Web : Confirm revocation or report failure
+Web -[#7E22CE]> Web : Clear browser credentials even on request failure
+Web -[#7E22CE]-> User : Return to sign-in view\nReport if server revocation was not confirmed
+note over Web, DB
+  Sign out must be safe to repeat and must not revoke other sessions.
+  Already issued JWTs remain valid until expiry unless extra revocation is added.
+end note
+@enduml

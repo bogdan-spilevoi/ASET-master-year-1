@@ -24,6 +24,10 @@ creation and each refresh rotation with one `SaveChangesAsync` transaction.
 
 The database is not shared with other services.
 
+See the [Member 3 authentication diagrams](diagrams/member-3/README.md) for a UML
+sign-in/session sequence and a C4 component view. They distinguish the current
+backend from the Angular and sign-out work required for the semester.
+
 ## Object mapping
 
 The API references `AutoMapper` 16.2.0. `Program.cs` calls `AddApiMapping`, defined in

@@ -1,0 +1,100 @@
+@startuml SmartLost_Matching_Sequence
+title SmartLost - UML Matching Sequence\nUC08 View matching suggestions\nProposed semester integration - not implemented
+autonumber
+hide footbox
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 65
+
+actor "Registered User\nLost Item Owner or Finder" as User
+boundary "Angular Web App" as Web
+control "Listings Service\nAPI and Listing Queries" as Listings
+box "Matching Service - one proposed application process" #EFF6FF
+  control "Suggestion Coordinator\nvia internal Matching API" as Matching
+  control "Candidate Selector" as Selector
+  control "Relevance Ranker" as Ranker
+  participant "Embedding Service\nDINOv3 adapter and versioned cache" as Embeddings
+end box
+database "Matching Database\nSearch projections and embeddings" as DB
+
+note over Listings, DB
+  Listings is authoritative for listing state, decisions and recoveries.
+  Durable retryable updates populate Matching projections separately.
+  Duplicate/older change sequences must not overwrite newer state.
+  This query does not publish a listing or execute a recovery.
+end note
+
+User -> Web : Open suggestions for an owned Open listing
+Web -> Listings : Request suggestions for listing
+Listings -> Listings : Validate token, ownership, current revision\nand source listing eligibility
+alt Unauthorised, not owned or ineligible source
+  Listings --> Web : Access error or current unavailable/conflict outcome
+  Web --> User : Show error or current listing state
+else Authorised and eligible source
+  Listings -> Matching : Request suggestions for listing identifier\nand expected source revision
+  alt Matching unreachable or request times out
+    Listings -> Listings : Observe call failure or timeout\nPreserve the published listing
+    Listings --> Web : Explicit unavailable processing outcome
+    Web --> User : Show that suggestions are unavailable\nAllow a later retry
+  else Matching request handled
+    Matching -> DB : Read source projection, revision\nand processing/eligibility state
+    DB --> Matching : Projection and status, or no current projection
+    alt Source projection missing, stale or processing failed
+      Matching -> Matching : Prepare explicit pending/failed outcome\nDo not label stale results as ready
+    else Projection current but source no longer eligible
+      Matching -> Matching : Prepare unavailable/current-state outcome
+    else Current eligible projection
+      Matching -> Selector : Select candidate pool for this source
+      Selector -> DB : Query Open opposite-type listings from other authors\nPrioritise normalised category compatibility\nExclude reserved, consumed and recovered listings\nApply date tolerance and revision-specific rejections
+      DB --> Selector : Eligible projected candidates, possibly none
+      Selector --> Matching : Candidate pool with listing revisions
+      alt Candidate pool empty
+        Matching -> Matching : Prepare ready result with an empty candidate list
+      else Candidates available
+        Matching -> Ranker : Rank source/candidate pairs\nusing versioned ranking configuration
+        loop Each candidate pair
+          Ranker -> Embeddings : Get available visual evidence for photo pair\nand compatible model/preprocessing versions
+          Embeddings -> DB : Read cached embeddings by photo identity/revision,\nmodel version and preprocessing version
+          DB --> Embeddings : Compatible vectors or missing/unavailable features
+          alt Both photos have compatible normalised vectors
+            Embeddings -> Embeddings : Compare vectors for visual similarity\nInitial proposed method: cosine similarity
+            Embeddings --> Ranker : VisualScore with feature versions
+          else Photo or usable embedding missing
+            Embeddings --> Ranker : No visual score; explicit feature status
+          end
+          Ranker -> Ranker : Combine available category, colour, location,\ndate and optional visual evidence\nDerive reasons from the actual calculation
+        end
+        Ranker -> Ranker : Apply configured relevance threshold and sort\nKeep visual similarity distinct from total relevance
+        Ranker --> Matching : Ranked candidate pool, revisions, scores,\nreasons and RankingVersion; possibly empty
+      end
+    end
+    Matching --> Listings : Ready ranked pool or explicit processing outcome
+    alt Ready result
+      Listings -> Listings : Recheck source revision and eligibility\nagainst authoritative current data
+      alt Source changed or became ineligible
+        Listings --> Web : Refresh-required or current unavailable outcome
+        Web --> User : Show current state and allow reload
+      else Source still current and eligible
+        Listings -> Listings : Recheck candidate revisions, Open state, reservations,\nconsumed/recovered links and pair rejections\nDiscard stale/ineligible results; take zero to three
+        Listings --> Web : Current suggestions with supported reasons\nor a ready empty result
+        Web --> User : Display relevance and optional visual similarity\nShow an empty state when no result remains
+      end
+    else Pending, failed or unavailable result
+      Listings --> Web : Explicit processing status
+      Web --> User : Show status and allow a later retry
+    end
+  end
+end
+
+note over Embeddings, DB
+  DINOv3 extraction uses the local host through an authenticated tunnel
+  with durable work and bounded concurrency, cached by photo/model/preprocessing version.
+  A cache miss is not an instruction to infer every photo during this query.
+  Local Qwen proposes editable traits in UC05; neither model confirms a match.
+end note
+note over User, Listings
+  Viewing suggestions creates no acceptance, recovery or points.
+  UC09 decisions and UC10 physical recovery are separate Listings operations.
+  Relevance scores are not validated ownership probabilities.
+end note
+@enduml
