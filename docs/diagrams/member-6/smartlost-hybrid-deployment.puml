@@ -1,0 +1,85 @@
+@startuml SmartLost_Hybrid_Deployment
+!include <C4/C4_Deployment>
+
+title SmartLost - C4 Deployment Diagram\nSemester demonstration environment - Azure and local AI\nProposed deployment - cloud resources and local HTTP wrapper not verified
+LAYOUT_LEFT_RIGHT()
+
+Deployment_Node(client, "Campus user device", "Desktop or mobile device") {
+  Deployment_Node(browser, "Web browser", "JavaScript runtime") {
+    Container(web, "Angular Web App instance", "Angular / TypeScript", "Account, publication, suggestion and recovery UI. Public API origins only; no runtime service secrets.")
+  }
+}
+
+Deployment_Node(azure, "Azure for Students subscription", "Shared with SmartRemoteManager") {
+  Deployment_Node(swa, "Static Web Apps Free", "Global managed static hosting", "Azure default HTTPS domain; validate supported resource location before provisioning.") {
+    Node(assets, "Angular static assets", "Versioned HTML / JavaScript / CSS", "Serves the distribution downloaded by the browser. No managed API linking assumed.")
+  }
+
+  Deployment_Node(region, "Switzerland North", "Regional backend and data resources") {
+    Deployment_Node(vnet, "Shared VNet", "Private database connectivity", "Reuse subject to access, capacity and original Terraform ownership.") {
+      Deployment_Node(env, "Shared Container Apps environment", "Consumption profile") {
+        Deployment_Node(authhost, "Auth Container App", "Public HTTPS ingress; replicas 0 to 1") {
+          Container(auth, "Auth Service instance", ".NET 10 / ASP.NET Core", "Identity, JWT issuance and refresh sessions. Existing local code; Azure release planned.")
+        }
+        Deployment_Node(listingshost, "Listings Container App", "Public HTTPS ingress; replicas 0 to 1") {
+          Container(listings, "Listings Service instance", ".NET 10 / ASP.NET Core - planned", "Authoritative listings, photos, decisions, recovery and credibility; JWT validation and ownership checks.")
+        }
+        Deployment_Node(matchinghost, "Matching Container App", "Environment-internal HTTPS ingress; replicas 0 to 1") {
+          Container(matching, "Matching Service instance", ".NET 10 - planned", "Search projections, cached vectors, ranking and authenticated local inference client. No model weights in Azure.")
+        }
+        Deployment_Node(synchost, "Listings synchronisation job", "Finite scheduled Container Apps Job") {
+          Container(sync, "Listings synchronisation execution", ".NET Listings worker entry point - planned", "Retries durable source updates in bounded batches. Uses Listings-owned data and permissions.")
+        }
+        Deployment_Node(featurehost, "Matching feature job", "Finite scheduled Container Apps Job") {
+          Container(features, "Matching feature-retry execution", ".NET Matching worker entry point - planned", "Processes durable feature work using the same Matching inference/photo contracts. Bounded retries and backoff.")
+        }
+      }
+
+      Deployment_Node(pg, "Shared PostgreSQL Flexible Server", "B1ms; private network access", "One server, three separately owned databases and service roles. Capacity and target major version require verification.") {
+        ContainerDb(authdb, "Auth Database instance", "PostgreSQL", "Users, refresh sessions and token history. Auth-owned data and migrations.")
+        ContainerDb(listingsdb, "Listings Database instance", "PostgreSQL", "Listings, photo metadata, decisions, recoveries, credibility and synchronisation tasks. Listings-owned.")
+        ContainerDb(matchingdb, "Matching Database instance", "PostgreSQL", "Search projections, versioned embeddings and durable feature work. Matching-owned.")
+      }
+    }
+
+    Deployment_Node(storage, "Blob Storage GPv2 LRS", "Azure managed storage") {
+      Node(photos, "Private photo container", "Azure Blob Storage", "Photo bytes; anonymous access disabled. Listings enforces application photo visibility.")
+    }
+  }
+}
+
+System_Ext(relay, "HTTPS Tunnel Relay", "External provider; ngrok is a candidate. Configured URL plus service authentication, not URL secrecy.")
+
+Deployment_Node(pc, "Operator computer", "Local CPU host", "Operator starts and maintains the runtime and tunnel agent; availability is independent of Azure.") {
+  Deployment_Node(localhost, "Local AI execution environment", ".NET / ONNX Runtime", "Model files stay local. Authenticated HTTP wrapper and tunnel startup remain planned.") {
+    Container(localai, "Local AI Runtime instance", "Qwen3-VL-4B-Instruct and DINOv3 ViT-L/16", "Bounded image analysis and feature extraction. Returns structured proposals/vectors plus model and preprocessing versions.")
+  }
+}
+
+Rel(web, assets, "Downloads the static application distribution", "HTTPS")
+Rel(web, auth, "Registers, signs in and renews sessions; sign out planned", "HTTPS / JSON")
+Rel(web, listings, "Uses protected listing, photo, recovery and credibility operations", "HTTPS / explicit CORS")
+Rel(listings, matching, "Requests analysis/suggestions and delivers revisioned updates", "Authorised internal HTTPS")
+Rel(matching, listings, "Fetches permitted photo bytes for a specified revision", "Authorised HTTPS")
+Rel(auth, authdb, "Reads/writes its own data", "PostgreSQL / TLS")
+Rel(listings, listingsdb, "Reads/writes its own data", "PostgreSQL / TLS")
+Rel(matching, matchingdb, "Reads/writes its own derived data", "PostgreSQL / TLS")
+Rel(listings, photos, "Stores/reads authorised photographs", "Azure Blob API / managed identity")
+Rel(sync, listingsdb, "Claims and completes durable delivery tasks", "PostgreSQL / TLS; Listings role")
+Rel(sync, matching, "Retries revisioned updates; HTTP can wake Matching", "Authorised internal HTTPS")
+Rel(features, matchingdb, "Claims work and writes versioned vectors with revision guards", "PostgreSQL / TLS; Matching role")
+Rel(features, listings, "Fetches permitted photo bytes", "Authorised HTTPS")
+Rel(matching, relay, "Requests optional local photo analysis or extraction", "HTTPS / service credential")
+Rel(features, relay, "Retries bounded local extraction work", "HTTPS / service credential")
+Rel(relay, localai, "Relays authenticated inference requests and responses", "Tunnel session established outbound by local agent")
+
+legend bottom
+  C4 deployment view: infrastructure nodes host application/data-store instances.
+  This is a supplementary view, not the C4 Code level.
+  Job instances execute Listings/Matching worker responsibilities; no extra business service.
+  Scheduled finite jobs recover pending work after API apps scale to zero.
+  A stop/offline local host leaves cloud core functions and cached/metadata ranking available.
+  Initial API sizing and job schedules require measurement; this is not an availability SLA.
+  Key Vault, ACR, Terraform state and migration delivery are detailed in the UML view.
+endlegend
+@enduml

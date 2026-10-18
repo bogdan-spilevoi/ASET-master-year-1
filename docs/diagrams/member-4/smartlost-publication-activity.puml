@@ -1,0 +1,119 @@
+@startuml SmartLost_Publication_Activity
+title SmartLost - UML Listing Publication Activity\nUC04 Publish a lost or found listing, with optional UC05 photo analysis\nProposed semester behaviour - not implemented
+skinparam shadowing false
+skinparam activity {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  DiamondBackgroundColor #FFF7ED
+  DiamondBorderColor #C2410C
+}
+
+|Registered User|
+start
+:Select New listing;
+|Listings Service|
+:Validate access token and derive acting user;
+if (Authenticated?) then (yes)
+  :Create and persist a private Draft\nowned by the acting user;
+else (no)
+  :Reject unauthenticated request;
+  stop
+endif
+
+|Registered User|
+:Choose Lost or Found and enter\ntitle, description, campus location\nand occurrence date;
+note right
+  Categories may be entered manually
+  or completed after optional analysis.
+  Colour and distinguishing traits are optional.
+end note
+
+repeat
+  |Registered User|
+  :Choose an optional photograph\nAttach, replace, retry or remove;
+  |Listings Service|
+  :Recheck draft ownership;
+  if (Photograph supplied?) then (yes)
+    :Validate actual JPEG/PNG format,\nsuccessful decoding and size <= 10 MiB;
+    if (Valid image?) then (yes)
+      |Private Photo Storage|
+      :Attempt private blob upload;
+      |Listings Service|
+      if (Upload and metadata association succeeded?) then (yes)
+        :Associate the available photo with the draft\nInvalidate analysis for a replaced photo;
+      else (no)
+        :Preserve valid draft data\nDo not associate an unavailable photo\nShow retry or remove option;
+      endif
+    else (no)
+      :Reject the new image and preserve draft\nShow replace or remove option;
+    endif
+  else (no)
+    :Keep the draft without a photograph\nInvalidate obsolete photo analysis;
+  endif
+repeat while (Unresolved photo error?) is (yes) not (no)
+
+|Registered User|
+if (Validated photo exists and user requests analysis?) then (yes)
+  |Listings Service|
+  :Check ownership and capture\nphoto identity and draft revision\nExpose analysis progress;
+  :Request analysis through the authorised\ninternal Matching contract;
+  |Matching Service|
+  :Obtain the photo through authorised Listings access\nCall local AI through the authenticated tunnel;
+  |Local AI Runtime|
+  :Attempt bounded Qwen analysis;
+  |Matching Service|
+  :Validate the structured result or report unavailability;
+  |Listings Service|
+  if (Usable result before the configured timeout?) then (yes)
+    if (Photo and relevant draft values still current?) then (yes)
+      :Present proposed objects, categories and traits\nDo not infer owner, location or occurrence date;
+      |Registered User|
+      :Select the intended object if several are detected\nAccept, edit or discard suggestions;
+    else (no)
+      :Discard stale suggestions\nPreserve newer manual edits;
+    endif
+  else (no)
+    :Show unavailable or failed analysis outcome\nPreserve valid draft and offer manual entry;
+  endif
+endif
+
+|Registered User|
+:Enter or confirm final categories and traits\nReview the complete listing;
+if (Publish now?) then (yes)
+  :Submit publication for this draft;
+else (no)
+  |Listings Service|
+  :Save permitted draft changes privately\nDo not enqueue it for matching;
+  stop
+endif
+
+|Listings Service|
+:Recheck authentication, ownership\nand publication request identity;
+if (Same publication already committed?) then (yes)
+  :Return the existing publication outcome\nDo not create another listing or update task;
+  stop
+endif
+:Validate expected draft revision, type, title,\ndescription, confirmed categories, location,\nnon-future occurrence date and any photo reference;
+if (Authorised, current and valid?) then (yes)
+  :Normalise confirmed categories\nPreserve unrecognised labels for manual search;
+else (no)
+  :Reject invalid, unauthorised or stale publication\nPreserve existing data and return errors or conflict;
+  stop
+endif
+
+:Atomically commit Draft -> Open,\nauthor, publication time and revision,\nand durable Matching update work;
+if (Transaction committed?) then (yes)
+  :Return the Open listing\nwith pending synchronisation status;
+  note right
+    A durable worker delivers the update later.
+    Matching failure leaves work pending/failed
+    and retryable; it does not undo publication.
+    No photo or successful AI analysis is required.
+  end note
+  |Registered User|
+  :See publication confirmation\nand current processing status;
+else (no)
+  :Roll back publication and update work together\nKeep the draft private and report failure;
+endif
+stop
+@enduml

@@ -1,5 +1,16 @@
 # SmartLost — obiecte pierdute și găsite într-un campus
 
+## Decizia de găzduire din 17 octombrie 2026
+
+Planul curent folosește Azure în Switzerland North pentru interfață, API-uri și
+date, iar Qwen și DINOv3 rulează local printr-un tunel HTTPS autentificat.
+Găzduirea pentru prezentare durează cel mult o lună și acceptă pornirea la cerere.
+[Planul Azure actual](AZURE_STUDENT_ARCHITECTURE.md) descrie resursele partajate
+cu SmartRemoteManager, beneficiile gratuite și automatizarea prin CI.
+Schițele inițiale de mai jos păstrează contextul proiectului; cerințele și
+sursele PlantUML actualizate descriu separarea dintre cloud Matching și AI local.
+Starea implementării este documentată în [README](../README.md).
+
 ## Descrierea proiectului
 
 SmartLost este o aplicație web pentru un campus universitar, care ajută studenții să

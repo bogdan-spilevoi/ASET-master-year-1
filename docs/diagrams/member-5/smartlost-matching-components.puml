@@ -1,0 +1,55 @@
+@startuml SmartLost_Matching_Components
+!include <C4/C4_Component>
+
+title SmartLost - C4 Component Diagram\nMatching Service container\nProposed semester service integration - not implemented
+LAYOUT_LEFT_RIGHT()
+
+Container(listings, "Listings Service", ".NET / internal contracts - planned", "Authoritative listing data, confirmed categories, photo access, decisions, recoveries and credibility. Delivers durable updates and rechecks suggestions before display.")
+Container(localai, "Local AI Runtime", ".NET / Qwen and DINOv3 ONNX - planned wrapper", "Operator computer executes bounded inference and returns versioned proposals or normalised vectors. No business database ownership.")
+System_Ext(tunnel, "HTTPS Tunnel Relay", "External relay to the local runtime; configured endpoint plus service authentication.")
+ContainerDb(db, "Matching Database", "PostgreSQL - planned", "Owned only by Matching: SearchListing projections, change sequence checkpoints, versioned ImageEmbeddings and durable feature-processing state. Suggestions are calculated results.")
+
+Container_Boundary(matching, "Matching Service [.NET / internal API and background work - planned]") {
+  Component(api, "Internal Matching API", "ASP.NET Core - proposed", "Authorises internal callers. Accepts analysis, suggestion and synchronisation requests; exposes explicit outcomes. Routes and schemas remain to be designed.")
+  Component(updater, "Projection Updater", "Application / background processing", "Applies newer source snapshots and eligibility updates atomically with sequence checkpoints. Ignores duplicates/older changes; durably schedules and retries feature preparation.")
+  Component(coordinator, "Suggestion Coordinator", "Application", "Checks requested source revision and processing state. Coordinates selection and ranking; returns a ranked pool or explicit pending, failed or unavailable outcome.")
+  Component(selector, "Candidate Selector", "Domain / application rules", "Selects Open opposite-type listings from different authors. Prioritises confirmed categories; checks date tolerance, reservations, consumed eligibility and revision-specific rejections.")
+  Component(ranker, "Relevance Ranker", "Domain / versioned configuration", "Combines available category, colour, location, date and visual evidence. Applies calibrated weights/threshold; returns separate relevance/visual scores and calculated reasons.")
+  Component(embeddings, "Embedding Service", "Cloud feature coordination / DINOv3 client", "Obtains normalised vectors from local inference. Caches by photo/revision/model/preprocessing version; compares compatible vectors or reports missing visual evidence.")
+  Component(analysis, "Photo Analysis", "Cloud Qwen analysis client", "Requests local image analysis and validates structured object/category/trait proposals. Reports failure/timeout; output remains advisory and cannot establish ownership.")
+  Component(inference, "Local Inference Client", ".NET HttpClient - planned", "Calls a configured HTTPS tunnel with service authentication, bounded concurrency/timeouts, contract versions and explicit offline outcomes.")
+  Component(photos, "Listings Photo Access Adapter", "Infrastructure / authorised internal client", "Requests permitted photo content through Listings. Carries photo identity and revision; does not access Blob Storage anonymously or read another service's database.")
+  Component(persistence, "Matching Persistence", "Infrastructure / EF Core / Npgsql - proposed", "Reads/writes owned projections, sequence checkpoints, versioned vectors and durable processing state. Protects newer revisions from stale processing results.")
+}
+
+Rel(listings, api, "Requests analysis and suggestions; delivers revisioned state/eligibility updates", "Authorised internal contracts")
+Rel(api, updater, "Dispatches synchronisation updates", "In-process")
+Rel(api, coordinator, "Requests suggestions for a source identifier and revision", "In-process")
+Rel(api, analysis, "Requests optional draft photo analysis", "In-process")
+
+Rel(updater, persistence, "Commits newer projections, sequence checkpoints and durable feature work", "In-process")
+Rel(updater, embeddings, "Runs scheduled feature preparation with retry and revision guards", "In-process")
+Rel(coordinator, persistence, "Reads source revision, eligibility and processing status", "In-process")
+Rel(coordinator, selector, "Requests an eligible projected candidate pool", "In-process")
+Rel(coordinator, ranker, "Requests relevance scores and supported reasons", "In-process")
+Rel(selector, persistence, "Reads projected candidates, reservations and rejection context", "In-process")
+Rel(ranker, embeddings, "Requests cached visual evidence for compatible photo pairs", "In-process")
+Rel(embeddings, persistence, "Reads/writes versioned vectors and feature processing state", "In-process")
+Rel(embeddings, photos, "Obtains photo bytes for scheduled extraction", "In-process")
+Rel(analysis, photos, "Obtains the authorised draft photo", "In-process")
+Rel(analysis, inference, "Requests local Qwen analysis", "In-process")
+Rel(embeddings, inference, "Requests scheduled local DINOv3 extraction", "In-process")
+Rel(inference, tunnel, "Sends permitted photo bytes and authenticated work", "HTTPS")
+Rel(tunnel, localai, "Relays fixed inference operations", "Protected tunnel")
+Rel(photos, listings, "Fetches permitted content for the specified photo revision", "Authorised internal contract")
+Rel(persistence, db, "Reads/writes exclusively owned data", "PostgreSQL protocol")
+
+legend bottom
+  C4 level 3: one proposed Matching Service container is expanded.
+  Standalone Qwen and DINOv3 console experiments exist; this service does not.
+  Components are logical responsibilities in one service process.
+  Qwen and DINOv3 run inside the local runtime; cloud Matching owns derived data.
+  Listings retains authority over decisions, recoveries and credibility.
+  Azure hosting topology belongs in the deployment view.
+endlegend
+@enduml

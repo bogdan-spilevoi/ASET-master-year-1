@@ -1,0 +1,37 @@
+@startuml SmartLost_System_Context
+!include <C4/C4_Context>
+
+title SmartLost - C4 System Context Diagram\nTarget application: semester MVP and future extensions
+LAYOUT_LEFT_RIGHT()
+
+AddElementTag("Future", $bgColor="#FAF5FF", $fontColor="#6B21A8", $borderColor="#7E22CE", $legendText="Planned beyond this semester")
+AddRelTag("Future", $textColor="#6B21A8", $lineColor="#7E22CE", $lineStyle=DashedLine())
+
+Person(user, "Campus User", "Visitor or registered user; may act as Lost Item Owner or Finder.")
+Person(operator, "Deployment Operator", "Deploys the semester application and verifies the Azure release.")
+Person(moderator, "Moderator [Future]", "Reviews reported content and applies moderation decisions.", $tags="Future")
+Person(benefits, "Campus Benefits Manager [Future]", "Supports campus benefit redemption.", $tags="Future")
+
+System(smartlost, "SmartLost", "Campus lost-and-found application. Manages accounts, listings, photographs, AI-assisted suggestions, recoveries and credibility.")
+
+System_Ext(tunnel, "HTTPS Tunnel Relay", "Connects cloud Matching to the operator-hosted local AI runtime; requires service authentication.")
+System_Ext(photos, "Photo Storage", "Azure Blob Storage. Stores listing photographs with controlled access; semester dependency.")
+System_Ext(identity, "Campus Identity Provider [Future]", "Authenticates campus accounts through institutional sign-in.", $tags="Future")
+System_Ext(notifications, "Notification Provider [Future]", "Delivers external updates about relevant application events.", $tags="Future")
+
+Rel(user, smartlost, "Registers, signs in, publishes and searches listings, reviews suggestions, confirms recoveries and views credibility")
+Rel(operator, smartlost, "Deploys and checks availability through operational tooling")
+Rel(smartlost, tunnel, "Reaches local AI through an authenticated HTTPS relay")
+Rel(smartlost, photos, "Stores and retrieves listing photographs with controlled access")
+Rel(moderator, smartlost, "Reviews reports and moderates content", $tags="Future")
+Rel(benefits, smartlost, "Supports benefit redemption", $tags="Future")
+Rel(smartlost, identity, "Requests institutional authentication", $tags="Future")
+Rel(smartlost, notifications, "Requests delivery of external updates", $tags="Future")
+
+' Cloud apps, databases and the local AI runtime belong to SmartLost.
+' Qwen/DINOv3 run locally; the relay is an external dependency.
+' Their decomposition belongs in C4 container and component diagrams.
+' Azure compute resources belong in a deployment diagram.
+' Campus membership is not verified by local account registration.
+SHOW_LEGEND()
+@enduml

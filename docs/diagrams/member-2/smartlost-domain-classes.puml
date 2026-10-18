@@ -1,0 +1,378 @@
+@startuml SmartLost_Domain_Classes
+' Comment out the next line to hide extensions beyond this semester.
+!define SHOW_FUTURE
+
+title SmartLost - UML Conceptual Class Diagram\nFull product domain; implementation status shown by stereotype
+left to right direction
+hide circle
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam class {
+  BackgroundColor<<Existing>> #ECFDF5
+  BorderColor<<Existing>> #047857
+  BackgroundColor<<Semester>> #EFF6FF
+  BorderColor<<Semester>> #2563EB
+  BackgroundColor<<Calculated>> #EFF6FF
+  BorderColor<<Calculated>> #2563EB
+  BackgroundColor<<Future>> #FAF5FF
+  BorderColor<<Future>> #7E22CE
+}
+
+package "Auth ownership" {
+  class UserAccount <<Existing>> {
+    +Id: Guid
+    +UserName: String
+    +NormalizedUserName: String
+    +Email: String
+    +NormalizedEmail: String
+    +PasswordHash: String
+    +CreatedAtUtc: DateTime
+    --
+    +ChangeIdentity(userName, email)
+    +SetPasswordHash(passwordHash)
+  }
+  class RefreshSession <<Existing>> {
+    +Id: Guid
+    +UserId: Guid
+    +CurrentTokenHash: String
+    +ExpiresAtUtc: DateTime
+    +RevokedAtUtc: DateTime [0..1]
+    --
+    +IsActive(nowUtc): Boolean
+    +Rotate(tokenHash)
+  }
+  class RefreshToken <<Existing>> {
+    +Id: Guid
+    +SessionId: Guid
+    +TokenHash: String
+  }
+  !ifdef SHOW_FUTURE
+  class CampusIdentityLink <<Future>> {
+    +UserId: Guid
+    +Provider: String
+    +Subject: String
+  }
+  class AccountRole <<Future>> {
+    +UserId: Guid
+    +Role: String
+  }
+  !endif
+}
+
+package "Listings ownership - semester design" {
+  class Listing <<Semester>> {
+    +Id: Guid
+    +AuthorId: Guid
+    +Type: ListingType
+    +Title: String
+    +Description: String
+    +Location: String
+    +OccurredOn: Date
+    +Colour: String [0..1]
+    +Traits: String [0..*]
+    +State: ListingState
+    +ClosureReason: ClosureReason [0..1]
+    +Revision: Integer
+    +PublishedAt: DateTime [0..1]
+    --
+    +Publish()
+    +Revise()
+    +Close(reason)
+  }
+  class Photo <<Semester>> {
+    +Id: Guid
+    +ListingId: Guid
+    +BlobKey: String
+    +Format: String
+    +ByteSize: Integer
+    +Revision: Integer
+  }
+  class Category <<Semester>> {
+    +Id: Guid
+    +NormalisedName: String
+  }
+  class ListingCategory <<Semester>> {
+    +ListingId: Guid
+    +CategoryId: Guid
+  }
+  class MatchDecision <<Semester>> {
+    +Id: Guid
+    +LostListingId: Guid
+    +FoundListingId: Guid
+    +LostRevision: Integer
+    +FoundRevision: Integer
+    +State: MatchDecisionState
+    +DecidedBy: Guid
+    +DecidedAt: DateTime
+    --
+    +Accept()
+    +Reject()
+    +CancelAcceptance()
+    +Invalidate()
+  }
+  class Recovery <<Semester>> {
+    +Id: Guid
+    +MatchDecisionId: Guid
+    +ConfirmedBy: Guid
+    +ConfirmedAt: DateTime
+  }
+  class CredibilityEntry <<Semester>> {
+    +Id: Guid
+    +RecoveryId: Guid
+    +BeneficiaryId: Guid
+    +HelpedUserId: Guid
+    +Points: Integer
+    +AwardedAt: DateTime
+  }
+  class SynchronisationTask <<Semester>> {
+    +Id: Guid
+    +ListingId: Guid
+    +ChangeSequence: Integer
+    +State: ProcessingState
+    +Attempts: Integer
+    +NextAttemptAt: DateTime [0..1]
+  }
+  enum ListingType {
+    Lost
+    Found
+  }
+  enum ListingState {
+    Draft
+    Open
+    Closed
+  }
+  enum ClosureReason {
+    Recovered
+    Withdrawn
+  }
+  enum MatchDecisionState {
+    Suggested
+    Accepted
+    Rejected
+    Confirmed
+    Invalidated
+  }
+  enum ProcessingState {
+    Pending
+    Processing
+    Ready
+    Failed
+  }
+}
+
+package "Matching ownership - semester design" {
+  class SearchListing <<Semester>> {
+    +ListingId: Guid
+    +SourceRevision: Integer
+    +ChangeSequence: Integer
+    +Type: ListingType
+    +AuthorId: Guid
+    +CategoryKeys: String [0..*]
+    +Colour: String [0..1]
+    +Traits: String [0..*]
+    +OccurredOn: Date
+    +Location: String
+    +Eligible: Boolean
+  }
+  class ImageEmbedding <<Semester>> {
+    +Id: Guid
+    +ListingId: Guid
+    +PhotoId: Guid
+    +PhotoRevision: Integer
+    +ModelVersion: String
+    +PreprocessingVersion: String
+    +Dimensions: Integer
+    +Vector: Real [1..*]
+  }
+  class MatchSuggestion <<Calculated>> {
+    +LostListingId: Guid
+    +FoundListingId: Guid
+    +LostRevision: Integer
+    +FoundRevision: Integer
+    +RelevanceScore: Real
+    +VisualScore: Real [0..1]
+    +Reasons: String [0..*]
+    +RankingVersion: String
+  }
+}
+
+UserAccount "1" -- "0..*" RefreshSession : has sessions
+RefreshSession "1" *-- "1..*" RefreshToken : token history
+UserAccount "1" -- "0..*" Listing : author [logical ID]
+Listing "1" *-- "0..1" Photo : current photo
+Listing "1" *-- "0..*" ListingCategory : confirmed assignments
+Category "1" -- "0..*" ListingCategory : category
+Listing "1" -- "0..*" MatchDecision : lostListing {Type=Lost}
+Listing "1" -- "0..*" MatchDecision : foundListing {Type=Found}
+MatchDecision "1" -- "0..1" Recovery : confirmed recovery
+Recovery "1" -- "1" CredibilityEntry : eligible award
+UserAccount "1" -- "0..*" CredibilityEntry : beneficiary [logical ID]
+UserAccount "1" -- "0..*" CredibilityEntry : helped user [logical ID]
+Listing "1" -- "0..*" SynchronisationTask : durable updates
+Listing "1" -- "0..1" SearchListing : current projection [logical ID]
+SearchListing "1" -- "0..*" ImageEmbedding : versioned features
+Photo "1" -- "0..*" ImageEmbedding : source photo [logical ID]
+Listing "1" -- "0..*" MatchSuggestion : lostListing [logical ID]
+Listing "1" -- "0..*" MatchSuggestion : foundListing [logical ID]
+
+note bottom of UserAccount
+  Normalised user name and email are unique.
+  Lost Item Owner and Finder are contextual roles,
+  not UserAccount subclasses.
+  Cross-service user references use logical IDs.
+end note
+note bottom of Listing
+  Draft -> Open -> Closed; no reopening in the MVP.
+  Open requires >=1 confirmed category and a non-future date.
+  State Closed requires ClosureReason; other states have none.
+  Only the authenticated author may edit or close.
+  Listing revision and eligibility change sequence are distinct.
+end note
+note bottom of Photo
+  At most one current JPEG/PNG, <=10 MiB.
+  BlobKey addresses a private file; bytes are not stored here.
+  Photo/model/preprocessing versions guard cache reuse.
+  Older cached versions are invalid for a replacement photo.
+end note
+note bottom of MatchDecision
+  One Lost and one Found listing, from different authors.
+  DecidedBy identifies the Lost listing owner [logical user ID].
+  At most one Accepted decision per listing in either role.
+  Acceptance does not close listings or award points.
+  Cancel acceptance -> Suggested; relevant changes invalidate it.
+end note
+note bottom of Recovery
+  ConfirmedBy identifies the Lost owner [logical user ID].
+  Create once after accepted physical handover confirmation.
+  Close only the Lost listing; consume Found matching eligibility.
+  Matched recovery + its eligible award commit consistently.
+  Manual closure creates neither this Recovery nor an award.
+end note
+note bottom of CredibilityEntry
+  RecoveryId is unique; the matched finder receives one point.
+  BeneficiaryId != HelpedUserId; HelpedUserId is the Lost owner.
+  Immutable award record; totals are derived from this ledger.
+end note
+note bottom of MatchSuggestion
+  Calculated result, not a required persisted table.
+  Missing visual evidence means no VisualScore, not zero.
+  Listings rechecks revisions/eligibility before showing 0..3.
+  A relevance score is not proof of ownership.
+end note
+
+!ifdef SHOW_FUTURE
+package "Moderation - future logical area; deployment undecided" {
+  class ContentReport <<Future>> {
+    +ListingId: Guid
+    +ReporterId: Guid
+    +Reason: String
+    +Status: String
+  }
+  class ModerationDecision <<Future>> {
+    +ModeratorId: Guid
+    +Outcome: String
+    +Reason: String
+    +DecidedAt: DateTime
+  }
+}
+package "Notifications - future logical area; deployment undecided" {
+  class NotificationPreference <<Future>> {
+    +UserId: Guid
+    +Channel: String
+    +Enabled: Boolean
+  }
+  class NotificationDelivery <<Future>> {
+    +RecipientId: Guid
+    +BusinessEventId: String
+    +Channel: String
+    +Status: String
+    +Attempts: Integer
+  }
+}
+package "Campus benefits - future logical area; deployment undecided" {
+  class Benefit <<Future>> {
+    +Description: String
+    +RuleVersion: String
+    +Available: Boolean
+    +ManagerId: Guid
+  }
+  class BenefitRedemption <<Future>> {
+    +UserId: Guid
+    +BenefitVersion: String
+    +Status: String
+    +FulfilmentReference: String [0..1]
+  }
+}
+package "Messaging - future logical area; deployment undecided" {
+  class Conversation <<Future>> {
+    +ListingId: Guid [0..1]
+    +MatchDecisionId: Guid [0..1]
+  }
+  class ConversationParticipant <<Future>> {
+    +UserId: Guid
+    +Permission: String
+  }
+  class Message <<Future>> {
+    +SenderId: Guid
+    +Body: String
+    +SentAt: DateTime
+  }
+}
+
+UserAccount "1" -- "0..*" CampusIdentityLink : linked identities
+UserAccount "1" -- "0..*" AccountRole : permission assignments
+Listing "1" -- "0..*" ContentReport : reported listing [logical ID]
+UserAccount "1" -- "0..*" ContentReport : reporter [logical ID]
+ContentReport "1" -- "0..*" ModerationDecision : recorded outcomes
+UserAccount "1" -- "0..*" ModerationDecision : authorised moderator [logical ID]
+UserAccount "1" -- "0..*" NotificationPreference : channel preferences [logical ID]
+UserAccount "1" -- "0..*" NotificationDelivery : recipient [logical ID]
+Benefit "1" -- "0..*" BenefitRedemption : versioned benefit
+UserAccount "1" -- "0..*" BenefitRedemption : redeeming user [logical ID]
+UserAccount "1" -- "0..*" Benefit : responsible manager [logical ID]
+BenefitRedemption ..> CredibilityEntry : eligibility reads via explicit contract
+Conversation "1" -- "2" ConversationParticipant : authorised participants
+UserAccount "1" -- "0..*" ConversationParticipant : membership [logical ID]
+Conversation "1" -- "0..*" Message : messages
+ConversationParticipant "1" -- "0..*" Message : authorised sender
+Listing "0..1" -- "0..*" Conversation : listing context [logical ID]
+MatchDecision "0..1" -- "0..*" Conversation : pair context [logical ID]
+
+note bottom of CampusIdentityLink
+  Provider + Subject uniquely identify one local account.
+  Campus sign-in is beyond the semester scope.
+end note
+note bottom of AccountRole
+  Future Moderator and Campus Benefits Manager permissions.
+  A person retains one account; these are not account subclasses.
+end note
+note bottom of NotificationDelivery
+  Event + recipient + channel suppress duplicates.
+  Delivery failure does not undo the originating business event.
+  One current preference per user/channel.
+end note
+note bottom of BenefitRedemption
+  Each redemption refers to exactly one benefit rule version.
+  Eligibility reads authoritative credibility; it does not alter
+  the ledger without a separately approved spending rule.
+end note
+note bottom of Conversation
+  Context: exactly one listing OR one accepted pair {xor}.
+  Initial future scope: exactly two distinct account participants.
+  A message's sender membership belongs to the same conversation.
+  Unrelated users cannot access it by knowing its identifier.
+end note
+!endif
+
+legend bottom
+  <<Existing>>: current Auth domain classes; selected members shown.
+  <<Semester>>: proposed semester domain classes and responsibilities.
+  <<Calculated>>: proposed calculated view; persistence not implied.
+  <<Future>>: beyond this semester; module deployment boundaries undecided.
+  Associations show domain relationships, not automatic navigation or API access.
+  Associations crossing ownership boundaries use logical IDs, never database FKs.
+  Operations on planned classes are conceptual responsibilities, not existing APIs.
+  Selected fields only; identity/link details of future records remain to be refined.
+endlegend
+@enduml

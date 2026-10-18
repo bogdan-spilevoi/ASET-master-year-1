@@ -33,6 +33,121 @@ the IDE view; production project folders remain at the repository root and tests
 Deployment is inactive; see the
 [deployment plan](docs/DEPLOYMENT.md).
 
+The [current hosting proposal](docs/AZURE_STUDENT_ARCHITECTURE.md) uses globally
+distributed static frontend hosting, APIs and persistent data in Switzerland North,
+with Qwen/DINOv3 on a local host through an authenticated HTTPS tunnel. It targets up to one month, accepts HTTP
+cold starts and accounts for student free benefits shared with SmartRemoteManager.
+This deployment and inference integration are not implemented.
+
+### UML and C4 diagrams
+
+The six member pairs below contain the user-provided PNG exports and short English
+explanations. Expand a pair to view its images; open an image at full size for details.
+Some exports are partial or precede the local AI revision, as noted beside each pair.
+The linked PlantUML sources and current hosting proposal describe the latest design.
+
+<details>
+<summary>Member 1 — Application goals and system context</summary>
+
+**UML Use Case.** Actors, semester use cases and future extensions, including optional analysis and recovery credibility.
+
+![Member 1 UML Use Case diagram](docs/diagrams/member-1/images/smartlost-use-case.png)
+
+**C4 System Context.** SmartLost, campus users, deployment operator and external systems, with future participants marked.
+
+![Member 1 C4 System Context diagram](docs/diagrams/member-1/images/smartlost-system-context.png)
+
+**Export note.** The supplied context PNG predates the tunnel relay. The current context source includes it; local AI remains part of SmartLost.
+
+[Explanation and editable sources](docs/diagrams/member-1/README.md)
+
+</details>
+
+<details>
+<summary>Member 2 — Domain model and application architecture</summary>
+
+**UML Class.** Domain classes, multiplicities, service data ownership and future product concepts.
+
+![Member 2 UML Class diagram](docs/diagrams/member-2/images/smartlost-domain-classes.png)
+
+**C4 Container.** Angular, Auth, Listings, Matching, their databases and private photo storage.
+
+![Member 2 C4 Container diagram](docs/diagrams/member-2/images/smartlost-containers.png)
+
+**Export note.** The supplied container PNG shows the earlier model placement inside Matching. The current source separates the local AI runtime and external tunnel; Member 6 shows their deployment.
+
+[Explanation and editable sources](docs/diagrams/member-2/README.md)
+
+</details>
+
+<details>
+<summary>Member 3 — Authentication and sessions</summary>
+
+**UML Sequence.** Refresh-token rotation, replay/concurrency rejection and planned current-session sign out.
+
+![Member 3 UML Sequence diagram](docs/diagrams/member-3/images/smartlost-auth-sequence.png)
+
+**C4 Component.** Authentication API, command pipeline, password/session/token services and the Auth-owned database.
+
+![Member 3 C4 Component diagram](docs/diagrams/member-3/images/smartlost-auth-components.png)
+
+**Export note.** The supplied sequence PNG begins at refresh and omits the initial sign-in interaction. The complete UC02 sign-in flow is available in the sequence source.
+
+[Explanation and editable sources](docs/diagrams/member-3/README.md)
+
+</details>
+
+<details>
+<summary>Member 4 — Listing publication and Listings Service</summary>
+
+**UML Activity.** Draft creation, optional photo upload/analysis, manual fallback, validation and durable publication.
+
+![Member 4 UML Activity diagram](docs/diagrams/member-4/images/smartlost-publication-activity.png)
+
+**C4 Component.** Listings responsibilities for publication, photos, suggestions, recovery, credibility and synchronisation.
+
+![Member 4 C4 Component diagram](docs/diagrams/member-4/images/smartlost-listings-components.png)
+
+**Export note.** The supplied activity PNG groups analysis under Matching. The current activity source also shows inference on the local AI runtime through the authenticated tunnel.
+
+[Explanation and editable sources](docs/diagrams/member-4/README.md)
+
+</details>
+
+<details>
+<summary>Member 5 — Matching suggestions and Matching Service</summary>
+
+**UML Sequence.** Suggestion requests, eligible candidate selection, cached visual evidence and relevance ranking.
+
+![Member 5 UML Sequence diagram](docs/diagrams/member-5/images/smartlost-matching-sequence.png)
+
+**C4 Component.** Suggestion coordination, selection, ranking, feature processing, photo access and Matching-owned persistence.
+
+![Member 5 C4 Component diagram](docs/diagrams/member-5/images/smartlost-matching-components.png)
+
+**Export note.** The supplied sequence PNG stops during ranking and omits the final eligibility checks/response. The component PNG predates the local inference client and tunnel. The current sources contain these details.
+
+[Explanation and editable sources](docs/diagrams/member-5/README.md)
+
+</details>
+
+<details>
+<summary>Member 6 — Azure delivery and hybrid deployment</summary>
+
+**UML Deployment.** CI delivery, OIDC, Terraform state, registry, Key Vault, database bootstrap and private migration jobs.
+
+![Member 6 UML Deployment diagram](docs/diagrams/member-6/images/smartlost-azure-deployment.png)
+
+**C4 Deployment.** Browser, Azure apps/databases, scheduled jobs and local Qwen/DINOv3 inference through an external HTTPS relay.
+
+![Member 6 C4 Deployment diagram](docs/diagrams/member-6/images/smartlost-hybrid-deployment.png)
+
+**Export note.** These deployment diagrams describe the proposed environment. They do not certify provisioned Azure resources or an operational local HTTP wrapper.
+
+[Explanation and editable sources](docs/diagrams/member-6/README.md)
+
+</details>
+
 ## Services/modules
 
 | Module | Responsibility | Documentation |
@@ -338,12 +453,20 @@ change as code/configuration, using relative links and verified, secret-safe exa
 
 ## Further reading
 
+- Requirements analysis for the semester MVP, Azure delivery and future UML/C4 modelling: [Google Docs](https://docs.google.com/document/d/1AYPYDg9ku5bWQCnwcyzXk9HWsxV3w5WU/edit)
+- [Member 1 UML Use Case and C4 System Context diagrams](docs/diagrams/member-1/README.md)
+- [Member 2 UML Class and C4 Container diagrams](docs/diagrams/member-2/README.md)
+- [Member 3 authentication UML Sequence and C4 Component diagrams](docs/diagrams/member-3/README.md)
+- [Member 4 publication UML Activity and Listings C4 Component diagrams](docs/diagrams/member-4/README.md)
+- [Member 5 matching UML Sequence and C4 Component diagrams](docs/diagrams/member-5/README.md)
+- [Member 6 Azure UML Deployment and hybrid C4 Deployment diagrams](docs/diagrams/member-6/README.md)
 - [SmartLost description, proposed C4 architecture and user flow](docs/SMARTLOST.md)
 - [Repository agent and documentation rules](AGENTS.md)
 - [Infrastructure, coverage and contributor onboarding](.github/README.md)
 - [C# coding standards](docs/CODING_STANDARDS.md)
 - [GitHub protections and security setup](docs/GITHUB_SETUP.md)
 - [Deployment plan and activation requirements](docs/DEPLOYMENT.md)
+- [Azure student resource/CI proposal and USD 100 budget assumptions](docs/AZURE_STUDENT_ARCHITECTURE.md)
 - [AuthService module README](docs/AUTHSERVICE.md)
 - [Shared building blocks and reuse guide](docs/BUILDING_BLOCKS.md)
 - [Standalone AI solution and local inference](AIModels/README.md)

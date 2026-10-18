@@ -1,0 +1,45 @@
+@startuml SmartLost_Containers
+!include <C4/C4_Container>
+
+title SmartLost - C4 Container Diagram\nSemester target architecture - Azure deployment is planned
+LAYOUT_LEFT_RIGHT()
+AddElementTag("ExistingLocal", $bgColor="#ECFDF5", $fontColor="#065F46", $borderColor="#047857", $legendText="Existing implementation / local configuration; Azure release not verified")
+AddElementTag("PlannedSemester", $bgColor="#EFF6FF", $fontColor="#1E3A8A", $borderColor="#2563EB", $legendText="Planned semester application or integration")
+
+Person(user, "Campus User", "Visitor or registered user; may act as Lost Item Owner or Finder.")
+
+System_Boundary(smartlost, "SmartLost - semester target") {
+  Container(web, "Angular Web App", "Angular / TypeScript", "Runs in the browser. Account screens, listings, editable categories, suggestions, recovery and credibility views. Holds no authoritative business data.", $tags="PlannedSemester")
+  Container(auth, "Auth Service API", ".NET 10 / ASP.NET Core", "Existing register, login and rotating refresh-token API. Owns identity and sessions. Explicit server sign out remains semester work.", $tags="ExistingLocal")
+  Container(listings, "Listings Service", ".NET 10 / ASP.NET Core", "Owns listings, confirmed categories, photo metadata, decisions, recoveries, credibility and durable synchronisation. Validates tokens and enforces ownership.", $tags="PlannedSemester")
+  Container(matching, "Matching Service", ".NET 10 / internal API and background work", "Coordinates local inference through a tunnel. Owns derived search projections, cached embeddings and cloud relevance calculation.", $tags="PlannedSemester")
+  Container(localai, "Local AI Runtime", ".NET / local ONNX runtimes - planned wrapper", "Runs Qwen and DINOv3 on the operator computer. Returns versioned categories or vectors; owns no authoritative business data.", $tags="PlannedSemester")
+  ContainerDb(authdb, "Auth Database", "PostgreSQL", "Users, refresh sessions and hashed token history. Only Auth reads/writes its database and owns migrations.", $tags="ExistingLocal")
+  ContainerDb(listingsdb, "Listings Database", "PostgreSQL", "Authoritative listings, categories, photo metadata, decisions, recoveries, credibility ledger and durable update tasks. Owned exclusively by Listings.", $tags="PlannedSemester")
+  ContainerDb(matchingdb, "Matching Database", "PostgreSQL", "Derived search data, versioned embeddings, sequence checkpoints and feature-processing state. Owned exclusively by Matching.", $tags="PlannedSemester")
+}
+
+System_Ext(tunnel, "HTTPS Tunnel Relay", "Authenticated connectivity to the operator-hosted AI runtime; external dependency.", $tags="PlannedSemester")
+System_Ext(photos, "Private Photo Storage", "Azure Blob Storage; Azurite planned for local development. Stores photo bytes with anonymous access disabled. Listings controls upload and retrieval.", $tags="PlannedSemester")
+
+Rel(user, web, "Uses account and lost-and-found workflows", "Browser UI")
+Rel(web, auth, "Registers, signs in, renews sessions; planned sign out", "JSON / HTTPS in Azure")
+Rel(web, listings, "Uses authorised listings, photos, decisions, recovery and credibility", "JSON and image transfer / HTTPS in Azure")
+Rel(auth, authdb, "Reads/writes identity and session data", "PostgreSQL protocol")
+Rel(listings, listingsdb, "Reads/writes authoritative business data and durable work", "PostgreSQL protocol")
+Rel(matching, matchingdb, "Reads/writes derived projections, versions and processing state", "PostgreSQL protocol")
+Rel(listings, matching, "Requests optional analysis and suggestions; delivers durable revisioned updates", "Authorised internal contracts")
+Rel(matching, listings, "Requests permitted photo bytes for a specified identity/revision", "Authorised internal photo contract")
+Rel(matching, tunnel, "Requests bounded photo analysis or feature extraction", "HTTPS / service authentication")
+Rel(tunnel, localai, "Relays permitted inference calls", "Protected tunnel connection")
+Rel(listings, photos, "Stores and retrieves private photographs after authorisation", "Azure Blob API")
+
+' Container means an application or data store, not a specific Docker resource.
+' No browser access to Matching, model runtimes, databases or anonymous blobs.
+' Listings validates JWTs locally; no per-request Auth callback is required.
+' Qwen/DINOv3 run inside Local AI Runtime, not cloud Matching.
+' Persistent data and cheap ranking stay in Azure; AI may be offline.
+' Future modules are not assigned new service boundaries in this semester view.
+' Operator, Azure compute topology and release configuration belong in other views.
+SHOW_LEGEND()
+@enduml

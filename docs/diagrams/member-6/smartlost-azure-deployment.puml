@@ -1,0 +1,113 @@
+@startuml SmartLost_Azure_Deployment
+title SmartLost - UML Deployment Diagram\nAzure release infrastructure and CI delivery\nProposed semester deployment - not provisioned or verified
+
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam packageStyle rectangle
+skinparam wrapWidth 180
+skinparam maxMessageSize 65
+
+actor "Deployment Operator" as operator
+
+cloud "GitHub" as github {
+  artifact "Protected repository configuration\nGitHub Secrets and Variables" as inputs
+  node "GitHub-hosted runner" as runner <<executionEnvironment>> {
+    artifact "GitHub Actions workflows\nInline Terraform and Azure CLI steps\nReviewed source and release digests" as workflow
+  }
+}
+
+cloud "Azure for Students subscription" as azure {
+  node "Microsoft Entra ID\nRepository/environment federation" as entra <<identityProvider>>
+  node "Azure Resource Manager" as arm <<controlPlane>>
+
+  node "Static Web Apps Free\nGlobal static content delivery" as swa <<managedHosting>> {
+    artifact "Angular distribution\nPublic configuration only" as angular
+  }
+
+  package "Switzerland North - regional resources" as region {
+    node "Shared ACR Standard\nOriginal Terraform state owns registry" as registry <<imageRegistry>> {
+      artifact "SmartLost API and job images\nImmutable verified digests" as images
+    }
+
+    node "Terraform backend storage\nScoped SmartLost state key" as backend <<stateStorage>> {
+      artifact "SmartLost Terraform state\nLocking enabled; no application secret values" as state
+    }
+
+    node "SmartLost Key Vault Standard" as vault <<secretStore>> {
+      artifact "Runtime secret versions\nService database credentials\nJWT signing key and AI client credential" as secrets
+    }
+
+    node "Shared VNet\nReachable private database network" as vnet <<network>> {
+      node "Shared Container Apps environment\nConsumption profile" as environment <<executionEnvironment>> {
+        node "SmartLost API apps\nAuth and Listings: public HTTPS\nMatching: environment-internal HTTPS" as apps <<executionEnvironment>> {
+          artifact "Auth API image" as authImage
+          artifact "Listings image" as listingsImage
+          artifact "Matching image\nNo model weights" as matchingImage
+        }
+        node "Service migration jobs\nFinite on-demand executions" as migrations <<executionEnvironment>> {
+          artifact "Auth migration image\nListings migration image\nMatching migration image" as migrators
+        }
+        node "Database bootstrap job\nFinite privileged setup execution" as bootstrap <<executionEnvironment>> {
+          artifact "Restricted SmartLost database/role setup\nSeparate from service migrators" as bootstrapImage
+        }
+        node "Processing jobs\nFinite scheduled executions" as workers <<executionEnvironment>> {
+          artifact "Listings synchronisation entry point\nMatching feature-retry entry point" as workerImages
+        }
+      }
+
+      node "Shared PostgreSQL Flexible Server\nB1ms - private network access" as postgres <<databaseServer>> {
+        database "smartlost_auth" as authdb
+        database "smartlost_listings" as listingsdb
+        database "smartlost_matching" as matchingdb
+      }
+    }
+
+    node "Blob Storage GPv2 LRS" as storage <<managedStorage>> {
+      artifact "Private SmartLost photo container\nAnonymous access disabled" as photos
+    }
+  }
+}
+
+operator ..> workflow : Selects trusted revision and approved release
+inputs ..> workflow : Supplies protected inputs\nNever printed or committed
+workflow ..> entra : Exchanges GitHub OIDC assertion\nNo long-lived Azure client secret
+workflow ..> arm : Plans/applies reviewed configuration\nShort-lived identity and scoped RBAC
+workflow ..> state : Reads/writes own state with locking\nShared foundation read as data sources
+workflow ..> images : Publishes/promotes verified release digests
+workflow ..> secrets : Synchronises runtime copies over HTTPS\nDoes not imply database password rotation
+workflow ..> angular : Uploads verified frontend distribution
+workflow ..> migrations : Starts and tracks exact job executions\nThrough Azure management API
+workflow ..> bootstrap : Runs initial authorised database/role setup\nBefore service migrations; tracks execution
+arm ..> environment : Configures app/job revisions and identities
+arm ..> swa : Configures static hosting
+arm ..> vault : Configures vault and scoped permissions
+arm ..> storage : Configures private photo storage
+environment --> registry : Pulls authorised images by digest\nManaged identities
+environment --> vault : Resolves authorised Key Vault references\nManaged identities
+bootstrap --> postgres : Creates/updates only SmartLost databases and roles\nRestricted bootstrap credential; no other app data
+migrations --> authdb : Auth migrator role\nCompatible versioned migrations
+migrations --> listingsdb : Listings migrator role\nCompatible versioned migrations
+migrations --> matchingdb : Matching migrator role\nCompatible versioned migrations
+
+note bottom of migrations
+  Migrate before app rollout; serialise executions and use DB advisory locks.
+  Stop release on failure. Image rollback does not undo a schema migration.
+  GitHub-hosted runners have no direct private database connection.
+end note
+
+note bottom of apps
+  Candidate per app: 0.25 vCPU / 0.5 GiB, replicas 0 to 1.
+  Verify actual memory, shared capacity and active student benefits.
+  Existing Auth code and local Docker configuration do not prove Azure deployment.
+end note
+
+legend bottom
+  Nested nodes show deployment locations; artifacts show deployed packages or stored data.
+  Dotted arrows show delivery/configuration dependencies, not execution order.
+  Solid arrows show infrastructure access; complete runtime traffic is in the C4 view.
+  Shared foundation reuse is conditional on live access and capacity checks.
+  Local AI is operated separately; CI does not start or keep the operator PC online.
+  Deployment stays inactive until infrastructure and approval settings are configured.
+endlegend
+@enduml

@@ -1,0 +1,55 @@
+@startuml SmartLost_Listings_Components
+!include <C4/C4_Component>
+
+title SmartLost - C4 Component Diagram\nListings Service container\nProposed semester design - service and integrations not implemented
+LAYOUT_LEFT_RIGHT()
+
+Container(web, "Angular Web App", "Angular / TypeScript - planned", "Authenticated listing publication, discovery, decisions, recoveries and credibility views.")
+Container(matching, "Matching Service", ".NET / internal contracts - planned", "Coordinates local Qwen/DINOv3 through a tunnel; owns search projections, cached embeddings and cloud relevance ranking.")
+ContainerDb(db, "Listings Database", "PostgreSQL - planned", "Owned only by Listings: listings and revisions, confirmed categories, photo metadata, decisions, recoveries, credibility ledger and durable processing tasks.")
+System_Ext(blob, "Private Photo Storage", "Azure Blob Storage - planned integration. Stores photo bytes with no anonymous access.")
+
+Container_Boundary(listings, "Listings Service [.NET / ASP.NET Core - planned]") {
+  Component(api, "Listings HTTP API", "API layer / ASP.NET Core", "Validates user tokens and internal callers, dispatches authorised operations and returns results. Routes remain to be designed.")
+  Component(lifecycle, "Listing Management", "Application / Domain", "Creates private drafts; validates, publishes, edits and closes owned listings. Enforces revisions and safe duplicate requests; records synchronisation work with changes.")
+  Component(photos, "Photo Management", "Application / Infrastructure", "Checks photo access; validates one JPEG/PNG up to 10 MiB. Stores private blobs and metadata; supplies authorised photo content to users or Matching.")
+  Component(queries, "Listing Queries and Suggestions", "Application", "Filters and paginates the catalogue; reads permitted details and owner history. Rechecks current eligibility before displaying at most three suggestions.")
+  Component(gateway, "Matching Integration", "Infrastructure adapter", "Calls internal analysis, suggestion and update contracts. Guards analysis against stale photo/revision results and exposes explicit processing outcomes.")
+  Component(worker, "Synchronisation Worker", "Background component in Listings process", "Loads durable work, retries delivery, records processing outcomes and preserves change sequence identity. Work survives process restarts.")
+  Component(recovery, "Match Decisions and Recovery", "Application / Domain", "Accepts, rejects or cancels eligible pairs. Reserves listings and confirms one physical recovery; closes only the Lost listing and consumes Found eligibility.")
+  Component(credibility, "Credibility Module", "Application / Domain", "Records one eligible finder point per matched recovery; prevents duplicates and self awards. Derives totals and authorised contribution history.")
+  Component(persistence, "Listings Persistence", "Infrastructure / EF Core / Npgsql - proposed", "Persists owned aggregates and durable tasks. Provides consistent commits, revision checks and uniqueness for recovery and award records.")
+}
+
+Rel(web, api, "Uses authorised listing, photo and recovery operations", "HTTPS / JSON and photo upload")
+Rel(matching, api, "Requests permitted photo content", "Authorised internal contract")
+Rel(api, lifecycle, "Dispatches draft, publication, edit and closure operations", "In-process")
+Rel(api, photos, "Dispatches upload and authorised photo retrieval", "In-process")
+Rel(api, queries, "Requests catalogue, details, history and suggestions", "In-process")
+Rel(api, recovery, "Dispatches decisions and recovery confirmation", "In-process")
+Rel(api, credibility, "Requests permitted points and contribution views", "In-process")
+
+Rel(lifecycle, photos, "Checks associated photo availability and invalidates obsolete analysis", "In-process")
+Rel(lifecycle, gateway, "Requests optional analysis for an owned draft photo", "In-process")
+Rel(lifecycle, persistence, "Commits listing changes with revisions and durable update tasks", "In-process")
+Rel(photos, blob, "Stores, reads and removes private photo bytes", "Azure Blob API")
+Rel(photos, persistence, "Reads access context and persists photo identifiers and metadata", "In-process")
+Rel(queries, persistence, "Reads permitted data and current candidate eligibility", "In-process")
+Rel(queries, gateway, "Requests ranked candidate suggestions", "In-process")
+Rel(queries, credibility, "Requests permitted author display totals", "In-process")
+Rel(gateway, matching, "Requests analysis and suggestions; delivers revisioned eligibility updates", "Authorised internal contracts")
+Rel(worker, persistence, "Claims durable work and records retry/status outcomes", "In-process")
+Rel(worker, gateway, "Delivers the same change identity safely on retry", "In-process")
+Rel(recovery, credibility, "Creates the eligible award within the recovery transaction", "In-process")
+Rel(recovery, persistence, "Commits reservations, decisions or recovery with award and update work", "In-process")
+Rel(credibility, persistence, "Stages unique ledger entries and reads authorised totals/history", "In-process")
+Rel(persistence, db, "Reads/writes exclusively owned data", "PostgreSQL protocol")
+
+legend bottom
+  C4 level 3: one proposed Listings Service container is expanded.
+  All shown Listings components and integrations are planned semester work.
+  Components are logical responsibilities in one service process.
+  Arrows show calls/dependencies; they do not imply shared databases.
+  Model inference runs on the local AI host via Matching. Physical hosting is a separate view.
+endlegend
+@enduml

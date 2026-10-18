@@ -1,0 +1,80 @@
+{
+  "checkedOn": "2026-10-17",
+  "region": "switzerlandnorth",
+  "currency": "USD",
+  "status": "Public retail reference; no authenticated Azure resource, shared-capacity or free-grant verification. AI runs locally through a tunnel; cloud cold starts accepted; hosting at most one month.",
+  "rates": [
+    {
+      "productName": "Azure Container Apps",
+      "skuName": "Standard",
+      "meterName": "Standard vCPU Active Usage",
+      "retailPrice": 2.4e-05,
+      "unitOfMeasure": "1 Second",
+      "armRegionName": "switzerlandnorth",
+      "sourceUrl": "https://prices.azure.com/api/retail/prices?%24filter=armRegionName+eq+%27switzerlandnorth%27+and+serviceName+eq+%27Azure+Container+Apps%27+and+priceType+eq+%27Consumption%27"
+    },
+    {
+      "productName": "Azure Container Apps",
+      "skuName": "Standard",
+      "meterName": "Standard Requests",
+      "retailPrice": 0.4,
+      "unitOfMeasure": "1M",
+      "armRegionName": "switzerlandnorth",
+      "sourceUrl": "https://prices.azure.com/api/retail/prices?%24filter=armRegionName+eq+%27switzerlandnorth%27+and+serviceName+eq+%27Azure+Container+Apps%27+and+priceType+eq+%27Consumption%27"
+    },
+    {
+      "productName": "Azure Container Apps",
+      "skuName": "Standard",
+      "meterName": "Standard Memory Active Usage",
+      "retailPrice": 3e-06,
+      "unitOfMeasure": "1 GiB Second",
+      "armRegionName": "switzerlandnorth",
+      "sourceUrl": "https://prices.azure.com/api/retail/prices?%24filter=armRegionName+eq+%27switzerlandnorth%27+and+serviceName+eq+%27Azure+Container+Apps%27+and+priceType+eq+%27Consumption%27"
+    },
+    {
+      "productName": "Container Registry",
+      "skuName": "Basic",
+      "meterName": "Basic Registry Unit",
+      "retailPrice": 0.1666,
+      "unitOfMeasure": "1/Day",
+      "armRegionName": "switzerlandnorth",
+      "sourceUrl": "https://prices.azure.com/api/retail/prices?%24filter=armRegionName+eq+%27switzerlandnorth%27+and+serviceName+eq+%27Container+Registry%27+and+priceType+eq+%27Consumption%27"
+    },
+    {
+      "productName": "Container Registry",
+      "skuName": "Standard",
+      "meterName": "Standard Registry Unit",
+      "retailPrice": 0.6666,
+      "unitOfMeasure": "1/Day",
+      "armRegionName": "switzerlandnorth",
+      "sourceUrl": "https://prices.azure.com/api/retail/prices?%24filter=armRegionName+eq+%27switzerlandnorth%27+and+serviceName+eq+%27Container+Registry%27+and+priceType+eq+%27Consumption%27"
+    }
+  ],
+  "sharedFoundationAssumptions": [
+    "Existing SmartRemoteManager Container Apps environment, VNet, PostgreSQL server and ACR reused as read-only references.",
+    "No additional registry/server/environment/VM fixed charge is assumed. Existing charges continue and are not counted as zero."
+  ],
+  "scenarios": [
+    {
+      "label": "Light use without any unconsumed ACA grant",
+      "appCount": 3,
+      "activeHoursPerApp": 20,
+      "cpuPerApp": 0.25,
+      "memoryGiBPerApp": 0.5,
+      "additionalWorkerJobExecutions": 5760,
+      "workerSecondsPerExecution": 30,
+      "workerCpu": 0.25,
+      "workerMemoryGiB": 0.5,
+      "note": "Two finite 30-second jobs every 15 minutes plus three APIs active 20 hours each; shared grants may cover this. Additional storage/log/network charges are separate.",
+      "workerCount": 2,
+      "scheduleMinutes": 15,
+      "estimatedGrossComputeUSD": 2.916
+    }
+  ],
+  "benefits": {
+    "source": "https://azure.microsoft.com/en-us/free/students/",
+    "acrStandard": "One registry/100 GB/10 webhooks for the eligible 12-month period; verify active coverage.",
+    "postgres": "750 B1ms hours/month plus 32 GB storage/backup; shared benefit, not per project.",
+    "aca": "180000 vCPU-seconds and 360000 GiB-seconds plus 2 million requests/month, shared per subscription."
+  }
+}
