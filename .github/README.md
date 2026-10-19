@@ -57,6 +57,9 @@ those reports to enforce **strictly above 80%** overall and on changed executabl
 merges line hits across suites without averaging percentages or double-counting lines. No
 external coverage service or access token is required.
 
+Coverage paths are resolved against the checkout and Cobertura source roots. Both report paths
+and production project directories use `/` separators before comparison, including on Windows.
+
 Every production assembly with C# compile items must appear in the reports, and every changed source file containing
 added lines must appear in coverage, except declaration-only contracts with no executable code:
 pure interfaces, enums and static classes containing only const fields.

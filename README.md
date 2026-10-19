@@ -510,6 +510,7 @@ Coverlet configuration and the inline coverage/test gates are documented in the
 Empty scaffold projects participate in inventory, locked restore, build and formatting.
 The coverage assembly check requires reports once a project has C# compile items; the
 strictly-above-80% overall and changed-code gates remain in place.
+Coverage file paths and project directories use the same separators on Linux, Windows and macOS.
 The Listings unit suite covers the generated NMF implementation. Pure interfaces, enums
 and const-only static classes are recognized as declarations; executable generated code remains covered by
 the existing gates.

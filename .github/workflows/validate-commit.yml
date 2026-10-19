@@ -137,7 +137,7 @@ jobs:
           $root = (Get-Location).Path
           $hits = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
           $productionDirectories = @((ConvertFrom-Json $env:PRODUCTION_PROJECTS) |
-            ForEach-Object { Split-Path $_ -Parent })
+            ForEach-Object { (Split-Path $_ -Parent).Replace('\', '/') })
           $modules = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
           foreach ($report in $reports) {
             [xml] $xml = Get-Content $report.FullName -Raw
