@@ -36,7 +36,7 @@ src/
       Auth.slnx        # Auth projects, shared dependencies and Auth tests
       SmartLost.AuthService.*/
     Listings/
-      Listings.slnx    # Four empty service layers, NMF Modeling and shared dependencies
+      Listings.slnx    # Runtime scaffolds, NMF Modeling, shared dependencies and model tests
       SmartLost.ListingsService.*/
     Matching/
       Matching.slnx    # Four empty service layers and shared dependencies
@@ -47,6 +47,7 @@ src/
 tests/
   Auth/                # Auth unit and integration test projects
   BuildingBlocks/      # Shared-library unit test project
+  Listings/            # NMF model unit test project
 ```
 
 Future services belong under `src/Services/<Service>/`, with tests under
@@ -56,7 +57,7 @@ Future services belong under `src/Services/<Service>/`, with tests under
 | --- | --- |
 | [Aset.slnx](Aset.slnx) | All backend projects and tests; the main CI entry point |
 | [Auth.slnx](src/Services/Auth/Auth.slnx) | Five Auth projects, four BuildingBlocks libraries and the two Auth test projects |
-| [Listings.slnx](src/Services/Listings/Listings.slnx) | Four Listings runtime-layer scaffolds, a separate NMF Modeling library and four BuildingBlocks libraries |
+| [Listings.slnx](src/Services/Listings/Listings.slnx) | Four Listings runtime-layer scaffolds, NMF Modeling, four BuildingBlocks libraries and the Listings unit suite |
 | [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching scaffold projects and four BuildingBlocks libraries |
 | [BuildingBlocks.slnx](src/BuildingBlocks/BuildingBlocks.slnx) | Four shared libraries and their existing unit test project |
 
@@ -69,11 +70,13 @@ Deployment is inactive; see the
 
 The runtime layers of Listings and Matching contain only project definitions and documentation. Their API projects
 temporarily build as libraries until an entry point is implemented. They have no endpoints,
-database contexts, migrations, workers, containers or test suites. Service implementations
+database contexts, migrations, workers or containers. Service implementations
 will use the existing BuildingBlocks; neither service references the other's projects.
 Listings also has a separate [NMF structural model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md)
 for Listing, Photo, Category and ListingCategory: Ecore source, generated NMeta/C#
-and a sample XMI instance. The runtime layers do not reference Modeling.
+and a sample XMI instance. The runtime layers do not reference Modeling. A separate
+[Listings unit suite](tests/Listings/SmartLost.ListingsService.UnitTests/README.md)
+checks the model and collects its coverage.
 
 The [current hosting proposal](docs/AZURE_STUDENT_ARCHITECTURE.md) uses globally
 distributed static frontend hosting, APIs and persistent data in Switzerland North,
@@ -461,7 +464,7 @@ sanitized 500 problem and are logged server-side.
 | SDK / target | SDK **10.0.401** pinned exactly in `global.json` and the Docker build image; `SmartLost.AuthService.Api` targets `net10.0`; the runtime image uses `aspnet:10.0` |
 | Style / analysis | `.editorconfig`, .NET 10 recommended analyzers, nullable references, warnings as errors |
 | Dependencies | Locked restore and direct/transitive NuGet auditing; lock files required with projects; local `dotnet-ef` 10.0.12 and `NMF-Ecore2Code` 2.0.467 pinned in `.config/dotnet-tools.json`; Listings Modeling references `NMF-Basics` 2.0.467 |
-| Tests / coverage | All tests must pass; unit tests check migration/model drift and PostgreSQL SQL generation without a database; **Coverlet** collects unit line coverage; inline workflow gates require **strictly above 80%** overall and on changed executable code; interface-only contracts without executable code are exempt from the changed-file coverage requirement regardless of their location |
+| Tests / coverage | All tests must pass; unit tests check Auth migration/model drift, PostgreSQL SQL generation and the NMF Listings model; **Coverlet** collects unit line coverage; inline workflow gates require **strictly above 80%** overall and on changed executable code; declaration-only interfaces, enums and const-only static classes are recognized regardless of location |
 | Security | Configured Gitleaks history/file scans; Trivy dependency, infrastructure and image scans; checksum-pinned tools |
 | Dependency updates | [Weekly Dependabot configuration](.github/dependabot.yml) for Actions, NuGet and Docker |
 
@@ -498,6 +501,7 @@ The current test commands are:
 ```sh
 dotnet test tests/Auth/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
 dotnet test tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.BuildingBlocks.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.ListingsService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
 dotnet test tests/Auth/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
 ```
 
@@ -506,8 +510,9 @@ Coverlet configuration and the inline coverage/test gates are documented in the
 Empty scaffold projects participate in inventory, locked restore, build and formatting.
 The coverage assembly check requires reports once a project has C# compile items; the
 strictly-above-80% overall and changed-code gates remain in place.
-The Listings NMF model now has generated executable code and no test coverage; its
-assembly/changed-code coverage gates remain pending until tests are implemented.
+The Listings unit suite covers the generated NMF implementation. Pure interfaces, enums
+and const-only static classes are recognized as declarations; executable generated code remains covered by
+the existing gates.
 Collection settings live in [coverage.runsettings](coverage.runsettings).
 After adding projects, apply formatting locally with `dotnet format Aset.slnx`.
 

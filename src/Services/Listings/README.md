@@ -9,7 +9,7 @@ Listings for the semester MVP.
 This module contains four empty runtime-layer .NET 10 projects, a separate
 [NMF Modeling project](SmartLost.ListingsService.Modeling/README.md) and [Listings.slnx](Listings.slnx).
 The runtime layers have no C# source files, endpoints, dependency registrations, database contexts,
-migrations, runtime settings, workers, Dockerfiles, Compose services or test projects.
+migrations, runtime settings, workers, Dockerfiles or Compose services.
 The API uses the Web SDK with `OutputType=Library` so the scaffold builds without a
 `Program.cs`. Remove that property when implementing the executable API entry point.
 The first NMF structural model defines Listing, Photo, Category and ListingCategory,
@@ -53,13 +53,11 @@ These commands build the runtime scaffolds, Modeling library and shared dependen
 there is no Listings API to run yet.
 See [NMF regeneration](SmartLost.ListingsService.Modeling/README.md#regeneration)
 for the exact pinned generator command.
-When tests are implemented, keep them under `tests/Listings/` and add their projects to
-both this focused solution and the root solution. CI inventories the scaffold projects
-and validates their package locks, build and formatting. Source-bearing assemblies must
-satisfy the existing coverage gates once implementation begins.
-Modeling already contains generated implementation and currently has no test coverage;
-the existing coverage gates will block it until tests are added. No tests were added
-or run for this modeling step, as requested.
+The [Listings unit tests](../../../tests/Listings/SmartLost.ListingsService.UnitTests/README.md)
+live under `tests/Listings/` and appear in both solutions. They exercise the NMF model,
+including XMI round trips, metadata, notifications, containment and generated collection
+adapters. They do not require Docker or a database. CI inventories all projects and
+validates package locks, build, formatting and the existing coverage requirements.
 
 ## Design references
 

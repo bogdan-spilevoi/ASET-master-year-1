@@ -184,21 +184,42 @@ jobs:
           # PowerShell bundles Roslyn; inspect contracts regardless of their folder/name.
           [void] [Reflection.Assembly]::LoadFrom((Join-Path $PSHOME 'Microsoft.CodeAnalysis.dll'))
           [void] [Reflection.Assembly]::LoadFrom((Join-Path $PSHOME 'Microsoft.CodeAnalysis.CSharp.dll'))
-          function Test-InterfaceContract([string] $file) {
+          function Test-DeclarationOnlyContract([string] $file) {
             $tree = [Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([IO.File]::ReadAllText($file))
             $syntax = $tree.GetRoot()
             $nodes = @($syntax.DescendantNodes())
-            $interfaces = @($nodes | Where-Object { $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.InterfaceDeclarationSyntax] })
-            if ($interfaces.Count -eq 0) { return $false }
-            # Reject mixed files and interface members with executable bodies or initializers.
+            $constantContainers = @($nodes | Where-Object {
+              $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax] -and
+              'static' -in @($_.Modifiers | ForEach-Object { $_.ValueText }) -and
+              $_.Members.Count -gt 0 -and
+              @($_.Members | Where-Object {
+                $_ -isnot [Microsoft.CodeAnalysis.CSharp.Syntax.FieldDeclarationSyntax] -or
+                'const' -notin @($_.Modifiers | ForEach-Object { $_.ValueText })
+              }).Count -eq 0
+            })
+            $contracts = @($nodes | Where-Object {
+              $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.InterfaceDeclarationSyntax] -or
+              $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.EnumDeclarationSyntax] -or
+              $_ -in $constantContainers
+            })
+            if ($contracts.Count -eq 0) { return $false }
+            # Enum values and const-only static classes have no runtime initialization.
             $implementation = @($nodes | Where-Object {
+              $constantInitializer = $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.EqualsValueClauseSyntax] -and
+                $_.Parent -is [Microsoft.CodeAnalysis.CSharp.Syntax.VariableDeclaratorSyntax] -and
+                $_.Parent.Parent.Parent -is [Microsoft.CodeAnalysis.CSharp.Syntax.FieldDeclarationSyntax] -and
+                $_.Parent.Parent.Parent.Parent -in $constantContainers
               ($_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseTypeDeclarationSyntax] -and
-               $_ -isnot [Microsoft.CodeAnalysis.CSharp.Syntax.InterfaceDeclarationSyntax]) -or
+               $_ -isnot [Microsoft.CodeAnalysis.CSharp.Syntax.InterfaceDeclarationSyntax] -and
+               $_ -isnot [Microsoft.CodeAnalysis.CSharp.Syntax.EnumDeclarationSyntax] -and
+               $_ -notin $constantContainers) -or
               $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.DelegateDeclarationSyntax] -or
               $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.GlobalStatementSyntax] -or
               $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.BlockSyntax] -or
               $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.ArrowExpressionClauseSyntax] -or
-              $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.EqualsValueClauseSyntax]
+              ($_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.EqualsValueClauseSyntax] -and
+               $_.Parent -isnot [Microsoft.CodeAnalysis.CSharp.Syntax.EnumMemberDeclarationSyntax] -and
+               !$constantInitializer)
             })
             return $implementation.Count -eq 0
           }
@@ -209,8 +230,8 @@ jobs:
           foreach ($file in $files | Where-Object {
             $_.EndsWith('.cs', [StringComparison]::Ordinal) -and $_.StartsWith('src/', [StringComparison]::Ordinal)
           }) {
-            if (!$coveredFiles.Contains($file) -and (Test-InterfaceContract $file)) {
-              "Interface contract (no executable lines): $file"
+            if (!$coveredFiles.Contains($file) -and (Test-DeclarationOnlyContract $file)) {
+              "Declaration-only contract (no executable lines): $file"
               continue
             }
             $diff = (git diff --no-ext-diff --no-renames --unified=0 $env:COVERAGE_BASE HEAD -- $file) -join "`n"

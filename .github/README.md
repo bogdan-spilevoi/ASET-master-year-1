@@ -58,11 +58,14 @@ merges line hits across suites without averaging percentages or double-counting 
 external coverage service or access token is required.
 
 Every production assembly with C# compile items must appear in the reports, and every changed source file containing
-added lines must appear in coverage, except interface-only contracts with no executable code.
+added lines must appear in coverage, except declaration-only contracts with no executable code:
+pure interfaces, enums and static classes containing only const fields.
 The changed-line gate recognizes these with the C# parser bundled with PowerShell,
-regardless of folder or filename. Mixed files and interfaces
-with executable bodies or initializers still require coverage. Coverlet already omits plain
-interface declarations from executable line counts. The assembly check evaluates MSBuild's
+regardless of folder or filename. Enum values and const fields are compile-time constants;
+mixed implementation files and interfaces with executable bodies or initializers still
+require coverage. Static readonly fields and static constructors still require coverage.
+Coverlet omits these declaration-only files from executable
+line counts. The assembly check evaluates MSBuild's
 `Compile` items; genuinely empty scaffold projects have no executable coverage to collect.
 As soon as a scaffold has a C# compile item, the assembly requirement applies automatically.
 Missing reports, absent source-bearing assemblies, or empty executable coverage fail.
@@ -97,6 +100,7 @@ projects with the exact CI flags:
 ```sh
 dotnet test tests/Auth/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
 dotnet test tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.BuildingBlocks.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.ListingsService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
 dotnet test tests/Auth/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
 ```
 
@@ -114,6 +118,11 @@ finite worker are included in the root solution; the existing Dockerfile discove
 builds/scans the worker image. Unit tests cover transport contracts with a fake HTTP handler
 and worker execution; PostgreSQL integration tests cover Outbox rollback and concurrent
 claims. Coverage gates have not been relaxed.
+
+The [Listings model suite](../tests/Listings/SmartLost.ListingsService.UnitTests/README.md)
+loads the NMF Modeling assembly for Coverlet and checks XMI round trips, metadata,
+containment, identity and observable generated model behavior. It runs on all unit-test
+matrix platforms through the existing discovery loop. It does not need Docker.
 
 ## Adding the first service
 

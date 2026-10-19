@@ -34,4 +34,7 @@
   <Folder Name="/Tests/BuildingBlocks/">
     <Project Path="tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj" />
   </Folder>
+  <Folder Name="/Tests/Listings/">
+    <Project Path="tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj" />
+  </Folder>
 </Solution>

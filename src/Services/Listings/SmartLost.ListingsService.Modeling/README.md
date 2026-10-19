@@ -75,6 +75,11 @@ collection. Photo/listing and assignment/listing references have opposites maint
 generated code. A collection's object uniqueness does not enforce uniqueness of the
 business pair `(Listing.Id, Category.Id)`.
 
+Use the containing `Listing.Photo` reference to assign photos. Clear an old photo
+before assigning a newly created replacement. Removing contained elements uses NMF's
+deletion lifecycle; the tests use new replacement nodes instead of reusing removed ones.
+These in-memory operations do not delete a blob from Azure.
+
 Enums are `ListingType { Lost, Found }`, `ListingState { Draft, Open, Closed }` and
 `ClosureReason { Recovered, Withdrawn }`. Defaults are Lost, Draft and revision 1.
 `ClosureReason` and `PublishedAt` are nullable. Ecore `EDate` maps to `DateTime`;
@@ -162,14 +167,17 @@ until an explicit mapping or generation strategy is selected.
 ## Verification scope and CI
 
 The pinned generator was run, the resulting library was compiled, and the example XMI
-was authored using NMF serialization. No XMI load/round-trip verification was performed.
-No unit/integration tests were added or run, as requested.
+was authored using NMF serialization. The
+[Listings unit suite](../../../../tests/Listings/SmartLost.ListingsService.UnitTests/README.md)
+now loads the XMI, verifies a save/load round trip, checks metamodel structure and
+exercises generated property/notification, identity and collection behavior.
 
 The existing overall and changed-code coverage gates remain strictly above 80%.
-Modeling now has generated executable C# and is no longer an empty scaffold.
-Current test suites do not reference this assembly, so the existing assembly/changed-code
-coverage gates will block this change until suitable coverage is added.
-No generated-code coverage exemption or gate relaxation has been introduced.
+The tests load Modeling so its executable generated C# appears in Coverlet reports.
+Pure interfaces, enums and const-only static classes are declaration-only contracts checked with Roslyn;
+generated implementation remains subject to coverage. No implementation exclusion
+or percentage relaxation has been introduced. Hosted CI verification is separate
+from local test results.
 
 ## References
 
