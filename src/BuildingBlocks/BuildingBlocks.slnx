@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/BuildingBlocks/">
+    <Project Path="SmartLost.BuildingBlocks.Core/SmartLost.BuildingBlocks.Core.csproj" />
+    <Project Path="SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
+    <Project Path="SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
+    <Project Path="SmartLost.BuildingBlocks.Infrastructure/SmartLost.BuildingBlocks.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="../../tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj" />
+  </Folder>
+</Solution>

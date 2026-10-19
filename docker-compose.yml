@@ -22,7 +22,7 @@ services:
     container_name: aset-auth-service
     build:
       context: .
-      dockerfile: SmartLost.AuthService.Api/Dockerfile
+      dockerfile: src/Services/Auth/SmartLost.AuthService.Api/Dockerfile
     depends_on:
       auth-db:
         condition: service_healthy
@@ -31,13 +31,31 @@ services:
       ASPNETCORE_URLS: http://+:8080
     volumes:
       - type: bind
-        source: ./SmartLost.AuthService.Api/appsettings.Docker.json
+        source: ./src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.json
         target: /app/appsettings.json
         read_only: true
         bind:
           create_host_path: false
     ports:
       - "8080:8080"
+
+  auth-outbox-worker:
+    profiles: [workers]
+    build:
+      context: .
+      dockerfile: src/Services/Auth/SmartLost.AuthService.Worker/Dockerfile
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    environment:
+      DOTNET_ENVIRONMENT: Development
+    volumes:
+      - type: bind
+        source: ./src/Services/Auth/SmartLost.AuthService.Worker/outboxsettings.Docker.json
+        target: /app/outboxsettings.json
+        read_only: true
+        bind:
+          create_host_path: false
 
 volumes:
   auth-db-data:

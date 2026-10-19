@@ -1,0 +1,29 @@
+{
+  "ConnectionStrings": {
+    "AuthDatabase": "Host=localhost;Port=5432;Database=authservice;Username=authservice;Password=change-me-dev-db-password"
+  },
+  "OutboxDelivery": {
+    "ServiceKey": "replace-with-random-service-key-of-at-least-32-characters",
+    "Routes": {
+      "auth.user.created": "https://consumer.invalid/",
+      "auth.user.identity_changed": "https://consumer.invalid/"
+    }
+  },
+  "Outbox": {
+    "BatchSize": 20,
+    "MaximumAttempts": 8,
+    "InitialRetryDelay": "00:00:02",
+    "MaximumRetryDelay": "00:05:00",
+    "DeliveryTimeout": "00:00:30",
+    "LeaseDuration": "00:02:00"
+  },
+  "Worker": {
+    "MaximumBatches": 10
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "System.Net.Http.HttpClient": "Warning"
+    }
+  }
+}

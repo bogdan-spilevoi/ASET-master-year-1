@@ -1,22 +1,37 @@
 <Solution>
   <Folder Name="/BuildingBlocks/">
-    <Project Path="SmartLost.BuildingBlocks.Core/SmartLost.BuildingBlocks.Core.csproj" />
-    <Project Path="SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
-    <Project Path="SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
+    <Project Path="src/BuildingBlocks/SmartLost.BuildingBlocks.Core/SmartLost.BuildingBlocks.Core.csproj" />
+    <Project Path="src/BuildingBlocks/SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
+    <Project Path="src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
+    <Project Path="src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/SmartLost.BuildingBlocks.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/Services/" />
   <Folder Name="/Services/Auth/">
-    <Project Path="SmartLost.AuthService.Api/SmartLost.AuthService.Api.csproj" />
-    <Project Path="SmartLost.AuthService.Application/SmartLost.AuthService.Application.csproj" />
-    <Project Path="SmartLost.AuthService.Domain/SmartLost.AuthService.Domain.csproj" />
-    <Project Path="SmartLost.AuthService.Infrastructure/SmartLost.AuthService.Infrastructure.csproj" />
+    <Project Path="src/Services/Auth/SmartLost.AuthService.Api/SmartLost.AuthService.Api.csproj" />
+    <Project Path="src/Services/Auth/SmartLost.AuthService.Application/SmartLost.AuthService.Application.csproj" />
+    <Project Path="src/Services/Auth/SmartLost.AuthService.Domain/SmartLost.AuthService.Domain.csproj" />
+    <Project Path="src/Services/Auth/SmartLost.AuthService.Infrastructure/SmartLost.AuthService.Infrastructure.csproj" />
+    <Project Path="src/Services/Auth/SmartLost.AuthService.Worker/SmartLost.AuthService.Worker.csproj" />
+  </Folder>
+  <Folder Name="/Services/Listings/">
+    <Project Path="src/Services/Listings/SmartLost.ListingsService.Api/SmartLost.ListingsService.Api.csproj" />
+    <Project Path="src/Services/Listings/SmartLost.ListingsService.Application/SmartLost.ListingsService.Application.csproj" />
+    <Project Path="src/Services/Listings/SmartLost.ListingsService.Domain/SmartLost.ListingsService.Domain.csproj" />
+    <Project Path="src/Services/Listings/SmartLost.ListingsService.Infrastructure/SmartLost.ListingsService.Infrastructure.csproj" />
+    <Project Path="src/Services/Listings/SmartLost.ListingsService.Modeling/SmartLost.ListingsService.Modeling.csproj" />
+  </Folder>
+  <Folder Name="/Services/Matching/">
+    <Project Path="src/Services/Matching/SmartLost.MatchingService.Api/SmartLost.MatchingService.Api.csproj" />
+    <Project Path="src/Services/Matching/SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj" />
+    <Project Path="src/Services/Matching/SmartLost.MatchingService.Domain/SmartLost.MatchingService.Domain.csproj" />
+    <Project Path="src/Services/Matching/SmartLost.MatchingService.Infrastructure/SmartLost.MatchingService.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/Tests/" />
   <Folder Name="/Tests/Auth/">
-    <Project Path="tests/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj" />
-    <Project Path="tests/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj" />
+    <Project Path="tests/Auth/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj" />
+    <Project Path="tests/Auth/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj" />
   </Folder>
   <Folder Name="/Tests/BuildingBlocks/">
-    <Project Path="tests/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj" />
+    <Project Path="tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj" />
   </Folder>
 </Solution>

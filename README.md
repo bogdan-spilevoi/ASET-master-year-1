@@ -14,24 +14,66 @@ authentication API with its own PostgreSQL database, Dockerfile and Compose setu
 The intended architecture separates services by responsibility, with each service owning its
 data and communicating through explicit contracts. `SmartLost.AuthService.Api` currently implements that
 split with API, Application, Domain and Infrastructure projects, a dedicated PostgreSQL
-database connection and JWT issuance. Listings and Matching are not implemented.
+database connection and JWT issuance. Listings and Matching have buildable project
+scaffolds; their application functionality is not implemented.
 
 The [SmartLost project description](docs/SMARTLOST.md) documents the proposed Listings and
 Matching services, their data ownership, C4 diagrams, publication/matching flows and credibility
-rules. These are design proposals, not implemented components.
+rules. Their behavior remains a design proposal.
 
 Application depends on Domain and its repository/security abstractions; Infrastructure
 implements those abstractions. API composes the service. Domain uses framework-free Core
 building blocks, Application uses MediatR/validation building blocks, and API uses the
 ASP.NET result adapter. Shared libraries never depend on a microservice or own its data.
 Repository build configuration applies to microservice projects in the [solution](Aset.slnx).
-The IDE solution groups production projects into `BuildingBlocks` and `Services/Auth`.
-A separate `Tests` solution folder groups AuthService unit/integration tests under `Auth`
-and shared-library tests under `BuildingBlocks`. Future services follow the same grouping.
-These solution folders organize
-the IDE view; production project folders remain at the repository root and tests under `tests/`.
+The solution groups match the physical directories, so Rider's solution view and
+VS Code's file explorer show the same service boundaries:
+
+```text
+src/
+  Services/
+    Auth/
+      Auth.slnx        # Auth projects, shared dependencies and Auth tests
+      SmartLost.AuthService.*/
+    Listings/
+      Listings.slnx    # Four empty service layers, NMF Modeling and shared dependencies
+      SmartLost.ListingsService.*/
+    Matching/
+      Matching.slnx    # Four empty service layers and shared dependencies
+      SmartLost.MatchingService.*/
+  BuildingBlocks/
+    BuildingBlocks.slnx
+    SmartLost.BuildingBlocks.*/
+tests/
+  Auth/                # Auth unit and integration test projects
+  BuildingBlocks/      # Shared-library unit test project
+```
+
+Future services belong under `src/Services/<Service>/`, with tests under
+`tests/<Service>/` and a focused `<Service>.slnx` beside the service projects.
+
+| Solution | Scope |
+| --- | --- |
+| [Aset.slnx](Aset.slnx) | All backend projects and tests; the main CI entry point |
+| [Auth.slnx](src/Services/Auth/Auth.slnx) | Five Auth projects, four BuildingBlocks libraries and the two Auth test projects |
+| [Listings.slnx](src/Services/Listings/Listings.slnx) | Four Listings runtime-layer scaffolds, a separate NMF Modeling library and four BuildingBlocks libraries |
+| [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching scaffold projects and four BuildingBlocks libraries |
+| [BuildingBlocks.slnx](src/BuildingBlocks/BuildingBlocks.slnx) | Four shared libraries and their existing unit test project |
+
+Solutions list the same `.csproj` files directly; they do not nest other solutions
+or duplicate code. Tests stay physically under `tests/` and appear in the relevant
+solution's `Tests` group. Open the focused solution to work on one area, or
+`Aset.slnx` to work across the backend. The standalone AI solution remains separate.
 Deployment is inactive; see the
 [deployment plan](docs/DEPLOYMENT.md).
+
+The runtime layers of Listings and Matching contain only project definitions and documentation. Their API projects
+temporarily build as libraries until an entry point is implemented. They have no endpoints,
+database contexts, migrations, workers, containers or test suites. Service implementations
+will use the existing BuildingBlocks; neither service references the other's projects.
+Listings also has a separate [NMF structural model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md)
+for Listing, Photo, Category and ListingCategory: Ecore source, generated NMeta/C#
+and a sample XMI instance. The runtime layers do not reference Modeling.
 
 The [current hosting proposal](docs/AZURE_STUDENT_ARCHITECTURE.md) uses globally
 distributed static frontend hosting, APIs and persistent data in Switzerland North,
@@ -153,23 +195,43 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | Module | Responsibility | Documentation |
 | --- | --- | --- |
 | [`.github/`](.github/) | GitHub Actions workflows, PR/main validation, Coverlet gates, security and container checks | [CI guide](.github/README.md) |
-| [`SmartLost.AuthService.Api/`](SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
-| [`SmartLost.BuildingBlocks.*`](SmartLost.BuildingBlocks.Core/) | Reusable entity/result/pagination primitives, application behaviors and HTTP adapters | [Building blocks guide](docs/BUILDING_BLOCKS.md) |
+| [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
+| [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Finite Auth Outbox job delivering versioned public-profile snapshots to configured HTTP receivers | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
+| [`src/Services/Listings/`](src/Services/Listings/) | Runtime scaffold and a separate NMF structural model for listings, photos and categories; runtime functionality pending | [Module README](src/Services/Listings/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md) |
+| [`src/Services/Matching/`](src/Services/Matching/) | Scaffold for search projections, embeddings, ranking and the local AI client; functionality pending | [Module README](src/Services/Matching/README.md) |
+| [`SmartLost.BuildingBlocks.*`](src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | Reusable domain/event/result/pagination primitives, application behaviors, HTTP adapters and opt-in EF Core Outbox | [Building blocks guide](docs/BUILDING_BLOCKS.md) |
 | [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen CPU label extraction and DINOv3 CPU normalized image embeddings | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
 
-`SmartLost.AuthService.Api` owns its database. Additional application services are not implemented yet.
+`SmartLost.AuthService.Api` owns its database. Listings and Matching will each own a separate
+database; their scaffolds do not create or connect to databases. Cross-service identifiers
+will be logical references, without foreign keys between service databases.
 
 ## Shared libraries/building blocks
 
 | Project | Responsibility |
 | --- | --- |
-| `SmartLost.BuildingBlocks.Core` | Type-aware `Entity<TId>`, immutable `Result`/`Result<T>`, errors, explicit domain exceptions, `PageSlice<T>`/`PagedResult<T>` and pagination defaults; no framework dependencies |
-| `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction behavior and framework-independent transaction contracts |
-| `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler and API registration |
+| `SmartLost.BuildingBlocks.Core` | Type-aware `Entity<TId>`, `AggregateRoot<TId>`, domain-event contracts, domain `Guard`, immutable `Result`/`Result<T>`, errors, explicit domain exceptions, `PageSlice<T>`/`PagedResult<T>` and pagination defaults; no framework dependencies |
+| `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction behavior, transaction/Outbox contracts and `ICurrentUser` |
+| `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped HTTP current-user adapter and API registration |
+| `SmartLost.BuildingBlocks.Infrastructure` | Opt-in EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its table and delivery adapter |
 
-See [dependencies, pagination usage and transaction opt-in](docs/BUILDING_BLOCKS.md).
+See [dependencies, domain primitives, Outbox integration and transaction opt-in](docs/BUILDING_BLOCKS.md).
+`AddBuildingBlocksApi()` also registers scoped `ICurrentUser` access to authenticated
+user/token claims. Auth already calls this registration; its existing endpoints remain
+register/login/refresh. See [current-user usage and claim mapping](docs/BUILDING_BLOCKS.md#current-user-identity).
+Auth now uses the shared Outbox library: its EF context saves profile messages atomically
+with business changes, and the separate worker performs bounded HTTP delivery. Receiver
+routes and a service key must be configured before running the worker. Unit tests cover
+profile mapping, the HTTP publisher with a fake handler, bounded worker runs, domain guards
+and current-user claims. PostgreSQL integration tests cover atomic Outbox rollback,
+identity-version conflicts and competing delivery claims; CI coverage requirements remain unchanged.
 AuthService enables exception mapping and validation; it does not enable the transaction
-behavior or provide a shared unit-of-work adapter. [Build defaults](Directory.Build.props),
+behavior or provide a shared unit-of-work adapter. Its user/session models now use
+`AggregateRoot<Guid>`, domain `Guard` checks and service-owned `AuthErrors`; token history
+remains an entity. Event collections are ignored by EF; selected profile events are
+persisted as Outbox messages, and local session events are cleared after commit. See
+[Auth aggregate boundaries and event lifecycle](docs/AUTHSERVICE.md#domain-aggregates-guards-and-events).
+[Build defaults](Directory.Build.props),
 [build enforcement](Directory.Build.targets), [formatting/naming rules](.editorconfig) and
 [NuGet configuration](NuGet.Config) provide the shared repository baseline.
 
@@ -178,6 +240,18 @@ behavior or provide a shared unit-of-work adapter. [Build defaults](Directory.Bu
 Use the .NET SDK specified in [global.json](global.json). Rider, Visual Studio and VS Code
 share the repository configuration. CI runs directly in GitHub Actions; no separate local
 CI runtime or helper scripts are required.
+
+For focused work, restore and build the selected solution from the repository root:
+
+```sh
+dotnet restore src/Services/Auth/Auth.slnx --locked-mode
+dotnet build src/Services/Auth/Auth.slnx --no-restore --configuration Release --warnaserror
+dotnet restore src/BuildingBlocks/BuildingBlocks.slnx --locked-mode
+dotnet build src/BuildingBlocks/BuildingBlocks.slnx --no-restore --configuration Release --warnaserror
+```
+
+These commands build the included test projects without executing their tests.
+The full-backend CI commands remain in [Quality and CI](#quality-and-ci).
 
 The [local Qwen experiment](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md) uses ONNX Runtime GenAI
 to load a local Qwen3-VL model on CPU and extract English JSON object labels from an image using an
@@ -237,8 +311,10 @@ locally after the upgrade; hosted CI and container verification remain separate.
 
 Docker-related configuration includes [`.dockerignore`](.dockerignore),
 [`docker-compose.yml`](docker-compose.yml) and
-[`SmartLost.AuthService.Api/Dockerfile`](SmartLost.AuthService.Api/Dockerfile).
-The auth stack uses one application container and one PostgreSQL container.
+[`src/Services/Auth/SmartLost.AuthService.Api/Dockerfile`](src/Services/Auth/SmartLost.AuthService.Api/Dockerfile), plus
+[the Auth worker Dockerfile](src/Services/Auth/SmartLost.AuthService.Worker/Dockerfile).
+The default stack uses one API container and one PostgreSQL container; the optional
+`workers` profile adds a finite Outbox job without an exposed port.
 The API image uses locked restore and excludes local settings from its build context.
 The standalone `AIModels/` folder is also excluded from the AuthService image build context.
 Compose mounts the ignored Docker settings file read-only at runtime.
@@ -246,8 +322,8 @@ Compose mounts the ignored Docker settings file read-only at runtime.
 Copy the JSON setup templates from the repository root:
 
 ```sh
-cp SmartLost.AuthService.Api/appsettings.example.json SmartLost.AuthService.Api/appsettings.json
-cp SmartLost.AuthService.Api/appsettings.Docker.example.json SmartLost.AuthService.Api/appsettings.Docker.json
+cp src/Services/Auth/SmartLost.AuthService.Api/appsettings.example.json src/Services/Auth/SmartLost.AuthService.Api/appsettings.json
+cp src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.example.json src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.json
 ```
 
 The first file is for local API/EF commands (`Host=localhost`); the second is for Compose
@@ -294,16 +370,35 @@ docker compose down -v
 named database volume. The API URL is `http://localhost:8080` with Docker Compose;
 PostgreSQL is exposed on `localhost:5432`.
 Local `dotnet run` still uses the launch profile ports in
-[`SmartLost.AuthService.Api/Properties/launchSettings.json`](SmartLost.AuthService.Api/Properties/launchSettings.json).
+[`src/Services/Auth/SmartLost.AuthService.Api/Properties/launchSettings.json`](src/Services/Auth/SmartLost.AuthService.Api/Properties/launchSettings.json).
+
+For the optional worker, copy the adjacent `outboxsettings*.example.json` templates and
+configure real receiver routes and a service key as described in the
+[Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md). Local files are
+ignored by Git and excluded from image/publish output. After applying Auth migrations:
+
+```sh
+docker compose --profile workers config --quiet
+docker compose --profile workers run --build --rm auth-outbox-worker
+```
+
+This performs a bounded run and exits. Repeat it or schedule it externally; an Azure
+schedule has not been deployed. Stop/remove optional-profile containers with
+`docker compose --profile workers stop` / `docker compose --profile workers down`.
+Volume removal remains destructive.
+
 
 ## Database and migrations
 
 `SmartLost.AuthService.Api` owns the `authservice` PostgreSQL database. The service uses EF Core with a
-dedicated connection string named `AuthDatabase`. Its [Infrastructure migrations](SmartLost.AuthService.Infrastructure/Persistence/Migrations/)
+dedicated connection string named `AuthDatabase`. Its [Infrastructure migrations](src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Migrations/)
 contain `InitialCreate`, which creates `Users` and the unique normalized-identity indexes,
-and `AddRefreshTokens`, which creates per-login sessions and hashed refresh-token history.
-The `Users` mapping lives in [UserAccountConfiguration](SmartLost.AuthService.Infrastructure/Persistence/Configurations/UserAccountConfiguration.cs);
-`AuthDbContext` automatically applies entity configurations from its Infrastructure assembly.
+`AddRefreshTokens`, which creates per-login sessions and hashed refresh-token history,
+and `AddAuthOutbox`, which adds `OutboxMessages` and the user identity-version column.
+Apply the latest migration before starting either updated Auth process.
+The `Users` mapping lives in [UserAccountConfiguration](src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Configurations/UserAccountConfiguration.cs);
+`AuthDbContext` applies service entity configurations and the shared Outbox mapping.
+The API and worker share only this Auth-owned database; they are two processes of the same service.
 Migrations are applied explicitly through `dotnet ef database update` before starting the
 API, including with Compose. API startup does not create or migrate the schema in any environment.
 Each future service must own its context, migrations and database; there are no cross-service
@@ -313,8 +408,8 @@ Restore the repository's pinned EF Core 10.0.12 tool and inspect migrations with
 
 ```sh
 dotnet tool restore
-dotnet ef migrations list --no-connect --project SmartLost.AuthService.Infrastructure --startup-project SmartLost.AuthService.Infrastructure --context AuthDbContext
-dotnet ef migrations has-pending-model-changes --project SmartLost.AuthService.Infrastructure --startup-project SmartLost.AuthService.Infrastructure --context AuthDbContext
+dotnet ef migrations list --no-connect --project src/Services/Auth/SmartLost.AuthService.Infrastructure --startup-project src/Services/Auth/SmartLost.AuthService.Infrastructure --context AuthDbContext
+dotnet ef migrations has-pending-model-changes --project src/Services/Auth/SmartLost.AuthService.Infrastructure --startup-project src/Services/Auth/SmartLost.AuthService.Infrastructure --context AuthDbContext
 ```
 
 The [AuthService database guide](docs/AUTHSERVICE.md#database-and-migrations) contains
@@ -365,7 +460,7 @@ sanitized 500 problem and are logged server-side.
 | --- | --- |
 | SDK / target | SDK **10.0.401** pinned exactly in `global.json` and the Docker build image; `SmartLost.AuthService.Api` targets `net10.0`; the runtime image uses `aspnet:10.0` |
 | Style / analysis | `.editorconfig`, .NET 10 recommended analyzers, nullable references, warnings as errors |
-| Dependencies | Locked restore and direct/transitive NuGet auditing; lock files required with projects; local `dotnet-ef` 10.0.12 pinned in `.config/dotnet-tools.json` |
+| Dependencies | Locked restore and direct/transitive NuGet auditing; lock files required with projects; local `dotnet-ef` 10.0.12 and `NMF-Ecore2Code` 2.0.467 pinned in `.config/dotnet-tools.json`; Listings Modeling references `NMF-Basics` 2.0.467 |
 | Tests / coverage | All tests must pass; unit tests check migration/model drift and PostgreSQL SQL generation without a database; **Coverlet** collects unit line coverage; inline workflow gates require **strictly above 80%** overall and on changed executable code; interface-only contracts without executable code are exempt from the changed-file coverage requirement regardless of their location |
 | Security | Configured Gitleaks history/file scans; Trivy dependency, infrastructure and image scans; checksum-pinned tools |
 | Dependency updates | [Weekly Dependabot configuration](.github/dependabot.yml) for Actions, NuGet and Docker |
@@ -394,20 +489,25 @@ AuthService integration tests require a running Docker engine. Testcontainers st
 PostgreSQL 16, applies EF migrations only there, resets data between tests and removes the
 container afterward. The suite runs the API in `Testing`, using Npgsql and test-only settings;
 it does not use the development database or EF's in-memory provider. See the
-[integration test guide](tests/SmartLost.AuthService.IntegrationTests/README.md).
+[integration test guide](tests/Auth/SmartLost.AuthService.IntegrationTests/README.md).
 Reusable request/seeding helpers use scoped EF contexts; connection-isolation tests verify
 independent connections while another scope has an active reader.
 
 The current test commands are:
 
 ```sh
-dotnet test tests/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
-dotnet test tests/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.BuildingBlocks.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
-dotnet test tests/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
+dotnet test tests/Auth/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.BuildingBlocks.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/Auth/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
 ```
 
 Coverlet configuration and the inline coverage/test gates are documented in the
 [CI guide](.github/README.md#local-net-commands).
+Empty scaffold projects participate in inventory, locked restore, build and formatting.
+The coverage assembly check requires reports once a project has C# compile items; the
+strictly-above-80% overall and changed-code gates remain in place.
+The Listings NMF model now has generated executable code and no test coverage; its
+assembly/changed-code coverage gates remain pending until tests are implemented.
 Collection settings live in [coverage.runsettings](coverage.runsettings).
 After adding projects, apply formatting locally with `dotnet format Aset.slnx`.
 
@@ -442,7 +542,9 @@ AuthService centralizes username/email lookup normalization in its Domain using
 Display values retain their casing; normalized columns have unique database indexes.
 See [identity conventions](docs/AUTHSERVICE.md#user-identity-normalization).
 
-Microservice and library projects have root-level project folders; tests live under `tests/`. All appear in `Aset.slnx`, have unique names and commit their
+Microservice projects live under `src/Services/<Service>/`, shared libraries under
+`src/BuildingBlocks/`, and tests under `tests/<Service>/` or `tests/BuildingBlocks/`.
+All appear in `Aset.slnx`, have unique names and commit their
 package locks. Production code requires both unit and integration test projects.
 Standalone AI applications live under `AIModels/` and appear only in `AIModels.slnx`, with
 their own configuration and package locks. CI excludes this folder from project inventory and

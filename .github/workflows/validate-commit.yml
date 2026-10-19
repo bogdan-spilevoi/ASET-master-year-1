@@ -73,9 +73,11 @@ jobs:
               throw "Missing packages.lock.json for $project. Run dotnet restore locally."
             }
           }
-          $production = @($projects | Where-Object { $_ -clike 'SmartLost.*/*.csproj' })
-          $unit = @($projects | Where-Object { $_ -clike 'tests/*.UnitTests.csproj' })
-          $integration = @($projects | Where-Object { $_ -clike 'tests/*.IntegrationTests.csproj' })
+          $production = @($projects | Where-Object {
+            $_ -cmatch '^src/(Services/[^/]+|BuildingBlocks)/SmartLost\.[^/]+/[^/]+\.csproj$'
+          })
+          $unit = @($projects | Where-Object { $_ -cmatch '^tests/[^/]+/[^/]+/[^/]+\.UnitTests\.csproj$' })
+          $integration = @($projects | Where-Object { $_ -cmatch '^tests/[^/]+/[^/]+/[^/]+\.IntegrationTests\.csproj$' })
           foreach ($project in $projects) {
             if ($project -cnotin ($production + $unit + $integration)) {
               throw "Invalid project location or test-project suffix: $project"
@@ -85,8 +87,10 @@ jobs:
             throw 'Application code requires both unit-test and integration-test projects.'
           }
           if ($production.Count -eq 0) {
-            $productionSource = @(Get-ChildItem -Directory -Filter 'SmartLost.*' |
-              Get-ChildItem -Recurse -Filter *.cs -File)
+            $productionSource = @(if (Test-Path src) {
+              Get-ChildItem src -Recurse -Filter *.cs -File |
+                Where-Object { $_.FullName -notmatch '[/\\](bin|obj)[/\\]' }
+            })
             if ($productionSource.Count -gt 0) { throw 'Source files exist without a production project.' }
           }
           "has-projects=$($projects.Count -gt 0)".ToLowerInvariant() >> $env:GITHUB_OUTPUT
@@ -151,7 +155,7 @@ jobs:
                     $path.StartsWith("$_/", [StringComparison]::Ordinal)
                   }).Count -gt 0) { $relative = $path; break }
                 }
-                if (!$relative) { throw "Cannot map production coverage file to a root project folder: $filename" }
+                if (!$relative) { throw "Cannot map production coverage file to a source project folder: $filename" }
                 foreach ($line in $class.SelectNodes('./lines/line')) {
                   $key = "$relative`:$($line.GetAttribute('number'))"
                   $hits[$key] = ($hits.ContainsKey($key) -and $hits[$key]) -or [int]$line.GetAttribute('hits') -gt 0
@@ -160,7 +164,12 @@ jobs:
             }
           }
           foreach ($project in (ConvertFrom-Json $env:PRODUCTION_PROJECTS)) {
-            $assembly = (dotnet msbuild $project -getProperty:AssemblyName).Trim()
+            $metadata = dotnet msbuild $project -getProperty:AssemblyName -getItem:Compile | ConvertFrom-Json
+            $assembly = $metadata.Properties.AssemblyName
+            if (@($metadata.Items.Compile).Count -eq 0) {
+              Write-Host "$assembly has no C# compile items (empty scaffold); no executable coverage to collect."
+              continue
+            }
             if (!$modules.Contains($assembly)) { throw "Production assembly missing from coverage: $assembly" }
           }
           if ($hits.Count -eq 0) { throw 'Production code exists but coverage contains no executable lines.' }
@@ -198,7 +207,7 @@ jobs:
           foreach ($key in $hits.Keys) { [void] $coveredFiles.Add($key.Substring(0, $key.LastIndexOf(':'))) }
           $files = ((git diff --name-only -z --diff-filter=ACMR $env:COVERAGE_BASE HEAD -- .) -join "`n").Split([char]0)
           foreach ($file in $files | Where-Object {
-            $_.EndsWith('.cs', [StringComparison]::Ordinal) -and $_ -like 'SmartLost.*/*.cs'
+            $_.EndsWith('.cs', [StringComparison]::Ordinal) -and $_.StartsWith('src/', [StringComparison]::Ordinal)
           }) {
             if (!$coveredFiles.Contains($file) -and (Test-InterfaceContract $file)) {
               "Interface contract (no executable lines): $file"
@@ -318,9 +327,11 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
-          $dockerfiles = @(Get-ChildItem -Directory -Filter 'SmartLost.*' |
-            ForEach-Object { Get-ChildItem $_.FullName -Recurse -Filter Dockerfile -File } |
-            Sort-Object FullName)
+          $dockerfiles = @(if (Test-Path src/Services) {
+            Get-ChildItem src/Services -Recurse -Filter Dockerfile -File |
+              Where-Object { $_.FullName -notmatch '[/\\](bin|obj)[/\\]' } |
+              Sort-Object FullName
+          })
           if ($dockerfiles.Count -eq 0) {
             'No Dockerfiles yet; container creation is not applicable.'
             exit 0

@@ -188,8 +188,9 @@ instanță PostgreSQL poate găzdui două baze cu utilizatori și permisiuni sep
 Contractele interne trebuie să permită sincronizarea la publicare, modificare și
 închidere, cu operații idempotente și reîncercări persistente. Dacă Matching este
 indisponibil, anunțul poate rămâne publicat, iar sugestiile sunt marcate ca în curs
-de procesare. Mecanismul concret de sincronizare rămâne de implementat; nu există
-în prezent broker de mesaje sau outbox.
+de procesare. Sincronizarea Listings–Matching rămâne de implementat. Auth are acum o tabelă Outbox
+și un worker HTTP pentru evenimente de profil; nu există încă destinatari implementați
+sau broker de mesaje.
 
 La confirmarea recuperării, Listings închide anunțul autorului. Un anunț al altui
 utilizator nu este închis automat fără o regulă explicită de autorizare. Listings

@@ -13,6 +13,7 @@ AIModels
 **/.env.*
 **/secrets.json
 **/appsettings*.json
+**/outboxsettings*.json
 **/*.pfx
 **/*.p12
 **/*.pem

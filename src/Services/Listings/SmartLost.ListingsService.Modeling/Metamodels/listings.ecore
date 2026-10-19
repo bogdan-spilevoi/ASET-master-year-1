@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ecore:EPackage xmlns:xmi="http://www.omg.org/XMI"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+                xmi:version="2.0"
+                name="Listings"
+                nsURI="https://smartlost.example/models/listings/v1"
+                nsPrefix="listings">
+  <!-- Model representation for the laboratory; runtime domain integration is separate. -->
+  <eClassifiers xsi:type="ecore:EDataType" name="Guid" instanceClassName="System.Guid" />
+  <eClassifiers xsi:type="ecore:EEnum" name="ListingType">
+    <eLiterals name="Lost" value="0" />
+    <eLiterals name="Found" value="1" />
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EEnum" name="ListingState">
+    <eLiterals name="Draft" value="0" />
+    <eLiterals name="Open" value="1" />
+    <eLiterals name="Closed" value="2" />
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EEnum" name="ClosureReason">
+    <eLiterals name="Recovered" value="0" />
+    <eLiterals name="Withdrawn" value="1" />
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Listing">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="id" lowerBound="1" eType="#//Guid" iD="true" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="authorId" lowerBound="1" eType="#//Guid" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="type" lowerBound="1" eType="#//ListingType" defaultValueLiteral="Lost" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="title" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="description" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="location" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <!-- EDate maps to DateTime; OccurredOn is interpreted as a calendar date. -->
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="occurredOn" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDate" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="colour" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="traits" upperBound="-1" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="state" lowerBound="1" eType="#//ListingState" defaultValueLiteral="Draft" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="closureReason" eType="#//ClosureReason" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="revision" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" defaultValueLiteral="1" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="publishedAt" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDate" />
+    <eStructuralFeatures xsi:type="ecore:EReference" name="photo" containment="true" eType="#//Photo" eOpposite="#//Photo/listing" />
+    <!-- Drafts may have no confirmed categories; publication validation is a business rule. -->
+    <eStructuralFeatures xsi:type="ecore:EReference" name="categories" upperBound="-1" ordered="false" containment="true" eType="#//ListingCategory" eOpposite="#//ListingCategory/listing" />
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Photo">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="id" lowerBound="1" eType="#//Guid" iD="true" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="blobKey" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="format" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="byteSize" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//ELong" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="revision" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" defaultValueLiteral="1" />
+    <eStructuralFeatures xsi:type="ecore:EReference" name="listing" lowerBound="1" eType="#//Listing" eOpposite="#//Listing/photo" />
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Category">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="id" lowerBound="1" eType="#//Guid" iD="true" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="normalizedName" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="ListingCategory">
+    <!-- Association identity is (Listing.Id, Category.Id), without a separate ID. -->
+    <eStructuralFeatures xsi:type="ecore:EReference" name="listing" lowerBound="1" eType="#//Listing" eOpposite="#//Listing/categories" />
+    <eStructuralFeatures xsi:type="ecore:EReference" name="category" lowerBound="1" eType="#//Category" />
+  </eClassifiers>
+</ecore:EPackage>

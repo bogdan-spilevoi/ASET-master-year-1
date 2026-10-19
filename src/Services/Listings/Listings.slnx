@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/Listings/">
+    <Project Path="SmartLost.ListingsService.Api/SmartLost.ListingsService.Api.csproj" />
+    <Project Path="SmartLost.ListingsService.Application/SmartLost.ListingsService.Application.csproj" />
+    <Project Path="SmartLost.ListingsService.Domain/SmartLost.ListingsService.Domain.csproj" />
+    <Project Path="SmartLost.ListingsService.Infrastructure/SmartLost.ListingsService.Infrastructure.csproj" />
+    <Project Path="SmartLost.ListingsService.Modeling/SmartLost.ListingsService.Modeling.csproj" />
+  </Folder>
+  <Folder Name="/BuildingBlocks/">
+    <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Core/SmartLost.BuildingBlocks.Core.csproj" />
+    <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
+    <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
+    <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/SmartLost.BuildingBlocks.Infrastructure.csproj" />
+  </Folder>
+</Solution>

@@ -40,7 +40,7 @@ assess until those files exist.
 
 TRX and Coverlet Cobertura reports are retained as `tests-<commit>-<OS>` for 14 days. If Dockerfiles
 exist, scanned image archives, CycloneDX SBOMs and a manifest mapping the commit to Dockerfiles
-are retained as `containers-<commit>` for 7 days. Packaging builds every `SmartLost.*/Dockerfile` with
+are retained as `containers-<commit>` for 7 days. Packaging builds every Dockerfile under `src/Services/` with
 the repository root as build context. It does not push images to a registry or deploy them.
 The final aggregate gate is unchanged by individual job or matrix names.
 
@@ -57,12 +57,15 @@ those reports to enforce **strictly above 80%** overall and on changed executabl
 merges line hits across suites without averaging percentages or double-counting lines. No
 external coverage service or access token is required.
 
-Every production assembly must appear in the reports, and every changed source file containing
+Every production assembly with C# compile items must appear in the reports, and every changed source file containing
 added lines must appear in coverage, except interface-only contracts with no executable code.
 The changed-line gate recognizes these with the C# parser bundled with PowerShell,
 regardless of folder or filename. Mixed files and interfaces
 with executable bodies or initializers still require coverage. Coverlet already omits plain
-interface declarations from executable line counts. Missing reports, absent assemblies, or empty executable coverage fail.
+interface declarations from executable line counts. The assembly check evaluates MSBuild's
+`Compile` items; genuinely empty scaffold projects have no executable coverage to collect.
+As soon as a scaffold has a C# compile item, the assembly requirement applies automatically.
+Missing reports, absent source-bearing assemblies, or empty executable coverage fail.
 Only instrumented executable C# lines count; comments and blank lines do not. Test assemblies
 and generated `bin`/`obj` files are excluded.
 
@@ -92,9 +95,9 @@ Use `dotnet format Aset.slnx` to apply formatting. The following commands run th
 projects with the exact CI flags:
 
 ```sh
-dotnet test tests/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
-dotnet test tests/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.BuildingBlocks.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
-dotnet test tests/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
+dotnet test tests/Auth/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.BuildingBlocks.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/Auth/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
 ```
 
 CI uses the same Coverlet settings from the event checkout (`../policy/coverage.runsettings`)
@@ -106,14 +109,27 @@ AuthService unit tests also check that the PostgreSQL model matches its migratio
 and validate generated migration SQL without a live database. A model change without a
 corresponding migration fails the existing unit-test job. The local EF tooling and database
 commands are documented in the [AuthService guide](../docs/AUTHSERVICE.md#database-and-migrations);
-CI does not apply migrations to an application database.
+CI does not apply migrations to an application database. The Auth Outbox migration and
+finite worker are included in the root solution; the existing Dockerfile discovery also
+builds/scans the worker image. Unit tests cover transport contracts with a fake HTTP handler
+and worker execution; PostgreSQL integration tests cover Outbox rollback and concurrent
+claims. Coverage gates have not been relaxed.
 
 ## Adding the first service
 
-1. Put each production project in a root-level `<ProjectName>/` folder and test projects under
-   `tests/<Service>.UnitTests/` and `tests/<Service>.IntegrationTests/`.
+1. Put each service project under `src/Services/<Service>/<ProjectName>/`, shared
+   libraries under `src/BuildingBlocks/<ProjectName>/`, and test projects under
+   `tests/<Service>/<ProjectName>.UnitTests/` and `tests/<Service>/<ProjectName>.IntegrationTests/`.
+   Shared-library tests belong under `tests/BuildingBlocks/<ProjectName>.UnitTests/`.
 2. Add every microservice/library/test project to `Aset.slnx` with `dotnet sln Aset.slnx add <project.csproj>`.
    Project names must be unique, and all projects must target `net10.0`.
+   Create a focused `src/Services/<Service>/<Service>.slnx` listing that service's
+   projects, required shared libraries and tests under `tests/<Service>/`. Follow
+   [Auth.slnx](../src/Services/Auth/Auth.slnx) for grouping and relative paths.
+   [BuildingBlocks.slnx](../src/BuildingBlocks/BuildingBlocks.slnx) lists only the
+   shared libraries and their own tests. Each solution references `.csproj` files
+   directly; the root solution does not nest the focused solutions. CI continues
+   to validate all projects through `Aset.slnx` and checks its complete inventory.
 3. Reference each service from its tests. Use VSTest-compatible projects with
    `Microsoft.NET.Test.Sdk` and a test framework/adapter such as xUnit. Unit projects must
    reference `coverlet.collector` with `PrivateAssets="all"`; missing collection fails CI.
@@ -124,7 +140,8 @@ CI does not apply migrations to an application database.
 6. Add a service Dockerfile when ready: multi-stage .NET 10 build, digest-pinned base images,
    non-root runtime user, no credentials, and repository-root build context.
 7. Add the module README and update the root README with verified responsibilities, ownership,
-   API/configuration and commands in the same change. Shared production libraries also use root-level project folders.
+   API/configuration and commands in the same change. Match solution folders to the
+   physical service/library/test grouping so Rider and file explorers stay consistent.
 
 ## Maintenance and deployment
 
