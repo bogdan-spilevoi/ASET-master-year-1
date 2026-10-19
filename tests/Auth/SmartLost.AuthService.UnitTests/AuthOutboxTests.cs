@@ -72,7 +72,7 @@ public sealed class AuthOutboxTests
     {
         AuthOutboxDeliveryOptions settings = ValidSettings();
         Assert.True(settings.IsValid());
-        settings.ServiceKey = "replace-with-a-secret-of-at-least-32-characters";
+        settings.ServiceKey = "replace-" + new string('k', 32);
         Assert.False(settings.IsValid());
         settings.ServiceKey = new string('k', 32);
         foreach (string address in new[] { "https://consumer.invalid/", "http://remote.example.com/", "https://user:password@example.com/", "https://example.com/#fragment", "invalid" })

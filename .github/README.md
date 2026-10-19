@@ -50,6 +50,10 @@ Validation job labels show a short commit ID and commit title instead of the ful
 The selected revision is checked using its full ID. Intermediate commits are not separately
 built or tested; later commits can fix earlier mistakes without rewriting branch history.
 Gitleaks still scans reachable commit history for secrets, including removed secrets.
+Both Gitleaks scans print redacted finding details. The root [`.gitleaksignore`](../.gitleaksignore)
+records one reviewed historical false positive: the `replace-*` placeholder in the Auth outbox
+rejection test. Its exact commit/file/rule/line fingerprint is excluded; new findings still fail.
+Changing the current file alone cannot clear a finding retained in Git history.
 
 [Coverlet collector settings](../coverage.runsettings) produce Cobertura reports during unit
 execution through VSTest. Coverage collection uses Coverlet, and the inline workflow step reads

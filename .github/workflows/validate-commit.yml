@@ -336,9 +336,9 @@ jobs:
       - name: Validate workflow syntax
         run: actionlint -shellcheck=""
       - name: Scan commit history for secrets (including removed secrets)
-        run: gitleaks git . --log-opts=HEAD --redact --no-banner --config ../policy/.gitleaks.toml
+        run: gitleaks git . --log-opts=HEAD --redact --verbose --no-banner --config ../policy/.gitleaks.toml
       - name: Scan current files for secrets
-        run: gitleaks dir . --redact --no-banner --config ../policy/.gitleaks.toml
+        run: gitleaks dir . --redact --verbose --no-banner --config ../policy/.gitleaks.toml
       - name: Scan dependency locks, Dockerfiles and Kubernetes configuration
         run: >-
           trivy fs --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 1
