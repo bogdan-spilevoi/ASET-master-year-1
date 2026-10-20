@@ -10,7 +10,7 @@ and the hosted runners' native shells. Start with the [repository README](../REA
 
 | Workflow/job | Responsibility |
 | --- | --- |
-| [`ci.yml`](workflows/ci.yml): `revisions` | Select the current revision and changed-code baseline |
+| [`ci.yml`](workflows/ci.yml): `revisions` | Select the current revision and changed-code baseline; enforce service communication documentation review |
 | [`ci.yml`](workflows/ci.yml): `validate` | Call the reusable workflow once for the selected revision |
 | [`ci.yml`](workflows/ci.yml): `required` | Expose the stable `CI / Required` merge gate |
 | [`validate-commit.yml`](workflows/validate-commit.yml): `build-test` | Microservice solution inventory, locked restore, build, formatting/analyzers, Coverlet/unit tests, integration tests, passing-test checks |
@@ -22,6 +22,18 @@ or manually selected revision. Feature branches without a PR do not run CI on pu
 New updates cancel superseded runs for the same PR; main, merge-group and manual runs are
 retained. No path filters skip checks. `CI / Required` fails if target selection or validation
 fails or is skipped; it is skipped when the whole run is cancelled so cancellation can finish.
+
+The target-selection job also checks that each service has a Mermaid
+`src/Services/<Service>/COMMUNICATION.md`. Changes to non-Markdown files under a
+service or its `tests/<Service>/` directory require changing that document in the
+same candidate. Shared `src/BuildingBlocks/` non-Markdown changes or root
+`docker-compose*.yml`/`.yaml` changes require reviewing all service documents.
+Pure documentation changes do not trigger this review requirement. Entirely removed
+services do not need a remaining diagram. Renames are treated as deletion plus addition.
+If communication is unchanged, add a specific explanation to the document's review
+notes. The check validates presence and a document diff, not the diagram's meaning;
+reviewers must verify accuracy. It uses the same candidate/baseline as coverage on
+PR, main-push, merge-group and manual runs and never writes documentation.
 
 Each revision builds and runs unit tests on Linux, Windows and macOS; integration tests run on
 Linux with Docker available. Tests must provision isolated dependencies and clean them up.
@@ -40,7 +52,7 @@ assess until those files exist.
 
 TRX and Coverlet Cobertura reports are retained as `tests-<commit>-<OS>` for 14 days. If Dockerfiles
 exist, scanned image archives, CycloneDX SBOMs and a manifest mapping the commit to Dockerfiles
-are retained as `containers-<commit>` for 7 days. Packaging builds every `SmartLost.*/Dockerfile` with
+are retained as `containers-<commit>` for 7 days. Packaging builds every Dockerfile under `src/Services/` with
 the repository root as build context. It does not push images to a registry or deploy them.
 The final aggregate gate is unchanged by individual job or matrix names.
 
@@ -50,6 +62,10 @@ Validation job labels show a short commit ID and commit title instead of the ful
 The selected revision is checked using its full ID. Intermediate commits are not separately
 built or tested; later commits can fix earlier mistakes without rewriting branch history.
 Gitleaks still scans reachable commit history for secrets, including removed secrets.
+Both Gitleaks scans print redacted finding details. The root [`.gitleaksignore`](../.gitleaksignore)
+records one reviewed historical false positive: the `replace-*` placeholder in the Auth outbox
+rejection test. Its exact commit/file/rule/line fingerprint is excluded; new findings still fail.
+Changing the current file alone cannot clear a finding retained in Git history.
 
 [Coverlet collector settings](../coverage.runsettings) produce Cobertura reports during unit
 execution through VSTest. Coverage collection uses Coverlet, and the inline workflow step reads
@@ -57,12 +73,21 @@ those reports to enforce **strictly above 80%** overall and on changed executabl
 merges line hits across suites without averaging percentages or double-counting lines. No
 external coverage service or access token is required.
 
-Every production assembly must appear in the reports, and every changed source file containing
-added lines must appear in coverage, except interface-only contracts with no executable code.
+Coverage paths are resolved against the checkout and Cobertura source roots. Both report paths
+and production project directories use `/` separators before comparison, including on Windows.
+
+Every production assembly with C# compile items must appear in the reports, and every changed source file containing
+added lines must appear in coverage, except declaration-only contracts with no executable code:
+pure interfaces, enums and static classes containing only const fields.
 The changed-line gate recognizes these with the C# parser bundled with PowerShell,
-regardless of folder or filename. Mixed files and interfaces
-with executable bodies or initializers still require coverage. Coverlet already omits plain
-interface declarations from executable line counts. Missing reports, absent assemblies, or empty executable coverage fail.
+regardless of folder or filename. Enum values and const fields are compile-time constants;
+mixed implementation files and interfaces with executable bodies or initializers still
+require coverage. Static readonly fields and static constructors still require coverage.
+Coverlet omits these declaration-only files from executable
+line counts. The assembly check evaluates MSBuild's
+`Compile` items; genuinely empty scaffold projects have no executable coverage to collect.
+As soon as a scaffold has a C# compile item, the assembly requirement applies automatically.
+Missing reports, absent source-bearing assemblies, or empty executable coverage fail.
 Only instrumented executable C# lines count; comments and blank lines do not. Test assemblies
 and generated `bin`/`obj` files are excluded.
 
@@ -92,9 +117,10 @@ Use `dotnet format Aset.slnx` to apply formatting. The following commands run th
 projects with the exact CI flags:
 
 ```sh
-dotnet test tests/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
-dotnet test tests/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.BuildingBlocks.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
-dotnet test tests/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
+dotnet test tests/Auth/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.BuildingBlocks.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.ListingsService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/Auth/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
 ```
 
 CI uses the same Coverlet settings from the event checkout (`../policy/coverage.runsettings`)
@@ -106,14 +132,32 @@ AuthService unit tests also check that the PostgreSQL model matches its migratio
 and validate generated migration SQL without a live database. A model change without a
 corresponding migration fails the existing unit-test job. The local EF tooling and database
 commands are documented in the [AuthService guide](../docs/AUTHSERVICE.md#database-and-migrations);
-CI does not apply migrations to an application database.
+CI does not apply migrations to an application database. The Auth Outbox migration and
+finite worker are included in the root solution; the existing Dockerfile discovery also
+builds/scans the worker image. Unit tests cover transport contracts with a fake HTTP handler
+and worker execution; PostgreSQL integration tests cover Outbox rollback and concurrent
+claims. Coverage gates have not been relaxed.
+
+The [Listings model suite](../tests/Listings/SmartLost.ListingsService.UnitTests/README.md)
+loads the NMF Modeling assembly for Coverlet and checks XMI round trips, metadata,
+containment, identity and observable generated model behavior. It runs on all unit-test
+matrix platforms through the existing discovery loop. It does not need Docker.
 
 ## Adding the first service
 
-1. Put each production project in a root-level `<ProjectName>/` folder and test projects under
-   `tests/<Service>.UnitTests/` and `tests/<Service>.IntegrationTests/`.
+1. Put each service project under `src/Services/<Service>/<ProjectName>/`, shared
+   libraries under `src/BuildingBlocks/<ProjectName>/`, and test projects under
+   `tests/<Service>/<ProjectName>.UnitTests/` and `tests/<Service>/<ProjectName>.IntegrationTests/`.
+   Shared-library tests belong under `tests/BuildingBlocks/<ProjectName>.UnitTests/`.
 2. Add every microservice/library/test project to `Aset.slnx` with `dotnet sln Aset.slnx add <project.csproj>`.
    Project names must be unique, and all projects must target `net10.0`.
+   Create a focused `src/Services/<Service>/<Service>.slnx` listing that service's
+   projects, required shared libraries and tests under `tests/<Service>/`. Follow
+   [Auth.slnx](../src/Services/Auth/Auth.slnx) for grouping and relative paths.
+   [BuildingBlocks.slnx](../src/BuildingBlocks/BuildingBlocks.slnx) lists only the
+   shared libraries and their own tests. Each solution references `.csproj` files
+   directly; the root solution does not nest the focused solutions. CI continues
+   to validate all projects through `Aset.slnx` and checks its complete inventory.
 3. Reference each service from its tests. Use VSTest-compatible projects with
    `Microsoft.NET.Test.Sdk` and a test framework/adapter such as xUnit. Unit projects must
    reference `coverlet.collector` with `PrivateAssets="all"`; missing collection fails CI.
@@ -124,7 +168,8 @@ CI does not apply migrations to an application database.
 6. Add a service Dockerfile when ready: multi-stage .NET 10 build, digest-pinned base images,
    non-root runtime user, no credentials, and repository-root build context.
 7. Add the module README and update the root README with verified responsibilities, ownership,
-   API/configuration and commands in the same change. Shared production libraries also use root-level project folders.
+   API/configuration and commands in the same change. Match solution folders to the
+   physical service/library/test grouping so Rider and file explorers stay consistent.
 
 ## Maintenance and deployment
 

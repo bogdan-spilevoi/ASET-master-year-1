@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../../../BuildingBlocks/SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
+    <ProjectReference Include="../SmartLost.ListingsService.Domain/SmartLost.ListingsService.Domain.csproj" />
+  </ItemGroup>
+</Project>

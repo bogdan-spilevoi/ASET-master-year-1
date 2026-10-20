@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xmi:XMI xmi:version="2.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xmi="http://www.omg.org/XMI">
+  <listings:Category id="20000000-0000-0000-0000-000000000001" normalizedName="backpack" xmlns:listings="https://smartlost.example/models/listings/v1" />
+  <listings:Category id="20000000-0000-0000-0000-000000000002" normalizedName="bag" xmlns:listings="https://smartlost.example/models/listings/v1" />
+  <listings:Listing id="10000000-0000-0000-0000-000000000001" authorId="90000000-0000-0000-0000-000000000001" title="Blue backpack lost in the campus library" description="A blue backpack with a black front pocket and a yellow keyring." location="Campus library" occurredOn="2026-10-01T00:00:00" colour="Blue" state="Open" publishedAt="10/01/2026 12:00:00" xmlns:listings="https://smartlost.example/models/listings/v1">
+    <traits>black front pocket</traits>
+    <traits>yellow keyring</traits>
+    <photo id="30000000-0000-0000-0000-000000000001" blobKey="examples/listings/lost-backpack.jpg" format="image/jpeg" byteSize="245760" />
+    <categories category="20000000-0000-0000-0000-000000000001" />
+    <categories category="20000000-0000-0000-0000-000000000002" />
+  </listings:Listing>
+  <listings:Listing id="10000000-0000-0000-0000-000000000002" authorId="90000000-0000-0000-0000-000000000002" type="Found" title="Backpack found near the library entrance" description="A blue backpack handed to the library reception desk." location="Campus library reception" occurredOn="2026-10-02T00:00:00" colour="Blue" state="Open" publishedAt="10/02/2026 10:00:00" xmlns:listings="https://smartlost.example/models/listings/v1">
+    <categories category="20000000-0000-0000-0000-000000000001" />
+    <categories category="20000000-0000-0000-0000-000000000002" />
+  </listings:Listing>
+</xmi:XMI>

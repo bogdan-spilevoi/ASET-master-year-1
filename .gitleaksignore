@@ -1,0 +1,3 @@
+# Reviewed false positive: the replace-* placeholder in the Auth outbox rejection test.
+# This was never a credential. Only this historical finding is excluded; new findings still fail.
+4c7398939624bf42abf03436bfa1374fb3092b2e:tests/Auth/SmartLost.AuthService.UnitTests/AuthOutboxTests.cs:generic-api-key:75

@@ -160,7 +160,9 @@ migration failure stops release; image rollback does not revert a schema.
 
 With min replicas 0, a polling loop cannot wake a stopped application. Use finite
 Listings synchronisation and Matching feature-work jobs on bounded schedules
-with durable retry/backoff. Initial 15-minute schedules recover pending work;
+with durable retry/backoff. Auth now also has a finite Outbox executable and service-owned migration, but its receiver
+and schedule are not deployed. Add a separate Auth delivery job when that consumer exists.
+Initial 15-minute schedules for the planned Listings/Matching jobs recover pending work;
 warm interactive processing can provide faster results. Final cadence and limits
 depend on measurements. Do not repeatedly launch expensive work for an offline PC.
 

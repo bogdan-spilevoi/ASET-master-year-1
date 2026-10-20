@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Buildable scaffold; remove OutputType when adding the API entry point. -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
+    <ProjectReference Include="../SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj" />
+    <ProjectReference Include="../SmartLost.MatchingService.Infrastructure/SmartLost.MatchingService.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

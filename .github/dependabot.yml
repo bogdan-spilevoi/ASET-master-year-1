@@ -8,14 +8,14 @@ updates:
   - package-ecosystem: nuget
     directories:
       - "/"
-      - "/SmartLost.*"
+      - "/src/**"
       - "/tests/**"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
   - package-ecosystem: docker
     directories:
-      - "/SmartLost.*"
+      - "/src/Services/**"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

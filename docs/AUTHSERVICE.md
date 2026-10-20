@@ -1,18 +1,28 @@
 # AuthService
 
-A .NET 10 authentication microservice for the ASET solution. It exposes register and login endpoints, issues JWTs, and stores users in a dedicated PostgreSQL database used only by this service.
+A .NET 10 authentication microservice for the ASET solution. It exposes register/login/refresh endpoints, issues JWTs, and stores users plus a service-owned Outbox in PostgreSQL. A finite worker delivers profile messages to configured receivers.
 
 ## Architecture
 
-The service has four projects:
+The service has five projects under `src/Services/Auth/`. Its unit and integration
+test projects live under `tests/Auth/`. The solution uses the same Auth grouping:
 
 - `SmartLost.AuthService.Api`: HTTP contracts/controllers, authentication setup and composition.
 - `SmartLost.AuthService.Application`: MediatR commands, FluentValidation validators,
   auth responses and repository/password/token abstractions.
-- `SmartLost.AuthService.Domain`: `UserAccount`, `RefreshSession` and `RefreshToken`,
-  derived from the shared `Entity<Guid>`.
+- `SmartLost.AuthService.Domain`: `UserAccount` and `RefreshSession` aggregate roots,
+  the `RefreshToken` history entity, domain guards, domain events and shared Auth error definitions.
 - `SmartLost.AuthService.Infrastructure`: EF Core/Npgsql, password hashing, JWT issuance
-  and persistent refresh-token sessions.
+  persistent refresh-token sessions, atomic Outbox staging and HTTP delivery.
+- [`SmartLost.AuthService.Worker`](../src/Services/Auth/SmartLost.AuthService.Worker/README.md):
+  finite, separately executable Auth Outbox delivery job.
+
+Open [Auth.slnx](../src/Services/Auth/Auth.slnx) for this service, its four shared
+BuildingBlocks dependencies and its unit/integration test projects. These are the
+same projects listed in [Aset.slnx](../Aset.slnx); the focused solution creates no
+new code dependency or copy. Tests remain physically under `tests/Auth/`.
+The root solution also contains the BuildingBlocks test project and remains the
+main CI entry point.
 
 Application depends on Domain; Infrastructure implements Application abstractions; API
 composes both. Each layer references the appropriate [building blocks](BUILDING_BLOCKS.md).
@@ -24,6 +34,99 @@ creation and each refresh rotation with one `SaveChangesAsync` transaction.
 
 The database is not shared with other services.
 
+## Domain aggregates, guards and events
+
+`UserAccount` and `RefreshSession` derive from the shared `AggregateRoot<Guid>`.
+The user aggregate owns identity and password-hash changes. A refresh session has its own
+lifecycle and rotation/concurrency boundary; `RefreshToken` remains an `Entity<Guid>`
+representing a session's token history. Physical user/session/token foreign keys remain
+inside the Auth database and are unchanged.
+
+The models use the shared `Guard` and service-owned
+[`AuthErrors`](../src/Services/Auth/SmartLost.AuthService.Domain/Errors/AuthErrors.cs).
+Guard failures throw `DomainException`, which the existing MediatR behavior converts to
+`Result.Failure`. Public identity constraints are validation errors; invalid internal
+hash/reference/timestamp state is classified as a failure and sanitized by the HTTP adapter.
+Inactive-session rotation uses the existing unauthorized refresh-token error.
+Handlers still return expected duplicate/credential errors directly, now using the same
+error definitions as Infrastructure. Error codes and existing HTTP response contracts are
+preserved.
+
+- Usernames are required and contain 3–100 characters after trimming; email is required
+  and at most 256 characters after trimming. Normalized lookup keys must also fit their
+  mapped lengths. Email format remains an application-validator responsibility.
+- Identity changes validate both values and compute both keys before mutating the model.
+  Reassigning the same trimmed identity does not create another event.
+- Password hashes must be nonblank. Session/token factories require referenced objects
+  with assigned IDs and nonblank token hashes of at most 64 characters. Hash encoding and
+  cryptographic generation remain Infrastructure responsibilities.
+- Creation/expiry/rotation timestamps supplied to the models must be nondefault UTC values.
+  Session construction accepts a past expiry for representing an expired session; rotation
+  requires an active session and a different hash. `Rotate(hash, nowUtc)` accepts the time
+  already read by the refresh flow; omitting it uses the current UTC time.
+- A newly created history entry must match its session's current hash. History entries are
+  created after session creation or rotation, never by changing an old history row.
+
+The [domain events](../src/Services/Auth/SmartLost.AuthService.Domain/Events/) are immutable
+records implementing `IDomainEvent`, each with its own assigned event ID:
+
+| Event | Trigger | Payload beyond event ID/time |
+| --- | --- | --- |
+| `UserAccountCreated` | User factory succeeds | User ID, trimmed username/email and identity version |
+| `UserIdentityChanged` | An existing identity actually changes | User ID, new username/email and identity version |
+| `RefreshSessionCreated` | Session factory succeeds | Session ID, user ID and absolute expiry |
+| `RefreshSessionRotated` | Active session changes its current hash | Session ID and user ID |
+
+Events contain no passwords, password hashes, refresh-token values/hashes or access tokens.
+User identity events contain personal data and are local domain events, not approved public
+integration payloads. `DomainEvents` is explicitly ignored in both EF aggregate mappings;
+the event collection itself is not persisted as an EF relationship.
+
+User-profile events are now staged into Outbox automatically by `AuthDbContext`; see below.
+Session creation/rotation events remain local and are cleared after a successful save.
+Replay/concurrency revocation still uses its existing atomic database update and emits no
+integration event. Profile messages cannot revoke JWTs or refresh sessions at another service.
+
+Invalid-entity assertions expect `DomainException` rather than argument exceptions.
+The standalone normalization utility retains its argument-exception contract. Shared
+primitive tests exercise domain guards/events; Auth tests cover event-to-profile mapping,
+identity versions, session-event filtering and rejected transaction boundaries.
+
+## Auth Outbox
+
+The [service communication diagrams](../src/Services/Auth/COMMUNICATION.md) show
+registration/login, refresh/replay and the separate outbox delivery flow against the
+current implementation. The older member diagrams below cover a different scope.
+
+`AddAuthOutbox` adds `OutboxMessages` and `Users.IdentityVersion` (existing users start at 1).
+Identity changes increment this concurrency token; concurrent profile updates fail instead
+of publishing competing versions. Repository-based profile conflicts map to HTTP 409 with
+`auth.identity_conflict`. Existing users are not automatically backfilled into the queue.
+
+Both sync and async `AuthDbContext.SaveChanges` stage selected events before the EF save.
+User/session/token rows and Outbox rows therefore commit together. The context clears captured
+domain events only after the save commits; failures retain pending events/staged rows, and
+repeated staging in the same context preserves message IDs. Discard a failed operation's
+context before retrying the business operation. Events must not be manually published or
+cleared before that commit.
+
+Auth currently requires EF-owned automatic transactions for event-bearing saves. It rejects
+an ambient/explicit transaction or disabled automatic transactions instead of clearing events
+before the caller's final commit. The optional MediatR transaction behavior remains disabled.
+Future explicit transaction support must move clearing to the final commit boundary.
+
+`AuthOutboxEventMapper` exports only `UserAccountCreated` and `UserIdentityChanged`, using
+stable types `auth.user.created` / `auth.user.identity_changed`, contract version 1 and payload
+`userId`, `userName`, `identityVersion`. The source event ID/time is preserved. Email and
+security/session data are excluded. Receivers must atomically deduplicate IDs and reject
+older/equal identity versions. No consumer endpoint has been implemented.
+
+The [Auth Worker guide](../src/Services/Auth/SmartLost.AuthService.Worker/README.md) documents
+real-route/service-key configuration, finite runs, retry/dead-letter behavior, the receiver
+acknowledgement contract and the opt-in Compose worker. API startup does not contact a
+consumer. Worker startup refuses missing/placeholder routes/keys; messages can remain
+pending until a real receiver is configured. No cloud schedule/deployment is enabled.
+
 See the [Member 3 authentication diagrams](diagrams/member-3/README.md) for a UML
 sign-in/session sequence and a C4 component view. They distinguish the current
 backend from the Angular and sign-out work required for the semester.
@@ -31,11 +134,11 @@ backend from the Angular and sign-out work required for the semester.
 ## Object mapping
 
 The API references `AutoMapper` 16.2.0. `Program.cs` calls `AddApiMapping`, defined in
-[`DependencyInjection`](../SmartLost.AuthService.Api/DependencyInjection.cs), to register profiles
+[`DependencyInjection`](../src/Services/Auth/SmartLost.AuthService.Api/DependencyInjection.cs), to register profiles
 from the API assembly through `AddAutoMapper`, using public constructors for record destinations. The core package
 includes dependency injection support; no separate DI package is needed.
 
-[`AuthMappingProfile`](../SmartLost.AuthService.Api/Mapping/AuthMappingProfile.cs) maps
+[`AuthMappingProfile`](../src/Services/Auth/SmartLost.AuthService.Api/Mapping/AuthMappingProfile.cs) maps
 `RegisterRequest` to `RegisterUserCommand` and `LoginRequest` to `LoginUserCommand`.
 It also maps `RefreshRequest` to `RefreshTokenCommand`.
 Controllers inject `IMapper` and send the mapped commands through the existing MediatR
@@ -54,7 +157,7 @@ are not automatically forwarded to containers. See the official
 
 ## User identity normalization
 
-[`UserIdentityNormalizer`](../SmartLost.AuthService.Domain/Identity/UserIdentityNormalizer.cs)
+[`UserIdentityNormalizer`](../src/Services/Auth/SmartLost.AuthService.Domain/Identity/UserIdentityNormalizer.cs)
 defines the service's lookup policy: reject blank values, trim surrounding whitespace and
 apply `ToUpperInvariant()`. Both login and entity creation use this one policy. Login uses
 email only. Normalized usernames and emails remain unique under that policy; stored display
@@ -77,12 +180,22 @@ The initial migration includes both normalized columns and their unique indexes.
 
 ## Local development and containers
 
+Restore and build only the Auth solution from the repository root:
+
+```sh
+dotnet restore src/Services/Auth/Auth.slnx --locked-mode
+dotnet build src/Services/Auth/Auth.slnx --no-restore --configuration Release --warnaserror
+```
+
+Building the solution compiles its test projects without executing them. Test
+commands are documented in [Quality and CI](#quality-and-ci).
+
 ### Docker files
 
 - [`docker-compose.yml`](../docker-compose.yml) starts the auth API and its PostgreSQL database.
-- [`SmartLost.AuthService.Api/Dockerfile`](../SmartLost.AuthService.Api/Dockerfile) builds the API image.
-- [`appsettings.example.json`](../SmartLost.AuthService.Api/appsettings.example.json) is the local API/EF configuration template.
-- [`appsettings.Docker.example.json`](../SmartLost.AuthService.Api/appsettings.Docker.example.json) is the container configuration template.
+- [`src/Services/Auth/SmartLost.AuthService.Api/Dockerfile`](../src/Services/Auth/SmartLost.AuthService.Api/Dockerfile) builds the API image.
+- [`appsettings.example.json`](../src/Services/Auth/SmartLost.AuthService.Api/appsettings.example.json) is the local API/EF configuration template.
+- [`appsettings.Docker.example.json`](../src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.example.json) is the container configuration template.
 
 The Docker build image is `mcr.microsoft.com/dotnet/sdk:10.0.401`, matching the exact SDK
 required by `global.json`. Update both together when changing the SDK; the floating `sdk:10.0`
@@ -92,14 +205,14 @@ The Dockerfile uses the repository root as its build context so the API's Applic
 Domain and Infrastructure references, shared build configuration and package locks are
 available during restore. It uses locked restore and starts `SmartLost.AuthService.Api.dll`.
 Local settings are excluded from the Docker build context. Compose mounts
-`SmartLost.AuthService.Api/appsettings.Docker.json` at `/app/appsettings.json` read-only;
+`src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.json` at `/app/appsettings.json` read-only;
 a missing file fails container creation instead of creating an empty directory.
 
 ### Start the stack
 
 ```sh
-cp SmartLost.AuthService.Api/appsettings.example.json SmartLost.AuthService.Api/appsettings.json
-cp SmartLost.AuthService.Api/appsettings.Docker.example.json SmartLost.AuthService.Api/appsettings.Docker.json
+cp src/Services/Auth/SmartLost.AuthService.Api/appsettings.example.json src/Services/Auth/SmartLost.AuthService.Api/appsettings.json
+cp src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.example.json src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.json
 # replace the JWT signing-key placeholder in the ignored local settings files
 docker compose config --quiet
 docker compose up -d --wait auth-db
@@ -167,7 +280,7 @@ must be positive. Validation messages do not include secret values.
 For a local API process after applying migrations:
 
 ```sh
-dotnet run --project SmartLost.AuthService.Api --launch-profile http
+dotnet run --project src/Services/Auth/SmartLost.AuthService.Api --launch-profile http
 ```
 
 Share completed local settings privately with teammates and commit only the templates.
@@ -178,8 +291,8 @@ needed; they take priority over JSON settings.
 
 `SmartLost.AuthService.Api` owns the `authservice` PostgreSQL database by default.
 `ConnectionStrings:AuthDatabase` in the local settings file configures its connection.
-[`Persistence/Migrations`](../SmartLost.AuthService.Infrastructure/Persistence/Migrations/) contains
-`InitialCreate`, `AddRefreshTokens` and the model snapshot. The initial migration creates `Users`, its primary key and
+[`Persistence/Migrations`](../src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Migrations/) contains
+`InitialCreate`, `AddRefreshTokens`, `AddAuthOutbox` and the model snapshot. The initial migration creates `Users`, its primary key and
 unique indexes on `NormalizedUserName` and `NormalizedEmail`. EF tracks applied migrations
 in `__EFMigrationsHistory`.
 
@@ -188,7 +301,11 @@ expiry and revocation timestamp) and `RefreshTokens` (unique token hash and sess
 Old hashes are retained to detect reuse. Foreign keys cascade from Users to sessions to token
 history; these references are entirely within AuthService's database.
 
-[`UserAccountConfiguration`](../SmartLost.AuthService.Infrastructure/Persistence/Configurations/UserAccountConfiguration.cs)
+`AddAuthOutbox` adds the profile-version concurrency column and the `OutboxMessages` table,
+including payload, retry/dead-letter and lease state. Apply it before running the updated
+API or worker; it is not applied by this code change. The worker accesses only Auth's database.
+
+[`UserAccountConfiguration`](../src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Configurations/UserAccountConfiguration.cs)
 implements `IEntityTypeConfiguration<UserAccount>` and defines the `Users` table, primary key,
 required properties, length limits and unique normalized-identity indexes. `AuthDbContext`
 loads entity configurations automatically from its Infrastructure assembly; add each future
@@ -211,11 +328,11 @@ runtime configuration so it can also be the tooling startup project.
 
 ```sh
 dotnet tool restore
-dotnet ef migrations list --no-connect --project SmartLost.AuthService.Infrastructure --startup-project SmartLost.AuthService.Infrastructure --context AuthDbContext
-dotnet ef migrations has-pending-model-changes --project SmartLost.AuthService.Infrastructure --startup-project SmartLost.AuthService.Infrastructure --context AuthDbContext
+dotnet ef migrations list --no-connect --project src/Services/Auth/SmartLost.AuthService.Infrastructure --startup-project src/Services/Auth/SmartLost.AuthService.Infrastructure --context AuthDbContext
+dotnet ef migrations has-pending-model-changes --project src/Services/Auth/SmartLost.AuthService.Infrastructure --startup-project src/Services/Auth/SmartLost.AuthService.Infrastructure --context AuthDbContext
 ```
 
-[`AuthDbContextFactory`](../SmartLost.AuthService.Infrastructure/Persistence/AuthDbContextFactory.cs)
+[`AuthDbContextFactory`](../src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/AuthDbContextFactory.cs)
 loads `appsettings.json` and optional environment-specific JSON from the tooling output
 folder. Infrastructure copies local API settings there during build, excluding examples
 and Docker settings. The environment defaults to Development; standard
@@ -232,7 +349,7 @@ After modifying the EF model, replace `MigrationName` with a descriptive name an
 a migration. Review the migration and snapshot, then commit both with the model change:
 
 ```sh
-dotnet ef migrations add MigrationName --output-dir Persistence/Migrations --project SmartLost.AuthService.Infrastructure --startup-project SmartLost.AuthService.Infrastructure --context AuthDbContext
+dotnet ef migrations add MigrationName --output-dir Persistence/Migrations --project src/Services/Auth/SmartLost.AuthService.Infrastructure --startup-project src/Services/Auth/SmartLost.AuthService.Infrastructure --context AuthDbContext
 ```
 
 ### Apply to a local database
@@ -241,7 +358,7 @@ Start PostgreSQL and apply migrations through the CLI after copying and editing 
 
 ```sh
 docker compose up -d --wait auth-db
-dotnet ef database update --project SmartLost.AuthService.Infrastructure --startup-project SmartLost.AuthService.Infrastructure --context AuthDbContext
+dotnet ef database update --project src/Services/Auth/SmartLost.AuthService.Infrastructure --startup-project src/Services/Auth/SmartLost.AuthService.Infrastructure --context AuthDbContext
 docker compose up --build
 ```
 
@@ -253,7 +370,7 @@ work in PowerShell: the EF factory reads the copied JSON settings on both platfo
 This command generates a script for review without applying it to a database:
 
 ```sh
-dotnet ef migrations script --idempotent --output artifacts/auth-migrations.sql --project SmartLost.AuthService.Infrastructure --startup-project SmartLost.AuthService.Infrastructure --context AuthDbContext
+dotnet ef migrations script --idempotent --output artifacts/auth-migrations.sql --project src/Services/Auth/SmartLost.AuthService.Infrastructure --startup-project src/Services/Auth/SmartLost.AuthService.Infrastructure --context AuthDbContext
 ```
 
 Review the migration and generated SQL before applying it through the CLI. For other
@@ -284,6 +401,24 @@ Open `http://localhost:8080/swagger` with Compose or `http://localhost:5048/swag
 the HTTP launch profile. Expand an endpoint, choose **Try it out**, enter the JSON body,
 and choose **Execute** to inspect its response. Both UI and OpenAPI are disabled outside
 Development. Swagger UI is served by the API through `Swashbuckle.AspNetCore.SwaggerUI`.
+
+## Access-token claims and current user
+
+Auth emits HS256 access JWTs containing `sub` (user GUID), `unique_name`, `email`,
+`jti`, `iss`, `aud`, `nbf` and `exp`. No role/permission or `iat` claim is currently
+issued. The refresh token is a separate opaque value, not a JWT claim.
+
+The existing `AddBuildingBlocksApi()` call registers scoped `ICurrentUser` with
+`HttpCurrentUser`. Application code can inject the interface from
+`SmartLost.BuildingBlocks.Application.Authentication` to read identity and token
+metadata from the authenticated HTTP principal. Raw and ASP.NET-mapped identity claims
+are supported, so the current JWT validation configuration is preserved.
+
+The adapter does not validate JWTs or query users. Signature, issuer, audience and lifetime
+checks remain in `Program.cs`. Restricted endpoints must use authorization; current
+register/login/refresh routes remain public. No current Auth handler consumes this new
+abstraction yet. See [the BuildingBlocks identity guide](BUILDING_BLOCKS.md#current-user-identity)
+for properties, null behavior and the required-user-ID method.
 
 ## Refresh tokens
 
@@ -325,7 +460,7 @@ Run from the repository root with a local `appsettings.json` whose database host
 ```sh
 dotnet tool restore
 docker compose up -d --wait auth-db
-dotnet ef database update --project SmartLost.AuthService.Infrastructure --startup-project SmartLost.AuthService.Infrastructure --context AuthDbContext -- --SettingsFile SmartLost.AuthService.Api/appsettings.json
+dotnet ef database update --project src/Services/Auth/SmartLost.AuthService.Infrastructure --startup-project src/Services/Auth/SmartLost.AuthService.Infrastructure --context AuthDbContext -- --SettingsFile src/Services/Auth/SmartLost.AuthService.Api/appsettings.json
 docker compose up --build
 ```
 
@@ -354,31 +489,33 @@ plus startup without migration in both Development and Production. Configuration
 verify JSON loading, CLI overrides and JWT validation at startup.
 This includes generated migration/snapshot code
 in Coverlet coverage; the existing coverage gates remain unchanged.
-`SmartLost.AuthService.IntegrationTests` uses Testcontainers 4.15.0 to start a disposable
+`SmartLost.AuthService.IntegrationTests` uses Testcontainers 4.16.0 to start a disposable
 `postgres:16-alpine` instance. Its `Testing` environment configures EF Core's production
 Npgsql provider with the container connection string and test-only JWT settings. No local
 appsettings file or existing Compose database is used. The fixture applies the checked-in EF
-migrations to this test database, truncates data before each test and disposes the container
+migrations to this test database, truncates all four application tables before each test and disposes the container
 after the suite. There are no persistent volumes or fixed host ports.
 
 The suite verifies migration application, register/login persistence and normalization,
 scoped EF seeding with real password hashes, independent database connections with an active reader,
 HTTP duplicate rejection, actual PostgreSQL unique-constraint mapping after competing
 preflight checks, refresh rotation/replay revocation, expiry and concurrent refresh rollback.
+It also verifies the Outbox migration, sanitized profile messages, rollback on failed
+identity changes, competing identity versions and concurrent Outbox workers on PostgreSQL.
 The concurrency test synchronizes two HTTP requests before their database saves, so both read
 the same current token. Docker must be running; missing Docker fails the suite rather than
 skipping it. Development database migrations remain an explicit developer operation.
-See the [integration test guide](../tests/SmartLost.AuthService.IntegrationTests/README.md).
+See the [integration test guide](../tests/Auth/SmartLost.AuthService.IntegrationTests/README.md).
 Its request factory and scoped data seeder provide reusable setup for future tests; test
 DbContexts own their connections, and database assertions use fresh async DI scopes.
 Run both suites from the repository root after restore and build:
 
 ```sh
-dotnet test tests/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
-dotnet test tests/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
+dotnet test tests/Auth/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/Auth/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
 ```
 
 ## Further reading
 
 - [Root repository README](../README.md)
-- [API request examples](../SmartLost.AuthService.Api/AuthService.Api.http)
+- [API request examples](../src/Services/Auth/SmartLost.AuthService.Api/AuthService.Api.http)

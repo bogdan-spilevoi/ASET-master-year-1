@@ -168,10 +168,10 @@ experiments have no HTTP API. Cloud Matching has internal ingress only.
 
 Primary source: sections 4, 8, 16 and 17 of the requirements analysis. Existing
 Auth members and relationships were compared with
-[UserAccount](../../../SmartLost.AuthService.Domain/Entities/UserAccount.cs),
-[RefreshSession](../../../SmartLost.AuthService.Domain/Entities/RefreshSession.cs),
-[RefreshToken](../../../SmartLost.AuthService.Domain/Entities/RefreshToken.cs)
-and [EF configurations](../../../SmartLost.AuthService.Infrastructure/Persistence/Configurations).
+[UserAccount](../../../src/Services/Auth/SmartLost.AuthService.Domain/Entities/UserAccount.cs),
+[RefreshSession](../../../src/Services/Auth/SmartLost.AuthService.Domain/Entities/RefreshSession.cs),
+[RefreshToken](../../../src/Services/Auth/SmartLost.AuthService.Domain/Entities/RefreshToken.cs)
+and [EF configurations](../../../src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Configurations).
 The [repository README](../../../README.md), current Compose configuration and
 existing member diagrams were inspected for architectural consistency.
 

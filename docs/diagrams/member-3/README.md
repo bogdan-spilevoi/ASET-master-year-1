@@ -92,19 +92,19 @@ business-service authorization belong in other views.
 
 ## Source correspondence
 
-- [AuthController](../../../SmartLost.AuthService.Api/Controllers/AuthController.cs),
-  [mapping](../../../SmartLost.AuthService.Api/Mapping/AuthMappingProfile.cs)
-  and [API composition](../../../SmartLost.AuthService.Api/Program.cs)
-- [Register handler](../../../SmartLost.AuthService.Application/Commands/Register/RegisterUserCommandHandler.cs),
-  [login handler](../../../SmartLost.AuthService.Application/Commands/Login/LoginUserCommandHandler.cs)
-  and [refresh handler](../../../SmartLost.AuthService.Application/Commands/Refresh/RefreshTokenCommandHandler.cs)
-- [Command pipeline registration](../../../SmartLost.BuildingBlocks.Application/DependencyInjection.cs)
-- [Session service](../../../SmartLost.AuthService.Infrastructure/Authentication/AuthenticationSessionService.cs),
-  [password service](../../../SmartLost.AuthService.Infrastructure/Authentication/PasswordService.cs)
-  and [JWT service](../../../SmartLost.AuthService.Infrastructure/Authentication/TokenService.cs)
-- [User repository](../../../SmartLost.AuthService.Infrastructure/Persistence/UserAccountRepository.cs),
-  [EF context](../../../SmartLost.AuthService.Infrastructure/Persistence/AuthDbContext.cs)
-  and [session concurrency configuration](../../../SmartLost.AuthService.Infrastructure/Persistence/Configurations/RefreshSessionConfiguration.cs)
+- [AuthController](../../../src/Services/Auth/SmartLost.AuthService.Api/Controllers/AuthController.cs),
+  [mapping](../../../src/Services/Auth/SmartLost.AuthService.Api/Mapping/AuthMappingProfile.cs)
+  and [API composition](../../../src/Services/Auth/SmartLost.AuthService.Api/Program.cs)
+- [Register handler](../../../src/Services/Auth/SmartLost.AuthService.Application/Commands/Register/RegisterUserCommandHandler.cs),
+  [login handler](../../../src/Services/Auth/SmartLost.AuthService.Application/Commands/Login/LoginUserCommandHandler.cs)
+  and [refresh handler](../../../src/Services/Auth/SmartLost.AuthService.Application/Commands/Refresh/RefreshTokenCommandHandler.cs)
+- [Command pipeline registration](../../../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/DependencyInjection.cs)
+- [Session service](../../../src/Services/Auth/SmartLost.AuthService.Infrastructure/Authentication/AuthenticationSessionService.cs),
+  [password service](../../../src/Services/Auth/SmartLost.AuthService.Infrastructure/Authentication/PasswordService.cs)
+  and [JWT service](../../../src/Services/Auth/SmartLost.AuthService.Infrastructure/Authentication/TokenService.cs)
+- [User repository](../../../src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/UserAccountRepository.cs),
+  [EF context](../../../src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/AuthDbContext.cs)
+  and [session concurrency configuration](../../../src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Configurations/RefreshSessionConfiguration.cs)
 
 ## Review scope
 

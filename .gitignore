@@ -43,6 +43,8 @@ _ReSharper*/
 .env.*
 **/appsettings*.json
 !**/appsettings*.example.json
+**/outboxsettings*.json
+!**/outboxsettings*.example.json
 secrets.json
 *.pfx
 *.p12

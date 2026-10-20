@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/Auth/">
+    <Project Path="SmartLost.AuthService.Api/SmartLost.AuthService.Api.csproj" />
+    <Project Path="SmartLost.AuthService.Application/SmartLost.AuthService.Application.csproj" />
+    <Project Path="SmartLost.AuthService.Domain/SmartLost.AuthService.Domain.csproj" />
+    <Project Path="SmartLost.AuthService.Infrastructure/SmartLost.AuthService.Infrastructure.csproj" />
+    <Project Path="SmartLost.AuthService.Worker/SmartLost.AuthService.Worker.csproj" />
+  </Folder>
+  <Folder Name="/BuildingBlocks/">
+    <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Core/SmartLost.BuildingBlocks.Core.csproj" />
+    <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
+    <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
+    <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/SmartLost.BuildingBlocks.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="../../../tests/Auth/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj" />
+    <Project Path="../../../tests/Auth/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
