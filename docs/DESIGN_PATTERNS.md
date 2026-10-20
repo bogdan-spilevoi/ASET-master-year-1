@@ -59,7 +59,8 @@ they are not interchangeable pattern names.
 - A gateway/interface does not alone establish Proxy, Bridge or Facade.
 - Inheritance alone does not establish Template Method; the fixed base algorithm must exist.
 - The command/handler organization does not establish a complete CQRS architecture.
-- Empty Listings/Matching runtime scaffolds do not implement the planned patterns in diagrams.
+- Empty Listings/Matching runtime scaffolds do not implement the planned patterns in diagrams;
+  their separate NMF Modeling libraries provide generated structural behavior only.
 
 ## Six member presentation allocation
 

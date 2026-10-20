@@ -25,6 +25,7 @@
     <Project Path="src/Services/Matching/SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj" />
     <Project Path="src/Services/Matching/SmartLost.MatchingService.Domain/SmartLost.MatchingService.Domain.csproj" />
     <Project Path="src/Services/Matching/SmartLost.MatchingService.Infrastructure/SmartLost.MatchingService.Infrastructure.csproj" />
+    <Project Path="src/Services/Matching/SmartLost.MatchingService.Modeling/SmartLost.MatchingService.Modeling.csproj" />
   </Folder>
   <Folder Name="/Tests/" />
   <Folder Name="/Tests/Auth/">
@@ -36,5 +37,8 @@
   </Folder>
   <Folder Name="/Tests/Listings/">
     <Project Path="tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/Tests/Matching/">
+    <Project Path="tests/Matching/SmartLost.MatchingService.UnitTests/SmartLost.MatchingService.UnitTests.csproj" />
   </Folder>
 </Solution>

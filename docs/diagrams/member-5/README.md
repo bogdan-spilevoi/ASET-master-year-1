@@ -42,6 +42,10 @@ Notation references: [PlantUML sequence syntax](https://plantuml.com/sequence-di
 [C4 component views](https://c4model.com/diagrams/component) and
 [C4-PlantUML](https://plantuml-stdlib.github.io/C4-PlantUML/).
 
+The separate [Matching NMF model](../../../src/Services/Matching/SmartLost.MatchingService.Modeling/README.md)
+now represents SearchListing and ImageEmbedding and has model unit tests. It does
+not implement the runtime integrations depicted here.
+
 ## UML sequence interpretation
 
 The actor owns an Open listing and requests suggestions through Angular and
@@ -159,6 +163,6 @@ design. Cached features and metadata suggestions remain usable while AI is offli
 
 Requirements, ownership boundaries and existing diagram contracts were inspected.
 Local links and source structure were checked. User-provided PNG exports were
-imported and visually inspected; current PlantUML sources were not re-rendered. No Matching code, endpoints, migrations, containers or deployment
+imported and visually inspected; current PlantUML sources were not re-rendered. No Matching runtime code, endpoints, migrations, containers or deployment
 configuration were added; application tests, inference and cloud deployment were
 not run for this documentation change.

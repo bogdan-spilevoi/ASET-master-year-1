@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<nmeta:Namespace xmi:version="2.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Uri="https://smartlost.example/models/matching/v1" Prefix="matching" Name="Matching" xmlns:xmi="http://www.omg.org/XMI" xmlns:nmeta="http://nmf.codeplex.com/nmeta/">
+  <Types xsi:type="nmeta:PrimitiveType" SystemType="System.Guid" Name="Guid" />
+  <Types xsi:type="nmeta:Enumeration" Name="ListingType">
+    <Literals Value="0" Name="Lost" />
+    <Literals Value="1" Name="Found" />
+  </Types>
+  <Types xsi:type="nmeta:Class" IdentifierScope="Global" Identifier="#//SearchListing/listingId" Name="SearchListing">
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType #//Guid" Name="listingId" />
+    <Attributes DefaultValue="1" IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//Integer" Name="sourceRevision" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//Long" Name="changeSequence" />
+    <Attributes DefaultValue="Lost" IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:Enumeration #//ListingType" Name="type" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType #//Guid" Name="authorId" />
+    <Attributes IsUnique="true" UpperBound="-1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//String" Name="categoryKeys" />
+    <Attributes IsOrdered="true" IsUnique="true" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//String" Name="colour" />
+    <Attributes IsUnique="true" UpperBound="-1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//String" Name="traits" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//DateTime" Name="occurredOn" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//String" Name="location" />
+    <Attributes DefaultValue="false" IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//Boolean" Name="eligible" />
+  </Types>
+  <Types xsi:type="nmeta:Class" IdentifierScope="Global" Identifier="#//ImageEmbedding/id" Name="ImageEmbedding">
+    <References ReferenceType="nmeta:Class #//SearchListing" IsOrdered="true" IsUnique="true" LowerBound="1" Name="searchListing" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType #//Guid" Name="id" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType #//Guid" Name="photoId" />
+    <Attributes DefaultValue="1" IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//Integer" Name="photoRevision" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//String" Name="modelVersion" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//String" Name="preprocessingVersion" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//Integer" Name="dimensions" />
+    <Attributes IsOrdered="true" LowerBound="1" UpperBound="-1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//Float" Name="vector" />
+  </Types>
+</nmeta:Namespace>
