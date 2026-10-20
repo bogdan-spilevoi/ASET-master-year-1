@@ -6,6 +6,11 @@ AI runtime through an authenticated HTTPS tunnel; it will not load model weights
 
 ## Current state
 
+The [communication diagram](COMMUNICATION.md) explicitly marks all service interactions
+as planned. Update that document with service code, configuration or test changes;
+if communication is unchanged, record a specific explanation in its review notes.
+CI checks document changes; reviewers check diagram accuracy.
+
 This module contains four empty .NET 10 projects and [Matching.slnx](Matching.slnx).
 There are no C# source files, endpoints, dependency registrations, database contexts,
 migrations, runtime settings, workers, Dockerfiles, Compose services or test projects.

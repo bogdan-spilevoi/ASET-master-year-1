@@ -65,6 +65,57 @@ jobs:
           "label=$short — $subject" >> $env:GITHUB_OUTPUT
           "Validating one revision: $head; changed-code baseline: $base"
 
+      - name: Require service communication diagram review
+        shell: bash
+        env:
+          BASE: ${{ steps.target.outputs.coverage-base }}
+          REVISION: ${{ steps.target.outputs.revision }}
+        run: |
+          set -euo pipefail
+          changed=()
+          while IFS= read -r -d '' path; do
+            changed+=("$path")
+          done < <(git diff --name-only --no-renames -z "$BASE" "$REVISION")
+
+          review_all=false
+          for path in "${changed[@]:-}"; do
+            case "$path" in
+              src/BuildingBlocks/*)
+                [[ "$path" == *.md ]] || review_all=true
+                ;;
+              docker-compose*.yml|docker-compose*.yaml) review_all=true ;;
+            esac
+          done
+
+          failed=false
+          for directory in src/Services/*/; do
+            [[ -d "$directory" ]] || continue
+            service="${directory%/}"
+            service="${service##*/}"
+            document="${directory}COMMUNICATION.md"
+            if [[ ! -f "$document" ]] || ! grep -q '^```mermaid$' "$document"; then
+              echo "::error file=$document::Service $service needs a COMMUNICATION.md with a Mermaid diagram."
+              failed=true
+              continue
+            fi
+
+            review="$review_all"
+            documented=false
+            for path in "${changed[@]:-}"; do
+              [[ "$path" != "$document" ]] || documented=true
+              case "$path" in
+                "${directory}"*|"tests/${service}/"*)
+                  [[ "$path" == *.md ]] || review=true
+                  ;;
+              esac
+            done
+            if [[ "$review" == true && "$documented" != true ]]; then
+              echo "::error file=$document::Update $service communication diagrams or add a specific review note explaining why communication is unchanged."
+              failed=true
+            fi
+          done
+          [[ "$failed" == false ]]
+
   validate:
     name: Validate ${{ needs.revisions.outputs.label }}
     needs: revisions

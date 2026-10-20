@@ -69,6 +69,17 @@ briefly instead of inventing content or presenting plans as completed work.
 
 ## Documentation maintenance
 
+- Each service must keep `src/Services/<Service>/COMMUNICATION.md` linked from its
+  service README. Use numbered Mermaid communication arrows and distinguish current
+  implementation from planned interactions. Include API flows, persistence ownership,
+  workers, outgoing calls/messages and failure/retry paths when implemented. For empty
+  scaffolds, state that no runtime communication exists; label any proposed arrows clearly.
+- Update the affected communication diagrams in the same change as service code,
+  configuration or tests. If communication is unchanged, add a specific review note
+  explaining why. Shared BuildingBlocks implementation or root Compose changes require
+  reviewing every service diagram. New services require their own README and diagram.
+  CI enforces document presence and a corresponding document change, not semantic
+  accuracy; reviewers must compare arrows, contracts and implementation labels to code.
 - Update the root README whenever a new service, endpoint, Docker file, Compose file, port,
   test suite, CI check, or deployment workflow is added or changed.
 - Update the affected module README in the same change. Create one when introducing a module.

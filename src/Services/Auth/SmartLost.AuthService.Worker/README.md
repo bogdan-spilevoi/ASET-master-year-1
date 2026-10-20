@@ -4,6 +4,10 @@ A finite .NET 10 console job belonging to AuthService. It reads Auth's `OutboxMe
 table and delivers profile integration events through configurable HTTP POST routes.
 It exposes no HTTP endpoint or port. No cloud job or deployment is configured.
 
+See the [Auth communication diagrams](../COMMUNICATION.md#durable-profile-notification-and-delivery)
+for atomic message staging, leased worker delivery and the receiver boundary. Keep
+that diagram current when worker or delivery behavior changes.
+
 ## Messages and receiver contract
 
 | Type | Contract version | Payload |

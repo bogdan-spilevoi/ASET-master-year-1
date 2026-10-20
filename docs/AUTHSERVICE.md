@@ -94,6 +94,10 @@ identity versions, session-event filtering and rejected transaction boundaries.
 
 ## Auth Outbox
 
+The [service communication diagrams](../src/Services/Auth/COMMUNICATION.md) show
+registration/login, refresh/replay and the separate outbox delivery flow against the
+current implementation. The older member diagrams below cover a different scope.
+
 `AddAuthOutbox` adds `OutboxMessages` and `Users.IdentityVersion` (existing users start at 1).
 Identity changes increment this concurrency token; concurrent profile updates fail instead
 of publishing competing versions. Repository-based profile conflicts map to HTTP 409 with

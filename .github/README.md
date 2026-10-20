@@ -10,7 +10,7 @@ and the hosted runners' native shells. Start with the [repository README](../REA
 
 | Workflow/job | Responsibility |
 | --- | --- |
-| [`ci.yml`](workflows/ci.yml): `revisions` | Select the current revision and changed-code baseline |
+| [`ci.yml`](workflows/ci.yml): `revisions` | Select the current revision and changed-code baseline; enforce service communication documentation review |
 | [`ci.yml`](workflows/ci.yml): `validate` | Call the reusable workflow once for the selected revision |
 | [`ci.yml`](workflows/ci.yml): `required` | Expose the stable `CI / Required` merge gate |
 | [`validate-commit.yml`](workflows/validate-commit.yml): `build-test` | Microservice solution inventory, locked restore, build, formatting/analyzers, Coverlet/unit tests, integration tests, passing-test checks |
@@ -22,6 +22,18 @@ or manually selected revision. Feature branches without a PR do not run CI on pu
 New updates cancel superseded runs for the same PR; main, merge-group and manual runs are
 retained. No path filters skip checks. `CI / Required` fails if target selection or validation
 fails or is skipped; it is skipped when the whole run is cancelled so cancellation can finish.
+
+The target-selection job also checks that each service has a Mermaid
+`src/Services/<Service>/COMMUNICATION.md`. Changes to non-Markdown files under a
+service or its `tests/<Service>/` directory require changing that document in the
+same candidate. Shared `src/BuildingBlocks/` non-Markdown changes or root
+`docker-compose*.yml`/`.yaml` changes require reviewing all service documents.
+Pure documentation changes do not trigger this review requirement. Entirely removed
+services do not need a remaining diagram. Renames are treated as deletion plus addition.
+If communication is unchanged, add a specific explanation to the document's review
+notes. The check validates presence and a document diff, not the diagram's meaning;
+reviewers must verify accuracy. It uses the same candidate/baseline as coverage on
+PR, main-push, merge-group and manual runs and never writes documentation.
 
 Each revision builds and runs unit tests on Linux, Windows and macOS; integration tests run on
 Linux with Docker available. Tests must provision isolated dependencies and clean them up.

@@ -86,6 +86,17 @@ This deployment and inference integration are not implemented.
 
 ### UML and C4 diagrams
 
+Current service communication documentation lives beside each service:
+[Auth](src/Services/Auth/COMMUNICATION.md),
+[Listings](src/Services/Listings/COMMUNICATION.md) and
+[Matching](src/Services/Matching/COMMUNICATION.md). Numbered arrows show interactions;
+planned integrations are explicitly marked. Auth includes its outbox worker flow;
+Listings documents model interactions, while Matching has no runtime communication yet.
+Keep these documents current with service changes, or add a specific review note when
+communication is unchanged. CI requires the corresponding document change for service
+code/configuration/test changes; shared BuildingBlocks implementation or root Compose
+changes require reviewing all service diagrams. Reviewers verify semantic accuracy.
+
 The six member pairs below contain the user-provided PNG exports and short English
 explanations. Expand a pair to view its images; open an image at full size for details.
 Some exports are partial or precede the local AI revision, as noted beside each pair.
@@ -475,6 +486,9 @@ The configured workflows are:
   PR cancel its superseded runs. Feature-branch pushes need an open PR to trigger CI.
   The aggregate **`CI / Required`** gate requires all validation stages to pass; there are
   no path filters. Job labels show a short commit ID and title.
+  Target selection also checks service communication document presence and requires
+  diagram updates or review notes alongside affected service changes. This read-only
+  check never generates or commits documentation.
 - [Validate commit](.github/workflows/validate-commit.yml): builds, checks formatting/analyzers,
   and runs unit tests on Linux, Windows and macOS for `Aset.slnx`; runs integration tests on Linux; then runs
   workflow/security scans and builds/scans any `SmartLost.*/Dockerfile`, retaining image archives

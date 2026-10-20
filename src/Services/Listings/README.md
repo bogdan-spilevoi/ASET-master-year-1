@@ -6,6 +6,12 @@ Listings for the semester MVP.
 
 ## Current state
 
+See the [communication diagrams](COMMUNICATION.md) for current in-process model
+interactions and clearly separated proposed service integrations. Update that document
+with service code, configuration or test changes; if communication is unchanged,
+record a specific explanation in its review notes. CI checks document changes;
+reviewers check diagram accuracy.
+
 This module contains four empty runtime-layer .NET 10 projects, a separate
 [NMF Modeling project](SmartLost.ListingsService.Modeling/README.md) and [Listings.slnx](Listings.slnx).
 The runtime layers have no C# source files, endpoints, dependency registrations, database contexts,
