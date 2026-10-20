@@ -575,6 +575,8 @@ change as code/configuration, using relative links and verified, secret-safe exa
 
 ## Further reading
 
+- [Design patterns used in the project, source evidence and six-member presentation allocation](docs/DESIGN_PATTERNS.md)
+- [Separate design pattern presentation folders for members 1–6](docs/design-patterns/README.md)
 - Requirements analysis for the semester MVP, Azure delivery and future UML/C4 modelling: [Google Docs](https://docs.google.com/document/d/1AYPYDg9ku5bWQCnwcyzXk9HWsxV3w5WU/edit)
 - [Member 1 UML Use Case and C4 System Context diagrams](docs/diagrams/member-1/README.md)
 - [Member 2 UML Class and C4 Container diagrams](docs/diagrams/member-2/README.md)
