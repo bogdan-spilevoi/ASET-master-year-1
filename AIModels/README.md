@@ -6,8 +6,8 @@ have no project references to the microservices and are not included in the Auth
 
 | Project | Responsibility | Documentation |
 | --- | --- | --- |
-| [QwenVision.csproj](Qwen3-VL-4B-Instruct-ONNX/QwenVision.csproj) | CPU image-label extraction using ONNX Runtime GenAI and an editable English prompt | [Qwen guide](Qwen3-VL-4B-Instruct-ONNX/README.md) |
-| [DinoVision.csproj](DINOv3-ViTL16-ONNX/DinoVision.csproj) | CPU image embeddings from the community DINOv3 ONNX export, with RGB preprocessing and L2 normalization | [DINO guide](DINOv3-ViTL16-ONNX/README.md) |
+| [QwenVision.csproj](Qwen3-VL-4B-Instruct-ONNX/QwenVision.csproj) | CPU or NVIDIA CUDA image-label extraction using ONNX Runtime GenAI and an editable English prompt | [Qwen guide](Qwen3-VL-4B-Instruct-ONNX/README.md) |
+| [DinoVision.csproj](DINOv3-ViTL16-ONNX/DinoVision.csproj) | CPU or NVIDIA CUDA image embeddings from the community DINOv3 ONNX export, with RGB preprocessing and L2 normalization | [DINO guide](DINOv3-ViTL16-ONNX/README.md) |
 | [DinoVision.Tests.csproj](DINOv3-ViTL16-ONNX.Tests/DinoVision.Tests.csproj) | Local preprocessing regression tests without model downloads | [Test guide](DINOv3-ViTL16-ONNX.Tests/README.md) |
 
 The solution, project, source, prompt, configuration and package lock are versioned.
@@ -35,10 +35,35 @@ relative CLI paths are resolved against the terminal's current directory.
 Rebuild after editing settings before using `--no-build`. The `--help` command
 works without settings or model files. A missing settings file produces a file error;
 create it using the copy commands above.
-Both applications use the standard `ConfigurationBuilder` / `AddJsonFile` provider
-and read values directly through `configuration["Paths:..."]`. Only the small
-shared [path resolver](Configuration/PathResolver.cs) is linked into both projects
-to expand `~/` and resolve relative paths; it does not load configuration.
+Both applications use the standard `ConfigurationBuilder` / `AddJsonFile` provider.
+The shared [path resolver](Configuration/PathResolver.cs) expands `~/` and resolves
+relative paths; [execution options](Configuration/ExecutionOptions.cs) validates the
+selected provider. Set `Execution.Provider` to `cpu` (the default) or `cuda`; CUDA
+uses `Execution.DeviceId`, which defaults to `0`. CPU remains available on every
+platform supported by the bundled ONNX Runtime packages.
+
+## NVIDIA CUDA setup
+
+CUDA is an explicit local choice, not automatic fallback. It requires an NVIDIA GPU,
+the CUDA/cuDNN runtime compatible with the locked ONNX Runtime GPU package, and the
+matching Qwen CUDA model variant. Install the runtime dependencies before setting
+`Execution.Provider` to `cuda`; a missing driver or DLL is reported as an inference
+error rather than silently falling back to CPU. The selected GPU packages support
+Windows and Linux, not macOS.
+
+For a CUDA configuration, replace the `Execution` section in each ignored local
+`appsettings.json` with:
+
+```json
+"Execution": {
+  "Provider": "cuda",
+  "DeviceId": 0
+}
+```
+
+See the individual guides for the Qwen CUDA download and DINO's unchanged ONNX
+download. The model packages and runtime requirements are documented by
+[ONNX Runtime's CUDA provider guide](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html).
 
 ```sh
 dotnet restore AIModels.slnx --locked-mode -p:NuGetAudit=true -p:NuGetAuditMode=all -p:NuGetAuditLevel=low -p:TreatWarningsAsErrors=true

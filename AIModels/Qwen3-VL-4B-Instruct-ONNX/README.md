@@ -1,8 +1,8 @@
 # Local Qwen ONNX experiment
 
 A .NET 10 console project `QwenVision.csproj` in the standalone [AIModels.slnx](../AIModels.slnx),
-using `Microsoft.ML.OnnxRuntimeGenAI` **0.17.1**.
-It loads a Qwen3-VL Instruct ONNX model on CPU and extracts structured labels for one image.
+using `Microsoft.ML.OnnxRuntimeGenAI.Cuda` **0.17.1**.
+It loads a Qwen3-VL Instruct ONNX model on CPU or NVIDIA CUDA and extracts structured labels for one image.
 The instructions are read from [Prompts/image-labels.txt](Prompts/image-labels.txt) at startup.
 The context is limited to 4,096 tokens and output to 1,024 new tokens.
 Generation uses greedy decoding. Each run loads and unloads the model; there is no conversation history.
@@ -40,7 +40,7 @@ the folder containing `genai_config.json` and `Paths.PromptFile` to your prompt:
 cp appsettings.example.json appsettings.json
 ```
 
-The example model directory is
+The default CPU model directory is
 `~/models/qwen3-vl-4b/onnxruntime/cpu_and_mobile/cpu-int4-rtn-block-32`.
 The example prompt path is `Prompts/image-labels.txt`, relative to the executable.
 Absolute paths and `~/` are also supported. Settings are copied to build/publish
@@ -108,3 +108,35 @@ For model files, use the CPU INT4 variant from
 Keep the complete model directory, including the external `.onnx.data` files, tokenizer
 and `genai_config.json`. The program reads files from the supplied path; it does not
 download or copy models, modify their configuration, or expose an HTTP API.
+
+## NVIDIA CUDA execution
+
+The versioned example selects CPU. To use an NVIDIA GPU, install CUDA/cuDNN runtime
+dependencies compatible with the locked ONNX Runtime package, download the CUDA model
+variant and set the ignored local configuration to CUDA:
+
+```sh
+mkdir -p ~/models/qwen3-vl-4b
+hf download onnx-community/Qwen3-VL-4B-Instruct-ONNX \
+  --include 'onnxruntime/cuda/cuda-int4-rtn-block-32/*' \
+  --local-dir ~/models/qwen3-vl-4b
+```
+
+```json
+{
+  "Paths": {
+    "ModelDirectory": "~/models/qwen3-vl-4b/onnxruntime/cuda/cuda-int4-rtn-block-32",
+    "PromptFile": "Prompts/image-labels.txt"
+  },
+  "Execution": {
+    "Provider": "cuda",
+    "DeviceId": 0
+  }
+}
+```
+
+The selected CUDA model directory must contain `genai_config.json`; do not point the
+CPU setting at CUDA files or the CUDA setting at CPU files. `DeviceId` is a zero-based
+CUDA device index. The program fails rather than falling back to CPU if CUDA cannot be
+loaded. The locked GPU package supports Windows and Linux; CPU remains the portable
+default for macOS. See [ONNX Runtime CUDA requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html).

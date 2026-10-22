@@ -41,6 +41,7 @@ try
         .SetBasePath(AppContext.BaseDirectory)
         .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
         .Build();
+    ExecutionOptions execution = ExecutionOptions.From(configuration);
     string imageArgument;
     if (args.Length == 0)
     {
@@ -78,9 +79,15 @@ try
         }
     }
 
-    Console.Error.WriteLine($"Loading model on CPU: {modelPath}");
+    using var sessionOptions = new SessionOptions();
+    if (execution.UsesCuda)
+    {
+        sessionOptions.AppendExecutionProvider_CUDA(execution.DeviceId);
+    }
+
+    Console.Error.WriteLine($"Loading model on {execution.Provider.ToUpperInvariant()}{(execution.UsesCuda ? $" device {execution.DeviceId}" : string.Empty)}: {modelPath}");
     var timer = Stopwatch.StartNew();
-    using var session = new InferenceSession(modelPath);
+    using var session = new InferenceSession(modelPath, sessionOptions);
     if (!session.InputMetadata.ContainsKey("pixel_values") || !session.OutputMetadata.ContainsKey("pooler_output"))
     {
         throw new ArgumentException("Expected the onnx-community DINOv3 export with pixel_values and pooler_output.");
