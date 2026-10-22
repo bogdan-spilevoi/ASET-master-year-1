@@ -1,8 +1,31 @@
 # Matching communication diagram
 
-Matching currently contains four empty runtime-layer projects. Its API builds as a
-library, with no `Program.cs`, endpoints, handlers, database context, inference client,
-worker or test suite. There is no runtime communication to diagram yet.
+Matching currently contains four empty runtime-layer projects plus a separate NMF
+Modeling library and model unit tests. Its API builds as a library with no Program.cs,
+endpoints, handlers, database context, inference client or worker. There is no running
+service integration yet.
+
+## Current in-process model interactions
+
+Solid numbered arrows describe model-test operations, not service endpoints.
+
+```mermaid
+flowchart LR
+    Tests["MatchingModelTests"]
+    Model["Generated SearchListing / ImageEmbedding objects"]
+    Repository["NMF ModelRepository"]
+    XMI[("Temporary XMI file")]
+    Tests -->|"1. Construct projections and versioned embeddings"| Model
+    Model -->|"1.1 Maintain projection references and notify changes"| Tests
+    Tests -->|"2. Save model roots"| Repository
+    Repository -->|"2.1 Serialize references and vector components"| XMI
+    Tests -->|"2.2 Reload and verify identities, versions and vectors"| Repository
+    Repository -->|"2.3 Read model file"| XMI
+```
+
+The model relationship is non-containment and stays within Matching. NMF file loading
+is not database persistence or cross-service synchronization. See the
+[modeling guide](SmartLost.MatchingService.Modeling/README.md) for fields and remaining rules.
 
 ## Planned interactions — not implemented
 
@@ -45,6 +68,6 @@ eligibility checking and ranking details; these arrows summarize that design.
 
 ## Review notes
 
-- Initial diagram checked against all four empty projects and the proposed matching
-  design. Update arrows and implementation labels as code is introduced; if
-  communication is unchanged, record what changed and why this diagram still applies here.
+- Added the separate NMF model and unit-test flow for SearchListing/ImageEmbedding.
+  Runtime projects remain empty, so all proposed network/database arrows still describe
+  unimplemented integrations. No processing job or receiver has been added.
