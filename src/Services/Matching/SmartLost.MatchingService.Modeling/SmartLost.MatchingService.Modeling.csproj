@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="NMF-Basics" Version="2.0.467" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Metamodels/matching.nmeta"
+                      LogicalName="SmartLost.MatchingService.Modeling.Metamodels.matching.nmeta" />
+    <AssemblyAttribute Include="NMF.Models.ModelMetadataAttribute">
+      <_Parameter1>https://smartlost.example/models/matching/v1</_Parameter1>
+      <_Parameter2>SmartLost.MatchingService.Modeling.Metamodels.matching.nmeta</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>
