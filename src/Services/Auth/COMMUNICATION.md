@@ -117,3 +117,6 @@ No cloud schedule or receiver is configured by the repository examples.
 - Initial diagrams checked against the API, handlers, session service, context and
   outbox implementation. Update affected flows with service changes; if communication
   is unchanged, record what changed and why these diagrams still apply here.
+- 2026-10-22: Added a separate NMF structural-model project for Auth entities. It has no
+  runtime references from the API, application, domain, infrastructure or worker layers, and
+  does not add persistence, messages, workers or outgoing calls; all numbered flows remain unchanged.

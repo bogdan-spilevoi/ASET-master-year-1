@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<nmeta:Namespace xmi:version="2.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Uri="https://smartlost.example/models/auth/v1" Prefix="auth" Name="Auth" xmlns:xmi="http://www.omg.org/XMI" xmlns:nmeta="http://nmf.codeplex.com/nmeta/">
+  <Types xsi:type="nmeta:PrimitiveType" SystemType="System.Guid" Name="Guid" />
+  <Types xsi:type="nmeta:Class" IdentifierScope="Global" Identifier="#//UserAccount/id" Name="UserAccount">
+    <References IsContainment="true" Opposite="#//RefreshSession/user" ReferenceType="nmeta:Class #//RefreshSession" IsOrdered="true" IsUnique="true" UpperBound="-1" Name="sessions" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType #//Guid" Name="id" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//String" Name="userName" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//String" Name="normalizedUserName" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//String" Name="email" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//String" Name="normalizedEmail" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//String" Name="passwordHash" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//Long" Name="identityVersion" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//DateTime" Name="createdAtUtc" />
+  </Types>
+  <Types xsi:type="nmeta:Class" IdentifierScope="Global" Identifier="#//RefreshSession/id" Name="RefreshSession">
+    <References Opposite="#//UserAccount/sessions" ReferenceType="nmeta:Class #//UserAccount" IsOrdered="true" IsUnique="true" LowerBound="1" Name="user" />
+    <References IsContainment="true" Opposite="#//RefreshToken/session" ReferenceType="nmeta:Class #//RefreshToken" IsOrdered="true" IsUnique="true" UpperBound="-1" Name="tokens" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType #//Guid" Name="id" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//String" Name="currentTokenHash" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//DateTime" Name="expiresAtUtc" />
+    <Attributes IsOrdered="true" IsUnique="true" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//DateTime" Name="revokedAtUtc" />
+  </Types>
+  <Types xsi:type="nmeta:Class" IdentifierScope="Global" Identifier="#//RefreshToken/id" Name="RefreshToken">
+    <References Opposite="#//RefreshSession/tokens" ReferenceType="nmeta:Class #//RefreshSession" IsOrdered="true" IsUnique="true" LowerBound="1" Name="session" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType #//Guid" Name="id" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//String" Name="tokenHash" />
+  </Types>
+</nmeta:Namespace>

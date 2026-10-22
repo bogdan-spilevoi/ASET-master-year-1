@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "NMF-Basics": {
+        "type": "Direct",
+        "requested": "[2.0.467, )",
+        "resolved": "2.0.467",
+        "contentHash": "v3WW0V1VbWRliLwHIcwVXPqXhpglClzKrrxoTqXLERPDgUFAY1mXz1JeuKBteZe2eQMy5JmfvzHWAEGQFUXzOg==",
+        "dependencies": {
+          "NMF-Expressions": "[2.3.0, 3.0.0)",
+          "NMF-Repository": "[3.1.0, 4.0.0)"
+        }
+      },
+      "NMF-Collections": {
+        "type": "Transitive",
+        "resolved": "2.0.459",
+        "contentHash": "PWnaZ4xl+r4swr/JW1bujMoXwdt5gZ/XTz/4RTQpMoyI1P9zcVagx62fp1cp/Nig90b6aQr55eUJ3IJeW9I/WQ==",
+        "dependencies": {
+          "NMF-Expressions": "[2.2.0, 3.0.0)"
+        }
+      },
+      "NMF-Expressions": {
+        "type": "Transitive",
+        "resolved": "2.3.0",
+        "contentHash": "QntgPPCpSIa9hYXuJu/9CCLX0LGNTpBhVa0qqP4AQ0ktOclvPe7r/WXjIVlSRu3Yvo3E+d9Scj/FU9kbY6VhDA=="
+      },
+      "NMF-Repository": {
+        "type": "Transitive",
+        "resolved": "3.1.0",
+        "contentHash": "ku/AvV/sD/cLqxn9MUsnHbcd3rfOkf49d86F+ssJpb3KWaP655zWPW7Zlc2neMa/D4+h8uKFJ260JpcwQrw0VQ==",
+        "dependencies": {
+          "NMF-Collections": "[2.0.459, 3.0.0)",
+          "NMF-Expressions": "[2.3.0, 3.0.0)",
+          "NMF-Utilities": "[2.0.459, 3.0.0)"
+        }
+      },
+      "NMF-Utilities": {
+        "type": "Transitive",
+        "resolved": "2.0.459",
+        "contentHash": "Npyn1OYgJ4hKx909qoT1dzGaHaoGs+6qtwLEBY9SHGzFuwp7FZ67coqvemhKpXYWzuT3enTa//wRGxDMvhbp3w=="
+      }
+    }
+  }
+}

@@ -33,13 +33,13 @@ VS Code's file explorer show the same service boundaries:
 src/
   Services/
     Auth/
-      Auth.slnx        # Auth projects, shared dependencies and Auth tests
+      Auth.slnx        # Auth runtime projects, NMF Modeling, shared dependencies and Auth tests
       SmartLost.AuthService.*/
     Listings/
       Listings.slnx    # Runtime scaffolds, NMF Modeling, shared dependencies and model tests
       SmartLost.ListingsService.*/
     Matching/
-      Matching.slnx    # Four empty service layers and shared dependencies
+      Matching.slnx    # Runtime scaffolds, NMF Modeling, shared dependencies and model tests
       SmartLost.MatchingService.*/
   BuildingBlocks/
     BuildingBlocks.slnx
@@ -47,7 +47,8 @@ src/
 tests/
   Auth/                # Auth unit and integration test projects
   BuildingBlocks/      # Shared-library unit test project
-  Listings/            # NMF model unit test project
+  Listings/            # Listings NMF model unit test project
+  Matching/            # Matching NMF model unit test project
 ```
 
 Future services belong under `src/Services/<Service>/`, with tests under
@@ -56,9 +57,9 @@ Future services belong under `src/Services/<Service>/`, with tests under
 | Solution | Scope |
 | --- | --- |
 | [Aset.slnx](Aset.slnx) | All backend projects and tests; the main CI entry point |
-| [Auth.slnx](src/Services/Auth/Auth.slnx) | Five Auth projects, four BuildingBlocks libraries and the two Auth test projects |
+| [Auth.slnx](src/Services/Auth/Auth.slnx) | Five Auth runtime projects, NMF Modeling, four BuildingBlocks libraries and the two Auth test projects |
 | [Listings.slnx](src/Services/Listings/Listings.slnx) | Four Listings runtime-layer scaffolds, NMF Modeling, four BuildingBlocks libraries and the Listings unit suite |
-| [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching scaffold projects and four BuildingBlocks libraries |
+| [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching runtime scaffolds, NMF Modeling, four BuildingBlocks libraries and the Matching unit suite |
 | [BuildingBlocks.slnx](src/BuildingBlocks/BuildingBlocks.slnx) | Four shared libraries and their existing unit test project |
 
 Solutions list the same `.csproj` files directly; they do not nest other solutions
@@ -72,11 +73,12 @@ The runtime layers of Listings and Matching contain only project definitions and
 temporarily build as libraries until an entry point is implemented. They have no endpoints,
 database contexts, migrations, workers or containers. Service implementations
 will use the existing BuildingBlocks; neither service references the other's projects.
-Listings also has a separate [NMF structural model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md)
-for Listing, Photo, Category and ListingCategory: Ecore source, generated NMeta/C#
-and a sample XMI instance. The runtime layers do not reference Modeling. A separate
-[Listings unit suite](tests/Listings/SmartLost.ListingsService.UnitTests/README.md)
-checks the model and collects its coverage.
+Listings and Auth have separate [NMF structural models](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md)
+and [Auth model documentation](src/Services/Auth/SmartLost.AuthService.Modeling/README.md).
+They contain Ecore sources and generated NMeta/C# representations; Listings also has a sample
+XMI instance. Runtime layers do not reference either Modeling project. The dedicated
+[Listings unit suite](tests/Listings/SmartLost.ListingsService.UnitTests/README.md) and the Auth
+unit suite check their respective models and collect generated-code coverage.
 
 The [current hosting proposal](docs/AZURE_STUDENT_ARCHITECTURE.md) uses globally
 distributed static frontend hosting, APIs and persistent data in Switzerland North,
@@ -91,7 +93,7 @@ Current service communication documentation lives beside each service:
 [Listings](src/Services/Listings/COMMUNICATION.md) and
 [Matching](src/Services/Matching/COMMUNICATION.md). Numbered arrows show interactions;
 planned integrations are explicitly marked. Auth includes its outbox worker flow;
-Listings documents model interactions, while Matching has no runtime communication yet.
+Listings and Matching document current model-test interactions; their service integrations remain planned.
 Keep these documents current with service changes, or add a specific review note when
 communication is unchanged. CI requires the corresponding document change for service
 code/configuration/test changes; shared BuildingBlocks implementation or root Compose
@@ -212,7 +214,7 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Finite Auth Outbox job delivering versioned public-profile snapshots to configured HTTP receivers | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
 | [`src/Services/Listings/`](src/Services/Listings/) | Runtime scaffold and a separate NMF structural model for listings, photos and categories; runtime functionality pending | [Module README](src/Services/Listings/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md) |
-| [`src/Services/Matching/`](src/Services/Matching/) | Scaffold for search projections, embeddings, ranking and the local AI client; functionality pending | [Module README](src/Services/Matching/README.md) |
+| [`src/Services/Matching/`](src/Services/Matching/) | Runtime scaffold plus a separate NMF structural model for search projections and versioned embeddings; ranking/client integration pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
 | [`SmartLost.BuildingBlocks.*`](src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | Reusable domain/event/result/pagination primitives, application behaviors, HTTP adapters and opt-in EF Core Outbox | [Building blocks guide](docs/BUILDING_BLOCKS.md) |
 | [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen CPU/NVIDIA CUDA label extraction and DINOv3 CPU/NVIDIA CUDA normalized image embeddings | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
 
@@ -474,8 +476,8 @@ sanitized 500 problem and are logged server-side.
 | --- | --- |
 | SDK / target | SDK **10.0.401** pinned exactly in `global.json` and the Docker build image; `SmartLost.AuthService.Api` targets `net10.0`; the runtime image uses `aspnet:10.0` |
 | Style / analysis | `.editorconfig`, .NET 10 recommended analyzers, nullable references, warnings as errors |
-| Dependencies | Locked restore and direct/transitive NuGet auditing; lock files required with projects; local `dotnet-ef` 10.0.12 and `NMF-Ecore2Code` 2.0.467 pinned in `.config/dotnet-tools.json`; Listings Modeling references `NMF-Basics` 2.0.467 |
-| Tests / coverage | All tests must pass; unit tests check Auth migration/model drift, PostgreSQL SQL generation and the NMF Listings model; **Coverlet** collects unit line coverage; inline workflow gates require **strictly above 80%** overall and on changed executable code; declaration-only interfaces, enums and const-only static classes are recognized regardless of location |
+| Dependencies | Locked restore and direct/transitive NuGet auditing; lock files required with projects; local `dotnet-ef` 10.0.12 and `NMF-Ecore2Code` 2.0.467 pinned in `.config/dotnet-tools.json`; Auth and Listings Modeling reference `NMF-Basics` 2.0.467 |
+| Tests / coverage | All tests must pass; unit tests check Auth migration/model drift, PostgreSQL SQL generation and the NMF Auth and Listings models; **Coverlet** collects unit line coverage; inline workflow gates require **strictly above 80%** overall and on changed executable code; declaration-only interfaces, enums and const-only static classes are recognized regardless of location |
 | Security | Configured Gitleaks history/file scans with redacted diagnostics and one exact historical test-placeholder exception in [`.gitleaksignore`](.gitleaksignore); Trivy dependency, infrastructure and image scans; checksum-pinned tools |
 | Dependency updates | [Weekly Dependabot configuration](.github/dependabot.yml) for Actions, NuGet and Docker |
 
@@ -516,6 +518,7 @@ The current test commands are:
 dotnet test tests/Auth/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.AuthService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
 dotnet test tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/SmartLost.BuildingBlocks.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.BuildingBlocks.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
 dotnet test tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.ListingsService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet test tests/Matching/SmartLost.MatchingService.UnitTests/SmartLost.MatchingService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.MatchingService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
 dotnet test tests/Auth/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
 ```
 
@@ -525,7 +528,7 @@ Empty scaffold projects participate in inventory, locked restore, build and form
 The coverage assembly check requires reports once a project has C# compile items; the
 strictly-above-80% overall and changed-code gates remain in place.
 Coverage file paths and project directories use the same separators on Linux, Windows and macOS.
-The Listings unit suite covers the generated NMF implementation. Pure interfaces, enums
+The Listings and Matching unit suites cover their generated NMF implementations. Pure interfaces, enums
 and const-only static classes are recognized as declarations; executable generated code remains covered by
 the existing gates.
 Collection settings live in [coverage.runsettings](coverage.runsettings).
@@ -575,6 +578,8 @@ change as code/configuration, using relative links and verified, secret-safe exa
 
 ## Further reading
 
+- [Design patterns used in the project, source evidence and six-member presentation allocation](docs/DESIGN_PATTERNS.md)
+- [Separate design pattern presentation folders for members 1–6](docs/design-patterns/README.md)
 - Requirements analysis for the semester MVP, Azure delivery and future UML/C4 modelling: [Google Docs](https://docs.google.com/document/d/1AYPYDg9ku5bWQCnwcyzXk9HWsxV3w5WU/edit)
 - [Member 1 UML Use Case and C4 System Context diagrams](docs/diagrams/member-1/README.md)
 - [Member 2 UML Class and C4 Container diagrams](docs/diagrams/member-2/README.md)

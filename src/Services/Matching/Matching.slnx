@@ -4,11 +4,15 @@
     <Project Path="SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj" />
     <Project Path="SmartLost.MatchingService.Domain/SmartLost.MatchingService.Domain.csproj" />
     <Project Path="SmartLost.MatchingService.Infrastructure/SmartLost.MatchingService.Infrastructure.csproj" />
+    <Project Path="SmartLost.MatchingService.Modeling/SmartLost.MatchingService.Modeling.csproj" />
   </Folder>
   <Folder Name="/BuildingBlocks/">
     <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Core/SmartLost.BuildingBlocks.Core.csproj" />
     <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
     <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
     <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/SmartLost.BuildingBlocks.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="../../../tests/Matching/SmartLost.MatchingService.UnitTests/SmartLost.MatchingService.UnitTests.csproj" />
   </Folder>
 </Solution>

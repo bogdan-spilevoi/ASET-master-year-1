@@ -28,6 +28,7 @@
     <ProjectReference Include="../../../src/Services/Auth/SmartLost.AuthService.Application/SmartLost.AuthService.Application.csproj" />
     <ProjectReference Include="../../../src/Services/Auth/SmartLost.AuthService.Domain/SmartLost.AuthService.Domain.csproj" />
     <ProjectReference Include="../../../src/Services/Auth/SmartLost.AuthService.Infrastructure/SmartLost.AuthService.Infrastructure.csproj" />
+    <ProjectReference Include="../../../src/Services/Auth/SmartLost.AuthService.Modeling/SmartLost.AuthService.Modeling.csproj" />
     <ProjectReference Include="../../../src/Services/Auth/SmartLost.AuthService.Worker/SmartLost.AuthService.Worker.csproj" />
   </ItemGroup>
 
