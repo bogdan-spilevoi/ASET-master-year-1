@@ -25,6 +25,7 @@ try
         .SetBasePath(AppContext.BaseDirectory)
         .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
         .Build();
+    ExecutionOptions execution = ExecutionOptions.From(configuration);
     string promptPath = PathResolver.Resolve(configuration["Paths:PromptFile"]);
     string extractionPrompt = File.ReadAllText(promptPath);
     if (string.IsNullOrWhiteSpace(extractionPrompt))
@@ -70,6 +71,11 @@ try
     using var runtime = new OgaHandle();
     using var config = new Config(modelDirectory);
     config.ClearProviders();
+    if (execution.UsesCuda)
+    {
+        config.SetProviderOption("cuda", "device_id", execution.DeviceId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        config.AppendProvider("cuda");
+    }
     config.Overlay("""
         {
           "model": { "context_length": 4096 },
@@ -77,7 +83,7 @@ try
         }
         """);
 
-    Console.Error.WriteLine($"Loading model on CPU: {modelDirectory}");
+    Console.Error.WriteLine($"Loading model on {execution.Provider.ToUpperInvariant()}{(execution.UsesCuda ? $" device {execution.DeviceId}" : string.Empty)}: {modelDirectory}");
     var timer = Stopwatch.StartNew();
     using var model = new Model(config);
     Console.Error.WriteLine($"Model loaded in {timer.Elapsed.TotalSeconds:F1}s.");

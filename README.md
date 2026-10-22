@@ -4,7 +4,7 @@ A learning project for a campus lost-and-found application that will suggest mat
 listings using editable image-derived categories and photo similarity, with credibility points
 for confirmed recoveries. Qwen3-VL-4B-Instruct is selected for traits/categories and DINOv3
 ViT-L/16 for image similarity. The selected stack is .NET 10, Angular and PostgreSQL, with
-local model inference (ONNX Runtime verified in a standalone CPU experiment; service integration
+local model inference (ONNX Runtime verified in a standalone CPU experiment; optional NVIDIA CUDA execution is configured but not locally inferred yet; service integration
 is not implemented) and Azure Blob Storage for
 photos. The repository now includes the first runtime microservice: `SmartLost.AuthService.Api`, a dedicated
 authentication API with its own PostgreSQL database, Dockerfile and Compose setup.
@@ -214,7 +214,7 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | [`src/Services/Listings/`](src/Services/Listings/) | Runtime scaffold and a separate NMF structural model for listings, photos and categories; runtime functionality pending | [Module README](src/Services/Listings/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md) |
 | [`src/Services/Matching/`](src/Services/Matching/) | Scaffold for search projections, embeddings, ranking and the local AI client; functionality pending | [Module README](src/Services/Matching/README.md) |
 | [`SmartLost.BuildingBlocks.*`](src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | Reusable domain/event/result/pagination primitives, application behaviors, HTTP adapters and opt-in EF Core Outbox | [Building blocks guide](docs/BUILDING_BLOCKS.md) |
-| [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen CPU label extraction and DINOv3 CPU normalized image embeddings | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
+| [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen CPU/NVIDIA CUDA label extraction and DINOv3 CPU/NVIDIA CUDA normalized image embeddings | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
 
 `SmartLost.AuthService.Api` owns its database. Listings and Matching will each own a separate
 database; their scaffolds do not create or connect to databases. Cross-service identifiers
@@ -268,14 +268,14 @@ These commands build the included test projects without executing their tests.
 The full-backend CI commands remain in [Quality and CI](#quality-and-ci).
 
 The [local Qwen experiment](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md) uses ONNX Runtime GenAI
-to load a local Qwen3-VL model on CPU and extract English JSON object labels from an image using an
+to load a local Qwen3-VL model on CPU or NVIDIA CUDA and extract English JSON object labels from an image using an
 [editable prompt](AIModels/Qwen3-VL-4B-Instruct-ONNX/Prompts/image-labels.txt). It belongs to
 [`AIModels.slnx`](AIModels/AIModels.slnx), with independent build configuration and commands.
 Its source and configuration are versioned; model files and build outputs are ignored.
 The AI solution is excluded from CI restore/build/format/test checks; repository-wide security scans still apply.
 It has no HTTP API or tunnel configuration.
 
-Both AI projects read model/resource paths from their own ignored `appsettings.json`.
+Both AI projects read model/resource paths and an explicit CPU/CUDA provider from their own ignored `appsettings.json`.
 They use the standard .NET JSON configuration provider and a small path resolver.
 Copy the adjacent `appsettings.example.json` and edit `Paths` before running them;
 the [AI setup guide](AIModels/README.md#build-and-run) provides both copy commands
@@ -283,7 +283,7 @@ and path resolution rules. Local settings are copied into build/publish output;
 `--model` remains an optional directory override.
 
 The [DINOv3 application](AIModels/DINOv3-ViTL16-ONNX/README.md) in the same solution
-loads the community ONNX export on CPU and returns a normalized 1024-value image
+loads the community ONNX export on CPU or NVIDIA CUDA and returns a normalized 1024-value image
 embedding. It reads the downloaded preprocessing configuration and supports an
 interactive image path or a `--model` override. Its Release build succeeded locally;
 C# inference and revised float32 preprocessing passed the recorded tolerances

@@ -1,9 +1,9 @@
 # Local DINOv3 ONNX application
 
-`DinoVision.csproj` is a .NET 10 CPU console application in the standalone
+`DinoVision.csproj` is a .NET 10 CPU/NVIDIA CUDA console application in the standalone
 [AIModels.slnx](../AIModels.slnx), matching QwenVision's interactive/CLI path handling,
 model override, JSON standard output and progress/errors on standard error.
-It uses ONNX Runtime 1.30.0 and SkiaSharp 3.119.4 for image decoding, with Linux native
+It uses ONNX Runtime GPU 1.30.0 and SkiaSharp 3.119.4 for image decoding, with Linux native
 assets included. It has no prompt, text generation, HTTP/gRPC endpoint, tunnel or database.
 
 ## Download the selected community model
@@ -66,6 +66,20 @@ Only the example is committed. Rebuild after editing settings before using `--no
 `--model` overrides `ModelDirectory`; the other configured paths are retained.
 The external weights filename remains `model.onnx_data`, beside the graph, because
 that exact name is referenced inside the community ONNX model.
+
+The example uses CPU. To execute the same downloaded ONNX model on an NVIDIA GPU, install
+the CUDA/cuDNN runtime dependencies compatible with ONNX Runtime GPU 1.30.0, then set:
+
+```json
+"Execution": {
+  "Provider": "cuda",
+  "DeviceId": 0
+}
+```
+
+`DeviceId` is zero-based. CUDA errors are surfaced to the caller; the application never
+silently runs CPU when CUDA was requested. ONNX Runtime GPU packages support Windows and
+Linux; CPU remains available for macOS. Refer to the [CUDA provider requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html).
 
 From `AIModels/`:
 

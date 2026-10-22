@@ -14,13 +14,13 @@
           "Microsoft.Extensions.FileProviders.Abstractions": "10.0.12"
         }
       },
-      "Microsoft.ML.OnnxRuntimeGenAI": {
+      "Microsoft.ML.OnnxRuntimeGenAI.Cuda": {
         "type": "Direct",
         "requested": "[0.17.1, )",
         "resolved": "0.17.1",
-        "contentHash": "ilVYETKd71LXTiQtFqZ0wI7VS68h2J74J4CB7hO/0tXLeZZg0UshaJ4/tH1KL9N1CT4hocFMzYlH1gQqpmUfGw==",
+        "contentHash": "cycqHKeuZ2TvWk6n3vPp74zlyBJOltHusM8RRBygTh/UbYpJDJd/zhVdw70qsbsVynjBqRs7HXKpqwiMAwVNOQ==",
         "dependencies": {
-          "Microsoft.ML.OnnxRuntime": "1.30.0",
+          "Microsoft.ML.OnnxRuntime.Gpu": "1.30.0",
           "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.1"
         }
       },
@@ -86,10 +86,28 @@
         "resolved": "10.0.12",
         "contentHash": "dYfCLR52UA+3DL7C4I/pvSaRPkNqxrUAQmbFL2u0zvYKKzqgrFCJl08Df+F1aYc8leu9JvpC9bsURUdpExcBXQ=="
       },
-      "Microsoft.ML.OnnxRuntime": {
+      "Microsoft.ML.OnnxRuntime.Gpu": {
         "type": "Transitive",
         "resolved": "1.30.0",
-        "contentHash": "RaF3KjPXB/IbNvvrcQtrxS/NZjB9dEHnZQTsdJCLP5Fnn1Jj3LomeqR1mMAoRFKinJ0pIe85PLhLlfGBYqzgWA==",
+        "contentHash": "b6DVF152PcFbR3VlkI2K/WhgT9H/mCbOkyAhlvT+lARelZNqSlfZPXSU039asLe9QVhjYhf6Q5UX/OrEGusroA==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.Gpu.Linux": "1.30.0",
+          "Microsoft.ML.OnnxRuntime.Gpu.Windows": "1.30.0",
+          "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+        }
+      },
+      "Microsoft.ML.OnnxRuntime.Gpu.Linux": {
+        "type": "Transitive",
+        "resolved": "1.30.0",
+        "contentHash": "fjwyxVj3AlYkzIJcNYyi4H0N/mcsrREF3ArvEdyskifT6gKMBjPbM/2RxwyeQeQa3b7LzVjsVvCFbnpdVMfUOw==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+        }
+      },
+      "Microsoft.ML.OnnxRuntime.Gpu.Windows": {
+        "type": "Transitive",
+        "resolved": "1.30.0",
+        "contentHash": "TA9/mtOhJI+MJZXzkGkHbYJFGMCkRcBzS7XEMdauC36exh6q4+lw7P/90MbIgrrwYK04SIFykvTFnAXDpDpscA==",
         "dependencies": {
           "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
         }
