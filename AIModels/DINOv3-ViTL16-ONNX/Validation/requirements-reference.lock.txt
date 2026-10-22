@@ -25,7 +25,7 @@ onnx-ir==1.0.0
 onnxruntime==1.30.0
 onnxscript==0.7.2
 packaging==26.3
-pillow==12.3.0
+pillow==13.0.0
 pip==26.2.1
 protobuf==7.36.2
 Pygments==2.21.0
