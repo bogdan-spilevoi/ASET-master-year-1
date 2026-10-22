@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ecore:EPackage xmlns:xmi="http://www.omg.org/XMI"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+                xmi:version="2.0"
+                name="Auth"
+                nsURI="https://smartlost.example/models/auth/v1"
+                nsPrefix="auth">
+  <!-- Structural representation only; Auth runtime domain integration is separate. -->
+  <eClassifiers xsi:type="ecore:EDataType" name="Guid" instanceClassName="System.Guid" />
+  <eClassifiers xsi:type="ecore:EClass" name="UserAccount">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="id" lowerBound="1" eType="#//Guid" iD="true" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="userName" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="normalizedUserName" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="email" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="normalizedEmail" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="passwordHash" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <!-- NMF 2.0.467 cannot deserialize an ELong numeric default; runtime initializes this value to 1. -->
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="identityVersion" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//ELong" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="createdAtUtc" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDate" />
+    <eStructuralFeatures xsi:type="ecore:EReference" name="sessions" upperBound="-1" ordered="false" containment="true" eType="#//RefreshSession" eOpposite="#//RefreshSession/user" />
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="RefreshSession">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="id" lowerBound="1" eType="#//Guid" iD="true" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="currentTokenHash" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="expiresAtUtc" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDate" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="revokedAtUtc" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDate" />
+    <eStructuralFeatures xsi:type="ecore:EReference" name="user" lowerBound="1" eType="#//UserAccount" eOpposite="#//UserAccount/sessions" />
+    <eStructuralFeatures xsi:type="ecore:EReference" name="tokens" upperBound="-1" ordered="false" containment="true" eType="#//RefreshToken" eOpposite="#//RefreshToken/session" />
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="RefreshToken">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="id" lowerBound="1" eType="#//Guid" iD="true" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="tokenHash" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EReference" name="session" lowerBound="1" eType="#//RefreshSession" eOpposite="#//RefreshSession/tokens" />
+  </eClassifiers>
+</ecore:EPackage>

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="NMF-Basics" Version="2.0.467" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Metamodels/auth.nmeta"
+                      LogicalName="SmartLost.AuthService.Modeling.Metamodels.auth.nmeta" />
+    <AssemblyAttribute Include="NMF.Models.ModelMetadataAttribute">
+      <_Parameter1>https://smartlost.example/models/auth/v1</_Parameter1>
+      <_Parameter2>SmartLost.AuthService.Modeling.Metamodels.auth.nmeta</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

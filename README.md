@@ -33,7 +33,7 @@ VS Code's file explorer show the same service boundaries:
 src/
   Services/
     Auth/
-      Auth.slnx        # Auth projects, shared dependencies and Auth tests
+      Auth.slnx        # Auth runtime projects, NMF Modeling, shared dependencies and Auth tests
       SmartLost.AuthService.*/
     Listings/
       Listings.slnx    # Runtime scaffolds, NMF Modeling, shared dependencies and model tests
@@ -56,7 +56,7 @@ Future services belong under `src/Services/<Service>/`, with tests under
 | Solution | Scope |
 | --- | --- |
 | [Aset.slnx](Aset.slnx) | All backend projects and tests; the main CI entry point |
-| [Auth.slnx](src/Services/Auth/Auth.slnx) | Five Auth projects, four BuildingBlocks libraries and the two Auth test projects |
+| [Auth.slnx](src/Services/Auth/Auth.slnx) | Five Auth runtime projects, NMF Modeling, four BuildingBlocks libraries and the two Auth test projects |
 | [Listings.slnx](src/Services/Listings/Listings.slnx) | Four Listings runtime-layer scaffolds, NMF Modeling, four BuildingBlocks libraries and the Listings unit suite |
 | [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching scaffold projects and four BuildingBlocks libraries |
 | [BuildingBlocks.slnx](src/BuildingBlocks/BuildingBlocks.slnx) | Four shared libraries and their existing unit test project |
@@ -72,11 +72,12 @@ The runtime layers of Listings and Matching contain only project definitions and
 temporarily build as libraries until an entry point is implemented. They have no endpoints,
 database contexts, migrations, workers or containers. Service implementations
 will use the existing BuildingBlocks; neither service references the other's projects.
-Listings also has a separate [NMF structural model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md)
-for Listing, Photo, Category and ListingCategory: Ecore source, generated NMeta/C#
-and a sample XMI instance. The runtime layers do not reference Modeling. A separate
-[Listings unit suite](tests/Listings/SmartLost.ListingsService.UnitTests/README.md)
-checks the model and collects its coverage.
+Listings and Auth have separate [NMF structural models](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md)
+and [Auth model documentation](src/Services/Auth/SmartLost.AuthService.Modeling/README.md).
+They contain Ecore sources and generated NMeta/C# representations; Listings also has a sample
+XMI instance. Runtime layers do not reference either Modeling project. The dedicated
+[Listings unit suite](tests/Listings/SmartLost.ListingsService.UnitTests/README.md) and the Auth
+unit suite check their respective models and collect generated-code coverage.
 
 The [current hosting proposal](docs/AZURE_STUDENT_ARCHITECTURE.md) uses globally
 distributed static frontend hosting, APIs and persistent data in Switzerland North,
@@ -474,8 +475,8 @@ sanitized 500 problem and are logged server-side.
 | --- | --- |
 | SDK / target | SDK **10.0.401** pinned exactly in `global.json` and the Docker build image; `SmartLost.AuthService.Api` targets `net10.0`; the runtime image uses `aspnet:10.0` |
 | Style / analysis | `.editorconfig`, .NET 10 recommended analyzers, nullable references, warnings as errors |
-| Dependencies | Locked restore and direct/transitive NuGet auditing; lock files required with projects; local `dotnet-ef` 10.0.12 and `NMF-Ecore2Code` 2.0.467 pinned in `.config/dotnet-tools.json`; Listings Modeling references `NMF-Basics` 2.0.467 |
-| Tests / coverage | All tests must pass; unit tests check Auth migration/model drift, PostgreSQL SQL generation and the NMF Listings model; **Coverlet** collects unit line coverage; inline workflow gates require **strictly above 80%** overall and on changed executable code; declaration-only interfaces, enums and const-only static classes are recognized regardless of location |
+| Dependencies | Locked restore and direct/transitive NuGet auditing; lock files required with projects; local `dotnet-ef` 10.0.12 and `NMF-Ecore2Code` 2.0.467 pinned in `.config/dotnet-tools.json`; Auth and Listings Modeling reference `NMF-Basics` 2.0.467 |
+| Tests / coverage | All tests must pass; unit tests check Auth migration/model drift, PostgreSQL SQL generation and the NMF Auth and Listings models; **Coverlet** collects unit line coverage; inline workflow gates require **strictly above 80%** overall and on changed executable code; declaration-only interfaces, enums and const-only static classes are recognized regardless of location |
 | Security | Configured Gitleaks history/file scans with redacted diagnostics and one exact historical test-placeholder exception in [`.gitleaksignore`](.gitleaksignore); Trivy dependency, infrastructure and image scans; checksum-pinned tools |
 | Dependency updates | [Weekly Dependabot configuration](.github/dependabot.yml) for Actions, NuGet and Docker |
 

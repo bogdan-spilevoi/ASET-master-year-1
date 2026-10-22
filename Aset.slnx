@@ -11,6 +11,7 @@
     <Project Path="src/Services/Auth/SmartLost.AuthService.Application/SmartLost.AuthService.Application.csproj" />
     <Project Path="src/Services/Auth/SmartLost.AuthService.Domain/SmartLost.AuthService.Domain.csproj" />
     <Project Path="src/Services/Auth/SmartLost.AuthService.Infrastructure/SmartLost.AuthService.Infrastructure.csproj" />
+    <Project Path="src/Services/Auth/SmartLost.AuthService.Modeling/SmartLost.AuthService.Modeling.csproj" />
     <Project Path="src/Services/Auth/SmartLost.AuthService.Worker/SmartLost.AuthService.Worker.csproj" />
   </Folder>
   <Folder Name="/Services/Listings/">

@@ -4,6 +4,7 @@
     <Project Path="SmartLost.AuthService.Application/SmartLost.AuthService.Application.csproj" />
     <Project Path="SmartLost.AuthService.Domain/SmartLost.AuthService.Domain.csproj" />
     <Project Path="SmartLost.AuthService.Infrastructure/SmartLost.AuthService.Infrastructure.csproj" />
+    <Project Path="SmartLost.AuthService.Modeling/SmartLost.AuthService.Modeling.csproj" />
     <Project Path="SmartLost.AuthService.Worker/SmartLost.AuthService.Worker.csproj" />
   </Folder>
   <Folder Name="/BuildingBlocks/">
