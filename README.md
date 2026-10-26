@@ -76,7 +76,9 @@ will use the existing BuildingBlocks; neither service references the other's pro
 Listings and Auth have separate [NMF structural models](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md)
 and [Auth model documentation](src/Services/Auth/SmartLost.AuthService.Modeling/README.md).
 They contain Ecore sources and generated NMeta/C# representations; Listings also has a sample
-XMI instance. Runtime layers do not reference either Modeling project. The dedicated
+publication XMI and a confirmed-recovery XMI. Its seven model classes include decisions,
+recoveries and credibility entries; these represent structure, not executable recovery
+or point-awarding workflows. Runtime layers do not reference either Modeling project. The dedicated
 [Listings unit suite](tests/Listings/SmartLost.ListingsService.UnitTests/README.md) and the Auth
 unit suite check their respective models and collect generated-code coverage.
 
@@ -132,7 +134,7 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 
 ![Member 2 C4 Container diagram](docs/diagrams/member-2/images/smartlost-containers.png)
 
-**Export note.** The supplied container PNG shows the earlier model placement inside Matching. The current source separates the local AI runtime and external tunnel; Member 6 shows their deployment.
+**Export note.** The class PNG predates the latest NMF extensions; its editable source includes source change sequences, current photo selection and embedding preparation tasks. The supplied container PNG shows the earlier model placement inside Matching. The current source separates the local AI runtime and external tunnel; Member 6 shows their deployment.
 
 [Explanation and editable sources](docs/diagrams/member-2/README.md)
 
@@ -213,8 +215,8 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | [`.github/`](.github/) | GitHub Actions workflows, PR/main validation, Coverlet gates, security and container checks | [CI guide](.github/README.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Finite Auth Outbox job delivering versioned public-profile snapshots to configured HTTP receivers | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
-| [`src/Services/Listings/`](src/Services/Listings/) | Runtime scaffold and a separate NMF structural model for listings, photos and categories; runtime functionality pending | [Module README](src/Services/Listings/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md) |
-| [`src/Services/Matching/`](src/Services/Matching/) | Runtime scaffold plus a separate NMF structural model for search projections and versioned embeddings; ranking/client integration pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
+| [`src/Services/Listings/`](src/Services/Listings/) | Runtime scaffold and separate NMF models for listings with change sequences, photos, categories, match decisions, recoveries and credibility entries; runtime functionality pending | [Module README](src/Services/Listings/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md) |
+| [`src/Services/Matching/`](src/Services/Matching/) | Runtime scaffold plus NMF search projections with current photo identity/revision, versioned embeddings and preparation tasks; worker/ranking/client integration pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
 | [`SmartLost.BuildingBlocks.*`](src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | Reusable domain/event/result/pagination primitives, application behaviors, HTTP adapters and opt-in EF Core Outbox | [Building blocks guide](docs/BUILDING_BLOCKS.md) |
 | [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen CPU/NVIDIA CUDA label extraction and DINOv3 CPU/NVIDIA CUDA normalized image embeddings | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
 

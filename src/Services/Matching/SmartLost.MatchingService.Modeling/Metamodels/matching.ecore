@@ -10,12 +10,22 @@
     <eLiterals name="Lost" value="0" />
     <eLiterals name="Found" value="1" />
   </eClassifiers>
+  <eClassifiers xsi:type="ecore:EEnum" name="EmbeddingPreparationState">
+    <eLiterals name="Pending" value="0" />
+    <eLiterals name="Processing" value="1" />
+    <eLiterals name="Ready" value="2" />
+    <eLiterals name="Failed" value="3" />
+    <eLiterals name="Obsolete" value="4" />
+  </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="SearchListing">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="listingId" lowerBound="1" iD="true" eType="#//Guid" />
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="sourceRevision" lowerBound="1" defaultValueLiteral="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" />
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="changeSequence" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//ELong" />
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="type" lowerBound="1" defaultValueLiteral="Lost" eType="#//ListingType" />
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="authorId" lowerBound="1" eType="#//Guid" />
+    <!-- Both absent without a photo; runtime validation must require a complete pair otherwise. -->
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="currentPhotoId" eType="#//Guid" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="currentPhotoRevision" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" />
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="categoryKeys" upperBound="-1" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="colour"  eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="traits" upperBound="-1" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
@@ -34,5 +44,21 @@
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="dimensions" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" />
     <!-- Ordered vector: repeated numeric components must be retained. -->
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="vector" lowerBound="1" upperBound="-1" unique="false" ordered="true" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EFloat" />
+  </eClassifiers>
+  <!-- Independent durable-work representation; no worker or persistence is generated. -->
+  <eClassifiers xsi:type="ecore:EClass" name="EmbeddingPreparationTask">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="id" lowerBound="1" iD="true" eType="#//Guid" />
+    <eStructuralFeatures xsi:type="ecore:EReference" name="searchListing" lowerBound="1" eType="#//SearchListing" />
+    <!-- Immutable processing target at runtime; not derived from a later projection update. -->
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="photoId" lowerBound="1" eType="#//Guid" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="photoRevision" lowerBound="1" defaultValueLiteral="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="modelVersion" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="preprocessingVersion" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="state" lowerBound="1" defaultValueLiteral="Pending" eType="#//EmbeddingPreparationState" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="attemptCount" lowerBound="1" defaultValueLiteral="0" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="nextAttemptAt" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDate" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="leaseId" eType="#//Guid" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="leaseExpiresAt" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDate" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="lastError" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
   </eClassifiers>
 </ecore:EPackage>

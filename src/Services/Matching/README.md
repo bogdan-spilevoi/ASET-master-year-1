@@ -15,8 +15,13 @@ This module contains four empty runtime-layer .NET 10 projects, a separate
 [NMF Modeling library](SmartLost.MatchingService.Modeling/README.md) and [Matching.slnx](Matching.slnx).
 The runtime layers have no C# source files, endpoints, dependency registrations, database
 contexts, migrations, runtime settings, workers, Dockerfiles or Compose services.
-The generated SearchListing/ImageEmbedding types are exercised by
+The generated SearchListing/ImageEmbedding/EmbeddingPreparationTask types are exercised by
 [model tests](../../../tests/Matching/SmartLost.MatchingService.UnitTests/README.md).
+SearchListing records the optional current photo ID/revision pair so future cache
+selection can distinguish current evidence from historical embeddings. Pair validation
+and stale-vector exclusion remain runtime work.
+EmbeddingPreparationTask models captured inference targets, retry metadata and temporary
+leases; it does not implement a worker, database queue or retry execution.
 The API uses the Web SDK with `OutputType=Library` so the scaffold builds without a
 `Program.cs`. Remove that property when implementing the executable API entry point.
 Runtime layers do not reference Modeling; generated types are not integrated domain aggregates.
@@ -29,7 +34,7 @@ Runtime layers do not reference Modeling; generated types are not integrated dom
 | [SmartLost.MatchingService.Application](SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj) | Future projection updates, analysis, ranking use cases and inference ports. | Own Domain; BuildingBlocks.Application. |
 | [SmartLost.MatchingService.Domain](SmartLost.MatchingService.Domain/SmartLost.MatchingService.Domain.csproj) | Future search projection, embedding and suggestion models and invariants. | BuildingBlocks.Core. |
 | [SmartLost.MatchingService.Infrastructure](SmartLost.MatchingService.Infrastructure/SmartLost.MatchingService.Infrastructure.csproj) | Future Matching-owned PostgreSQL persistence, local AI HTTP client and delivery adapters. | Own Application and Domain; BuildingBlocks.Infrastructure. |
-| [SmartLost.MatchingService.Modeling](SmartLost.MatchingService.Modeling/README.md) | Matching-owned projection and versioned embedding structural model; generated NMF classes and metadata. | NMF-Basics; no service runtime references. |
+| [SmartLost.MatchingService.Modeling](SmartLost.MatchingService.Modeling/README.md) | Matching-owned projection, versioned embedding and preparation-task structural models; generated NMF classes and metadata. | NMF-Basics; no service runtime references. |
 
 The focused solution also lists the four shared BuildingBlocks projects directly.
 The root [Aset.slnx](../../../Aset.slnx) lists these same service projects. Solutions

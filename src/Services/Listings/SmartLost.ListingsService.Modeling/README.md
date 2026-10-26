@@ -1,7 +1,8 @@
 # Listings model with NMF
 
-This .NET 10 library implements the first structural model for the optional laboratory
-exercise: Listing, Photo, Category and ListingCategory. It references
+This .NET 10 library implements the structural model for the optional laboratory
+exercise: Listing, Photo, Category, ListingCategory, MatchDecision, Recovery and
+CredibilityEntry. It references
 `NMF-Basics` **2.0.467** and is included in both [Listings.slnx](../Listings.slnx)
 and the root [Aset.slnx](../../../../Aset.slnx).
 
@@ -18,6 +19,7 @@ Domain, Application, Infrastructure and Api do not reference Modeling.
 | [Metamodels/listings.ecore](Metamodels/listings.ecore) | Hand-written source of truth: classes, attributes, enums, references and multiplicities |
 | [Metamodels/listings.nmeta](Metamodels/listings.nmeta) | Converted NMeta metamodel, generated from Ecore and embedded in the assembly |
 | [Models/campus-backpacks.xmi](Models/campus-backpacks.xmi) | Example instance authored with generated classes and serialized using NMF |
+| [Models/matched-recovery.xmi](Models/matched-recovery.xmi) | Fictional confirmed pair, independent recovery and one finder award, serialized using NMF |
 | [Generated](Generated/) | Generated C# classes, interfaces, enums and a collection helper; do not edit manually |
 | [Transformations](Transformations/) | Reserved for optional custom C# NTL rules; none are implemented |
 
@@ -60,13 +62,17 @@ dotnet restore src/Services/Listings/Listings.slnx --locked-mode
 dotnet build src/Services/Listings/Listings.slnx --no-restore --configuration Release --warnaserror
 ```
 
-## First structural model
+## Structural model
 
 ```mermaid
 classDiagram
     Listing "1" *-- "0..1" Photo : current photo
     Listing "1" *-- "0..*" ListingCategory : confirmed assignments
     ListingCategory "0..*" --> "1" Category : category
+    MatchDecision "0..*" --> "1" Listing : lostListing
+    MatchDecision "0..*" --> "1" Listing : foundListing
+    MatchDecision "1" -- "0..1" Recovery : matchDecision / recovery
+    Recovery "1" -- "1" CredibilityEntry : recovery / credibilityEntry
 ```
 
 Listing contains the current Photo and category assignment objects. The assignments
@@ -85,21 +91,73 @@ Enums are `ListingType { Lost, Found }`, `ListingState { Draft, Open, Closed }` 
 `ClosureReason` and `PublishedAt` are nullable. Ecore `EDate` maps to `DateTime`;
 `OccurredOn` has calendar-date business meaning, with runtime conversion/validation pending.
 
+`Listing.ChangeSequence` is a required `long`, separate from the integer content
+Revision. It defaults to 0 for an unsubmitted draft. Runtime publication starts at 1;
+subsequent content or eligibility changes increment it atomically, including acceptance,
+cancellation, recovery and closure. Pair operations update both affected listings as
+needed. The pinned NMF converter cannot deserialize an ELong numeric default, so no
+explicit ELong default literal is used. The generated property does not auto-increment.
+
+Listings runtime persistence will commit the changed records, sequence increments and
+full-snapshot Outbox messages together with concurrency protection. Outbox envelope
+Version is the contract version; ChangeSequence belongs in the snapshot payload. The
+existing BuildingBlocks Outbox supplies delivery attempts, leases and retries when a
+service integrates it. No duplicate SynchronisationTask class or Outbox model is added
+to this metamodel; a future processing view can derive delivery status from Outbox.
+
 The [example XMI](Models/campus-backpacks.xmi) has four model roots: two shared
 categories, backpack and bag, and two Open listings with distinct authors, one Lost and
 one Found. Four contained assignments reference the same two categories. The Lost
 listing has one photo and two multiword traits; the Found listing demonstrates an
 optional missing photo. The serializer can omit the default Lost type and revision 1.
-The blob key is illustrative metadata; no image is uploaded or included.
+Both published examples start with ChangeSequence 1. The blob key is illustrative
+metadata; no image is uploaded or included.
 No match decision, recovery or point award is represented by this sample.
 
-## Candidate entities for discussion
+## Decisions, recoveries and credibility
+
+MatchDecision, Recovery and CredibilityEntry are independent model roots. Their
+references are non-containment: a decision does not own either listing, and unlinking
+a recovery does not delete the paired listings. Use the explicit `LostListing` and
+`FoundListing` properties to assign roles; a generic reference-collection `Add` cannot
+distinguish two references with the same target type.
+
+`MatchDecision` records both reviewed revisions and defaults to Suggested, with revision
+defaults of 1. `MatchDecisionState` contains Suggested, Accepted, Rejected, Confirmed
+and Invalidated. `DecidedBy` and `DecidedAt` are nullable until a human decision exists;
+the runtime must require the Lost owner's ID and a UTC timestamp for acceptance or
+rejection. Automatic invalidation need not invent a human actor. Cancellation returns
+to Suggested; no extra Cancelled state was introduced.
+
+The opposite references represent at most one Recovery per MatchDecision, and one
+CredibilityEntry per confirmed Recovery. User identifiers (`DecidedBy`, `ConfirmedBy`,
+`BeneficiaryId`, `HelpedUserId`) refer logically to Auth. Entity identifiers are accessed
+through references such as `entry.Recovery.Id` rather than duplicate writable FK fields.
+`Points` defaults to 1. Totals and distinct helped users are derived views of the ledger.
+
+The [recovery sample](Models/matched-recovery.xmi) has seven roots: two shared categories,
+two listings, a confirmed decision, a recovery and an award. The Lost listing is Closed
+with reason Recovered; the Found listing remains Open. The finder receives one point
+for helping the Lost owner. Fictional IDs and explicit UTC audit values are used. This is
+a serialized final-state example, not execution of a business recovery operation.
+Both listings have ChangeSequence 3, representing publication, acceptance and confirmed
+recovery eligibility updates while their content Revision remains 1.
+
+NMF opposite setters keep the current in-memory links consistent but allow reassignment
+and null during construction. They do not enforce historical immutability, authorization,
+pair eligibility, reservation uniqueness or persistence. The runtime must enforce unique
+recovery/award keys and commit recovery, its eligible award, listing changes and durable
+updates consistently. No API, database mapping, migration or point-awarding workflow is
+implemented by this model extension. Model tests that delete or relink roots exercise
+NMF reference cleanup; they do not authorize deletion of business history.
+
+## Modelled entities and proposed runtime roles
 
 This is a proposal derived from the current
 [class diagram](../../../../docs/diagrams/member-2/smartlost-domain-classes.puml)
 and [Listings workflows](../../../../docs/diagrams/member-4/README.md).
-The first four rows now have NMF representations. These are not runtime domain entities;
-aggregate boundaries and the remaining three model candidates are still proposals.
+All seven rows now have NMF representations. These are not runtime domain entities;
+runtime aggregate and transaction boundaries remain proposals.
 
 | Candidate | Responsibility and main relationships | Proposed domain role |
 | --- | --- | --- |
@@ -141,10 +199,10 @@ invalid partially constructed objects. Generated setters are not the future doma
 
 ### Technical state and other service boundaries
 
-- `OutboxMessage` is shared delivery infrastructure, not a new business aggregate.
-  The diagram's `SynchronisationTask` can potentially use the existing Outbox; whether it
-  also needs a separate user-visible processing record remains a design decision.
-- `SearchListing`, `ImageEmbedding` and suggestion ranking belong to Matching.
+- `OutboxMessage` is shared delivery infrastructure. The planned implementation of the
+  diagram's conceptual `SynchronisationTask` reuses this Outbox in Listings' own database;
+  it is not another NMF business aggregate. Runtime adoption remains unimplemented.
+- `SearchListing`, `ImageEmbedding`, `EmbeddingPreparationTask` and suggestion ranking belong to Matching.
   A suggestion returned to Listings can be a DTO rather than a persisted Listings entity.
 - `ListingType`, `ListingState`, `ClosureReason` and `MatchDecisionState` are enums.
   Location/traits can initially be attributes or value objects, not independent entities.
@@ -153,11 +211,11 @@ invalid partially constructed objects. Generated setters are not the future doma
 
 ## Next modeling decisions
 
-The Ecore model now covers `Listing`, `Photo`, `Category` and `ListingCategory`.
-The next candidates are `MatchDecision`, `Recovery` and `CredibilityEntry`; design
-accepted-pair reservations, physical recovery and the unique award commit together
-before extending the metamodel. Decide which business rules require explicit C#
-validation or transformation rather than relying on structural multiplicities.
+The Ecore model covers all seven business concepts and the source ChangeSequence.
+Next, implement runtime aggregate boundaries, accepted-pair reservation concurrency,
+the atomic recovery/award commit and Outbox snapshot delivery. Match processing status
+must reflect the consumer checkpoint as well as delivery acknowledgement. Explicit C#
+validation is required; structural multiplicities do not enforce those operations.
 
 NMF generates model representation classes. Integration with existing `AggregateRoot`,
 domain events, EF Core mappings, transactions and runtime use cases is a separate decision.
@@ -178,6 +236,21 @@ Pure interfaces, enums and const-only static classes are declaration-only contra
 generated implementation remains subject to coverage. No implementation exclusion
 or percentage relaxation has been introduced. Hosted CI verification is separate
 from local test results.
+
+## Local verification on 2026-10-26
+
+The pinned generator and generated-code whitespace formatter completed successfully.
+Locked root restore with NuGet audit, Release build with warnings as errors and root
+format/analyzer verification passed. All 28 Listings model tests passed; Coverlet
+reported 94.35% line coverage for the Modeling assembly. The existing four backend
+unit suites passed 180 tests in total after the Matching preparation-task extension.
+The CI coverage logic, evaluated locally against the full working change including
+new files, passed at 93.40% overall and 95.81% for
+changed executable lines. No coverage exclusions or thresholds changed.
+
+Gitleaks scans of Listings source and tests found no secrets. Documentation links and
+Ecore/NMeta XML were checked. PostgreSQL integration tests, hosted Windows/Linux CI,
+containers and Azure were not run for this structural extension.
 
 ## References
 

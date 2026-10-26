@@ -14,6 +14,13 @@
     <Literals Value="0" Name="Recovered" />
     <Literals Value="1" Name="Withdrawn" />
   </Types>
+  <Types xsi:type="nmeta:Enumeration" Name="MatchDecisionState">
+    <Literals Value="0" Name="Suggested" />
+    <Literals Value="1" Name="Accepted" />
+    <Literals Value="2" Name="Rejected" />
+    <Literals Value="3" Name="Confirmed" />
+    <Literals Value="4" Name="Invalidated" />
+  </Types>
   <Types xsi:type="nmeta:Class" IdentifierScope="Global" Identifier="#//Listing/id" Name="Listing">
     <References IsContainment="true" Opposite="#//Photo/listing" ReferenceType="nmeta:Class #//Photo" IsOrdered="true" IsUnique="true" Name="photo" />
     <References IsContainment="true" Opposite="#//ListingCategory/listing" ReferenceType="nmeta:Class #//ListingCategory" IsOrdered="true" IsUnique="true" UpperBound="-1" Name="categories" />
@@ -29,6 +36,7 @@
     <Attributes DefaultValue="Draft" IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:Enumeration #//ListingState" Name="state" />
     <Attributes IsOrdered="true" IsUnique="true" Type="nmeta:Enumeration #//ClosureReason" Name="closureReason" />
     <Attributes DefaultValue="1" IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//Integer" Name="revision" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//Long" Name="changeSequence" />
     <Attributes IsOrdered="true" IsUnique="true" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//DateTime" Name="publishedAt" />
   </Types>
   <Types xsi:type="nmeta:Class" IdentifierScope="Global" Identifier="#//Photo/id" Name="Photo">
@@ -46,5 +54,31 @@
   <Types xsi:type="nmeta:Class" Name="ListingCategory">
     <References Opposite="#//Listing/categories" ReferenceType="nmeta:Class #//Listing" IsOrdered="true" IsUnique="true" LowerBound="1" Name="listing" />
     <References ReferenceType="nmeta:Class #//Category" IsOrdered="true" IsUnique="true" LowerBound="1" Name="category" />
+  </Types>
+  <Types xsi:type="nmeta:Class" IdentifierScope="Global" Identifier="#//MatchDecision/id" Name="MatchDecision">
+    <References ReferenceType="nmeta:Class #//Listing" IsOrdered="true" IsUnique="true" LowerBound="1" Name="lostListing" />
+    <References ReferenceType="nmeta:Class #//Listing" IsOrdered="true" IsUnique="true" LowerBound="1" Name="foundListing" />
+    <References Opposite="#//Recovery/matchDecision" ReferenceType="nmeta:Class #//Recovery" IsOrdered="true" IsUnique="true" Name="recovery" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType #//Guid" Name="id" />
+    <Attributes DefaultValue="1" IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//Integer" Name="lostRevision" />
+    <Attributes DefaultValue="1" IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//Integer" Name="foundRevision" />
+    <Attributes DefaultValue="Suggested" IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:Enumeration #//MatchDecisionState" Name="state" />
+    <Attributes IsOrdered="true" IsUnique="true" Type="nmeta:PrimitiveType #//Guid" Name="decidedBy" />
+    <Attributes IsOrdered="true" IsUnique="true" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//DateTime" Name="decidedAt" />
+  </Types>
+  <Types xsi:type="nmeta:Class" IdentifierScope="Global" Identifier="#//Recovery/id" Name="Recovery">
+    <References Opposite="#//MatchDecision/recovery" ReferenceType="nmeta:Class #//MatchDecision" IsOrdered="true" IsUnique="true" LowerBound="1" Name="matchDecision" />
+    <References Opposite="#//CredibilityEntry/recovery" ReferenceType="nmeta:Class #//CredibilityEntry" IsOrdered="true" IsUnique="true" LowerBound="1" Name="credibilityEntry" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType #//Guid" Name="id" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType #//Guid" Name="confirmedBy" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//DateTime" Name="confirmedAt" />
+  </Types>
+  <Types xsi:type="nmeta:Class" IdentifierScope="Global" Identifier="#//CredibilityEntry/id" Name="CredibilityEntry">
+    <References Opposite="#//Recovery/credibilityEntry" ReferenceType="nmeta:Class #//Recovery" IsOrdered="true" IsUnique="true" LowerBound="1" Name="recovery" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType #//Guid" Name="id" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType #//Guid" Name="beneficiaryId" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType #//Guid" Name="helpedUserId" />
+    <Attributes DefaultValue="1" IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//Integer" Name="points" />
+    <Attributes IsOrdered="true" IsUnique="true" LowerBound="1" Type="nmeta:PrimitiveType http://nmf.codeplex.com/nmeta/#//DateTime" Name="awardedAt" />
   </Types>
 </nmeta:Namespace>
