@@ -12,12 +12,13 @@ namespace SmartLost.ListingsService.UnitTests;
 public sealed partial class ListingsModelTests
 {
     [Fact]
-    public void DefaultsAndMetamodelPreserveTheFourClassStructure()
+    public void DefaultsAndMetamodelPreserveThePublicationStructure()
     {
         Listing listing = new();
         Assert.Equal(ListingType.Lost, listing.Type);
         Assert.Equal(ListingState.Draft, listing.State);
         Assert.Equal(1, listing.Revision);
+        Assert.Equal(0L, listing.ChangeSequence);
         Assert.Null(listing.ClosureReason);
         Assert.Null(listing.PublishedAt);
         Assert.Null(listing.Photo);
@@ -73,6 +74,9 @@ public sealed partial class ListingsModelTests
     [InlineData("Listing")]
     [InlineData("Photo")]
     [InlineData("Category")]
+    [InlineData("MatchDecision")]
+    [InlineData("Recovery")]
+    [InlineData("CredibilityEntry")]
     public void ScalarAttributesSupportReflectiveAccessAndObservableUpdates(string className)
     {
         ModelElement element = CreateInspectable(className);
@@ -83,8 +87,8 @@ public sealed partial class ListingsModelTests
 
         foreach (IAttribute attribute in element.GetClass().Attributes.Where(attribute => attribute.UpperBound == 1))
         {
-            object first = AttributeValue(attribute.Name, false);
-            object second = AttributeValue(attribute.Name, true);
+            object first = AttributeValue(attribute.Name, false, className);
+            object second = AttributeValue(attribute.Name, true, className);
             string propertyName = char.ToUpperInvariant(attribute.Name[0]) + attribute.Name[1..];
             ValueChangedEventArgs? changing = null;
             ValueChangedEventArgs? changed = null;
@@ -206,7 +210,10 @@ public sealed partial class ListingsModelTests
         [
             new Listing { Id = Guid.NewGuid() },
             new Photo { Id = Guid.NewGuid() },
-            new Category { Id = Guid.NewGuid() }
+            new Category { Id = Guid.NewGuid() },
+            new MatchDecision { Id = Guid.NewGuid() },
+            new Recovery { Id = Guid.NewGuid() },
+            new CredibilityEntry { Id = Guid.NewGuid() }
         ];
 
         foreach (ModelElement element in elements)
@@ -246,6 +253,7 @@ public sealed partial class ListingsModelTests
         {
             Assert.Equal(ListingState.Open, listing.State);
             Assert.Equal(1, listing.Revision);
+            Assert.Equal(1L, listing.ChangeSequence);
             Assert.Null(listing.ClosureReason);
             Assert.NotNull(listing.PublishedAt);
             Assert.Equal(2, listing.Categories.Count);
@@ -271,23 +279,28 @@ public sealed partial class ListingsModelTests
             "Listing" => new InspectableListing(),
             "Photo" => new InspectablePhoto(),
             "Category" => new InspectableCategory(),
+            "MatchDecision" => new InspectableMatchDecision(),
+            "Recovery" => new InspectableRecovery(),
+            "CredibilityEntry" => new InspectableCredibilityEntry(),
             _ => throw new ArgumentException("Unsupported model class.", nameof(className))
         };
     }
 
-    private static object AttributeValue(string name, bool alternate)
+    private static object AttributeValue(string name, bool alternate, string className)
     {
         return name switch
         {
-            "id" or "authorId" => alternate
+            "id" or "authorId" or "decidedBy" or "confirmedBy" or "beneficiaryId" or "helpedUserId" => alternate
                 ? Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002")
                 : Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001"),
             "type" => alternate ? ListingType.Lost : ListingType.Found,
+            "state" when className == "MatchDecision" => alternate ? MatchDecisionState.Confirmed : MatchDecisionState.Accepted,
             "state" => alternate ? ListingState.Closed : ListingState.Open,
             "closureReason" => alternate ? ClosureReason.Withdrawn : ClosureReason.Recovered,
-            "revision" => alternate ? 3 : 2,
+            "revision" or "lostRevision" or "foundRevision" or "points" => alternate ? 3 : 2,
             "byteSize" => alternate ? 2048L : 1024L,
-            "occurredOn" or "publishedAt" => new DateTime(2026, 10, alternate ? 2 : 1, 0, 0, 0, DateTimeKind.Utc),
+            "changeSequence" => alternate ? 3000000002L : 3000000001L,
+            "occurredOn" or "publishedAt" or "decidedAt" or "confirmedAt" or "awardedAt" => new DateTime(2026, 10, alternate ? 2 : 1, 0, 0, 0, DateTimeKind.Utc),
             _ => alternate ? "updated value" : "initial value"
         };
     }

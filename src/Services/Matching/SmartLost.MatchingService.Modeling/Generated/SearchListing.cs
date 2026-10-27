@@ -84,6 +84,22 @@ namespace SmartLost.MatchingService.Modeling.Matching
         private static Lazy<ITypedElement> _authorIdAttribute = new Lazy<ITypedElement>(RetrieveAuthorIdAttribute);
 
         /// <summary>
+        /// The backing field for the CurrentPhotoId property
+        /// </summary>
+        [DebuggerBrowsableAttribute(DebuggerBrowsableState.Never)]
+        private Nullable<System.Guid> _currentPhotoId;
+
+        private static Lazy<ITypedElement> _currentPhotoIdAttribute = new Lazy<ITypedElement>(RetrieveCurrentPhotoIdAttribute);
+
+        /// <summary>
+        /// The backing field for the CurrentPhotoRevision property
+        /// </summary>
+        [DebuggerBrowsableAttribute(DebuggerBrowsableState.Never)]
+        private Nullable<int> _currentPhotoRevision;
+
+        private static Lazy<ITypedElement> _currentPhotoRevisionAttribute = new Lazy<ITypedElement>(RetrieveCurrentPhotoRevisionAttribute);
+
+        /// <summary>
         /// The backing field for the CategoryKeys property
         /// </summary>
         [DebuggerBrowsableAttribute(DebuggerBrowsableState.Never)]
@@ -286,6 +302,62 @@ namespace SmartLost.MatchingService.Modeling.Matching
                     this._authorId = value;
                     this.OnAuthorIdChanged(e);
                     this.OnPropertyChanged("AuthorId", e, _authorIdAttribute);
+                }
+            }
+        }
+
+        /// <summary>
+        /// The currentPhotoId property
+        /// </summary>
+        [DisplayNameAttribute("currentPhotoId")]
+        [CategoryAttribute("SearchListing")]
+        [XmlElementNameAttribute("currentPhotoId")]
+        [XmlAttributeAttribute(true)]
+        public Nullable<System.Guid> CurrentPhotoId
+        {
+            get
+            {
+                return this._currentPhotoId;
+            }
+            set
+            {
+                if ((this._currentPhotoId != value))
+                {
+                    Nullable<System.Guid> old = this._currentPhotoId;
+                    ValueChangedEventArgs e = new ValueChangedEventArgs(old, value);
+                    this.OnCurrentPhotoIdChanging(e);
+                    this.OnPropertyChanging("CurrentPhotoId", e, _currentPhotoIdAttribute);
+                    this._currentPhotoId = value;
+                    this.OnCurrentPhotoIdChanged(e);
+                    this.OnPropertyChanged("CurrentPhotoId", e, _currentPhotoIdAttribute);
+                }
+            }
+        }
+
+        /// <summary>
+        /// The currentPhotoRevision property
+        /// </summary>
+        [DisplayNameAttribute("currentPhotoRevision")]
+        [CategoryAttribute("SearchListing")]
+        [XmlElementNameAttribute("currentPhotoRevision")]
+        [XmlAttributeAttribute(true)]
+        public Nullable<int> CurrentPhotoRevision
+        {
+            get
+            {
+                return this._currentPhotoRevision;
+            }
+            set
+            {
+                if ((this._currentPhotoRevision != value))
+                {
+                    Nullable<int> old = this._currentPhotoRevision;
+                    ValueChangedEventArgs e = new ValueChangedEventArgs(old, value);
+                    this.OnCurrentPhotoRevisionChanging(e);
+                    this.OnPropertyChanging("CurrentPhotoRevision", e, _currentPhotoRevisionAttribute);
+                    this._currentPhotoRevision = value;
+                    this.OnCurrentPhotoRevisionChanged(e);
+                    this.OnPropertyChanged("CurrentPhotoRevision", e, _currentPhotoRevisionAttribute);
                 }
             }
         }
@@ -516,6 +588,26 @@ namespace SmartLost.MatchingService.Modeling.Matching
         public event EventHandler<ValueChangedEventArgs> AuthorIdChanging;
 
         /// <summary>
+        /// Gets fired when the CurrentPhotoId property changed its value
+        /// </summary>
+        public event EventHandler<ValueChangedEventArgs> CurrentPhotoIdChanged;
+
+        /// <summary>
+        /// Gets fired before the CurrentPhotoId property changes its value
+        /// </summary>
+        public event EventHandler<ValueChangedEventArgs> CurrentPhotoIdChanging;
+
+        /// <summary>
+        /// Gets fired when the CurrentPhotoRevision property changed its value
+        /// </summary>
+        public event EventHandler<ValueChangedEventArgs> CurrentPhotoRevisionChanged;
+
+        /// <summary>
+        /// Gets fired before the CurrentPhotoRevision property changes its value
+        /// </summary>
+        public event EventHandler<ValueChangedEventArgs> CurrentPhotoRevisionChanging;
+
+        /// <summary>
         /// Gets fired when the Colour property changed its value
         /// </summary>
         public event EventHandler<ValueChangedEventArgs> ColourChanged;
@@ -704,6 +796,68 @@ namespace SmartLost.MatchingService.Modeling.Matching
         protected virtual void OnAuthorIdChanging(ValueChangedEventArgs eventArgs)
         {
             EventHandler<ValueChangedEventArgs> handler = this.AuthorIdChanging;
+            if ((handler != null))
+            {
+                handler.Invoke(this, eventArgs);
+            }
+        }
+
+        private static ITypedElement RetrieveCurrentPhotoIdAttribute()
+        {
+            return ((ITypedElement)(((ModelElement)(SmartLost.MatchingService.Modeling.Matching.SearchListing.ClassInstance)).Resolve("currentPhotoId")));
+        }
+
+        /// <summary>
+        /// Raises the CurrentPhotoIdChanged event
+        /// </summary>
+        /// <param name="eventArgs">The event data</param>
+        protected virtual void OnCurrentPhotoIdChanged(ValueChangedEventArgs eventArgs)
+        {
+            EventHandler<ValueChangedEventArgs> handler = this.CurrentPhotoIdChanged;
+            if ((handler != null))
+            {
+                handler.Invoke(this, eventArgs);
+            }
+        }
+
+        /// <summary>
+        /// Raises the CurrentPhotoIdChanging event
+        /// </summary>
+        /// <param name="eventArgs">The event data</param>
+        protected virtual void OnCurrentPhotoIdChanging(ValueChangedEventArgs eventArgs)
+        {
+            EventHandler<ValueChangedEventArgs> handler = this.CurrentPhotoIdChanging;
+            if ((handler != null))
+            {
+                handler.Invoke(this, eventArgs);
+            }
+        }
+
+        private static ITypedElement RetrieveCurrentPhotoRevisionAttribute()
+        {
+            return ((ITypedElement)(((ModelElement)(SmartLost.MatchingService.Modeling.Matching.SearchListing.ClassInstance)).Resolve("currentPhotoRevision")));
+        }
+
+        /// <summary>
+        /// Raises the CurrentPhotoRevisionChanged event
+        /// </summary>
+        /// <param name="eventArgs">The event data</param>
+        protected virtual void OnCurrentPhotoRevisionChanged(ValueChangedEventArgs eventArgs)
+        {
+            EventHandler<ValueChangedEventArgs> handler = this.CurrentPhotoRevisionChanged;
+            if ((handler != null))
+            {
+                handler.Invoke(this, eventArgs);
+            }
+        }
+
+        /// <summary>
+        /// Raises the CurrentPhotoRevisionChanging event
+        /// </summary>
+        /// <param name="eventArgs">The event data</param>
+        protected virtual void OnCurrentPhotoRevisionChanging(ValueChangedEventArgs eventArgs)
+        {
+            EventHandler<ValueChangedEventArgs> handler = this.CurrentPhotoRevisionChanging;
             if ((handler != null))
             {
                 handler.Invoke(this, eventArgs);
@@ -912,6 +1066,14 @@ namespace SmartLost.MatchingService.Modeling.Matching
             {
                 return this.AuthorId;
             }
+            if ((attribute == "CURRENTPHOTOID"))
+            {
+                return this.CurrentPhotoId;
+            }
+            if ((attribute == "CURRENTPHOTOREVISION"))
+            {
+                return this.CurrentPhotoRevision;
+            }
             if ((attribute == "COLOUR"))
             {
                 return this.Colour;
@@ -981,6 +1143,16 @@ namespace SmartLost.MatchingService.Modeling.Matching
                 this.AuthorId = ((System.Guid)(value));
                 return;
             }
+            if ((feature == "CURRENTPHOTOID"))
+            {
+                this.CurrentPhotoId = ((System.Guid)(value));
+                return;
+            }
+            if ((feature == "CURRENTPHOTOREVISION"))
+            {
+                this.CurrentPhotoRevision = ((int)(value));
+                return;
+            }
             if ((feature == "COLOUR"))
             {
                 this.Colour = ((string)(value));
@@ -1030,6 +1202,14 @@ namespace SmartLost.MatchingService.Modeling.Matching
             if ((attribute == "AUTHORID"))
             {
                 return Observable.Box(new SearchListingAuthorIdProxy(this));
+            }
+            if ((attribute == "CURRENTPHOTOID"))
+            {
+                return Observable.Box(new SearchListingCurrentPhotoIdProxy(this));
+            }
+            if ((attribute == "CURRENTPHOTOREVISION"))
+            {
+                return Observable.Box(new SearchListingCurrentPhotoRevisionProxy(this));
             }
             if ((attribute == "COLOUR"))
             {
@@ -1256,6 +1436,68 @@ namespace SmartLost.MatchingService.Modeling.Matching
                 set
                 {
                     this.ModelElement.AuthorId = value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Represents a proxy to represent an incremental access to the currentPhotoId property
+        /// </summary>
+        protected sealed class SearchListingCurrentPhotoIdProxy : ModelPropertyChange<ISearchListing, Nullable<System.Guid>>
+        {
+
+            /// <summary>
+            /// Creates a new observable property access proxy
+            /// </summary>
+            /// <param name="modelElement">The model instance element for which to create the property access proxy</param>
+            public SearchListingCurrentPhotoIdProxy(ISearchListing modelElement) :
+                    base(modelElement, "CurrentPhotoId")
+            {
+            }
+
+            /// <summary>
+            /// Gets or sets the value of this expression
+            /// </summary>
+            public override Nullable<System.Guid> Value
+            {
+                get
+                {
+                    return this.ModelElement.CurrentPhotoId;
+                }
+                set
+                {
+                    this.ModelElement.CurrentPhotoId = value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Represents a proxy to represent an incremental access to the currentPhotoRevision property
+        /// </summary>
+        protected sealed class SearchListingCurrentPhotoRevisionProxy : ModelPropertyChange<ISearchListing, Nullable<int>>
+        {
+
+            /// <summary>
+            /// Creates a new observable property access proxy
+            /// </summary>
+            /// <param name="modelElement">The model instance element for which to create the property access proxy</param>
+            public SearchListingCurrentPhotoRevisionProxy(ISearchListing modelElement) :
+                    base(modelElement, "CurrentPhotoRevision")
+            {
+            }
+
+            /// <summary>
+            /// Gets or sets the value of this expression
+            /// </summary>
+            public override Nullable<int> Value
+            {
+                get
+                {
+                    return this.ModelElement.CurrentPhotoRevision;
+                }
+                set
+                {
+                    this.ModelElement.CurrentPhotoRevision = value;
                 }
             }
         }

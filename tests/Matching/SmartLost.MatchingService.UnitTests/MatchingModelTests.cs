@@ -20,6 +20,14 @@ public sealed partial class MatchingModelTests
         Assert.Equal(ListingType.Lost, listing.Type);
         Assert.Equal(1, listing.SourceRevision);
         Assert.False(listing.Eligible);
+        Assert.Null(listing.CurrentPhotoId);
+        Assert.Null(listing.CurrentPhotoRevision);
+        foreach (string name in new[] { "currentPhotoId", "currentPhotoRevision" })
+        {
+            IAttribute attribute = listing.GetClass().Attributes.Single(attribute => attribute.Name == name);
+            Assert.Equal(0, attribute.LowerBound);
+            Assert.Equal(1, attribute.UpperBound);
+        }
         Assert.Equal(1, embedding.PhotoRevision);
         Assert.Same(SearchListing.ClassInstance, listing.GetClass());
         Assert.Same(ImageEmbedding.ClassInstance, embedding.GetClass());
@@ -43,6 +51,8 @@ public sealed partial class MatchingModelTests
         {
             ListingId = Guid.NewGuid(),
             AuthorId = Guid.NewGuid(),
+            CurrentPhotoId = Guid.Parse("30000000-0000-0000-0000-000000000001"),
+            CurrentPhotoRevision = 2,
             Type = ListingType.Found,
             SourceRevision = 3,
             ChangeSequence = 7,
@@ -69,6 +79,8 @@ public sealed partial class MatchingModelTests
             SearchListing copy = Assert.Single(loaded.RootElements.OfType<SearchListing>());
             Assert.Equal(listing.ListingId, copy.ListingId);
             Assert.Equal(listing.AuthorId, copy.AuthorId);
+            Assert.Equal(listing.CurrentPhotoId, copy.CurrentPhotoId);
+            Assert.Equal(listing.CurrentPhotoRevision, copy.CurrentPhotoRevision);
             Assert.Equal(3, copy.SourceRevision);
             Assert.Equal(7, copy.ChangeSequence);
             Assert.Equal(ListingType.Found, copy.Type);
@@ -86,6 +98,8 @@ public sealed partial class MatchingModelTests
                 Assert.Same(copy, item.SearchListing);
                 Assert.Equal(first.PhotoId, item.PhotoId);
                 Assert.Equal(2, item.PhotoRevision);
+                Assert.Equal(copy.CurrentPhotoId, item.PhotoId);
+                Assert.Equal(copy.CurrentPhotoRevision, item.PhotoRevision);
                 Assert.Equal("preprocessing-v1", item.PreprocessingVersion);
                 Assert.Equal(4, item.Dimensions);
                 Assert.Equal(_components, item.Vector);
@@ -122,6 +136,7 @@ public sealed partial class MatchingModelTests
     [Theory]
     [InlineData("SearchListing")]
     [InlineData("ImageEmbedding")]
+    [InlineData("EmbeddingPreparationTask")]
     public void ScalarAttributesSupportReflectiveAccessAndObservableUpdates(string className)
     {
         ModelElement element = CreateInspectable(className);
@@ -191,6 +206,7 @@ public sealed partial class MatchingModelTests
     [Theory]
     [InlineData("SearchListing")]
     [InlineData("ImageEmbedding")]
+    [InlineData("EmbeddingPreparationTask")]
     public void IdentityResolutionTracksUpdatesAndMovesBetweenModels(string className)
     {
         ModelElement element = CreateInspectable(className);
@@ -245,6 +261,7 @@ public sealed partial class MatchingModelTests
         {
             "SearchListing" => new InspectableSearchListing(),
             "ImageEmbedding" => new InspectableImageEmbedding(),
+            "EmbeddingPreparationTask" => new InspectableEmbeddingPreparationTask(),
             _ => throw new ArgumentException("Unsupported model class.", nameof(className))
         };
     }
@@ -253,14 +270,15 @@ public sealed partial class MatchingModelTests
     {
         return name switch
         {
-            "id" or "listingId" or "authorId" or "photoId" => alternate
+            "id" or "listingId" or "authorId" or "photoId" or "currentPhotoId" or "leaseId" => alternate
                 ? Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002")
                 : Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001"),
             "type" => alternate ? ListingType.Lost : ListingType.Found,
-            "sourceRevision" or "photoRevision" or "dimensions" => alternate ? 3 : 2,
+            "sourceRevision" or "photoRevision" or "currentPhotoRevision" or "dimensions" or "attemptCount" => alternate ? 3 : 2,
+            "state" => alternate ? EmbeddingPreparationState.Ready : EmbeddingPreparationState.Processing,
             "changeSequence" => alternate ? 3L : 2L,
             "eligible" => !alternate,
-            "occurredOn" => new DateTime(2026, 10, alternate ? 2 : 1, 0, 0, 0, DateTimeKind.Utc),
+            "occurredOn" or "nextAttemptAt" or "leaseExpiresAt" => new DateTime(2026, 10, alternate ? 2 : 1, 0, 0, 0, DateTimeKind.Utc),
             _ => alternate ? "updated value" : "initial value"
         };
     }

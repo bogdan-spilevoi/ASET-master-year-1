@@ -12,15 +12,17 @@ Solid numbered arrows describe model-test operations, not service endpoints.
 ```mermaid
 flowchart LR
     Tests["MatchingModelTests"]
-    Model["Generated SearchListing / ImageEmbedding objects"]
+    Model["Generated SearchListing / ImageEmbedding / EmbeddingPreparationTask objects"]
     Repository["NMF ModelRepository"]
     XMI[("Temporary XMI file")]
-    Tests -->|"1. Construct projections and versioned embeddings"| Model
+    Tests -->|"1. Construct projections with optional current photo and versioned embeddings"| Model
     Model -->|"1.1 Maintain projection references and notify changes"| Tests
     Tests -->|"2. Save model roots"| Repository
     Repository -->|"2.1 Serialize references and vector components"| XMI
-    Tests -->|"2.2 Reload and verify identities, versions and vectors"| Repository
+    Tests -->|"2.2 Reload and verify current photo, cache identities, versions and vectors"| Repository
     Repository -->|"2.3 Read model file"| XMI
+    Tests -->|"3. Set task state, retry metadata and lease fields"| Model
+    Model -->|"3.1 Notify changes; retain captured photo/model target"| Tests
 ```
 
 The model relationship is non-containment and stays within Matching. NMF file loading
@@ -39,16 +41,25 @@ flowchart LR
     DB[("Future Matching-owned projection and embeddings database")]
     Tunnel["Future authenticated HTTPS tunnel"]
     AI["Future local Qwen / DINOv3 HTTP runtime"]
+    Worker["Future Matching preparation worker"]
 
     Listings -.->|"1. Request analysis or synchronize confirmed listing"| Matching
     Matching -.->|"1.1 Obtain authorized photo through Listings"| Listings
-    Matching -.->|"1.2 Request inference"| Tunnel
-    Tunnel -.->|"1.3 Forward request"| AI
-    AI -.->|"1.4 Return analysis or embedding through tunnel"| Matching
+    Matching -.->|"1.2 Request optional Qwen analysis"| Tunnel
+    Tunnel -.->|"1.3 Forward Qwen request"| AI
+    AI -.->|"1.4 Return analysis through tunnel"| Matching
     Matching -.->|"1.5 Persist projection / derived evidence when applicable"| DB
     Listings -.->|"2. Request matching suggestions"| Matching
     Matching -.->|"2.1 Read candidate projections and cached evidence"| DB
     Matching -.->|"2.2 Return ranked suggestions"| Listings
+    Matching -.->|"3. Commit snapshot, checkpoint and preparation task together"| DB
+    Matching -.->|"3.1 Acknowledge committed snapshot"| Listings
+    Worker -.->|"4. Claim due task; retry expired lease"| DB
+    Worker -.->|"4.1 Obtain authorized photo"| Listings
+    Worker -.->|"4.2 Request DINOv3 inference"| Tunnel
+    Tunnel -.->|"4.2.1 Forward DINOv3 request"| AI
+    AI -.->|"4.2.2 Return vector through tunnel"| Worker
+    Worker -.->|"4.3 Recheck target/lease; commit vector and task outcome"| DB
 ```
 
 Matching will own only derived search data and model evidence. It will obtain photos
@@ -68,6 +79,15 @@ eligibility checking and ranking details; these arrows summarize that design.
 
 ## Review notes
 
+- 2026-10-26: added the independent EmbeddingPreparationTask model, five state values
+  and model tests. The current diagram includes task property notifications. Dashed
+  arrows refine the proposed snapshot/checkpoint commit and future leased worker flow;
+  no actual retry loop, transaction, inference call, worker or receiver is implemented.
+- 2026-10-26: added nullable CurrentPhotoId/CurrentPhotoRevision to SearchListing and
+  tests for missing, removed, replaced and revised photos. Current model-test arrows
+  include the photo pair and retained historical embeddings. Runtime APIs, snapshot
+  delivery and cache-selection behavior remain unimplemented, so planned service
+  arrows are unchanged.
 - Added the separate NMF model and unit-test flow for SearchListing/ImageEmbedding.
   Runtime projects remain empty, so all proposed network/database arrows still describe
-  unimplemented integrations. No processing job or receiver has been added.
+  unimplemented integrations. No executable processing job or receiver has been added.

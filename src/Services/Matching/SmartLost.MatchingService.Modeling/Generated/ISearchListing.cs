@@ -110,6 +110,32 @@ namespace SmartLost.MatchingService.Modeling.Matching
         }
 
         /// <summary>
+        /// The currentPhotoId property
+        /// </summary>
+        [DisplayNameAttribute("currentPhotoId")]
+        [CategoryAttribute("SearchListing")]
+        [XmlElementNameAttribute("currentPhotoId")]
+        [XmlAttributeAttribute(true)]
+        Nullable<System.Guid> CurrentPhotoId
+        {
+            get;
+            set;
+        }
+
+        /// <summary>
+        /// The currentPhotoRevision property
+        /// </summary>
+        [DisplayNameAttribute("currentPhotoRevision")]
+        [CategoryAttribute("SearchListing")]
+        [XmlElementNameAttribute("currentPhotoRevision")]
+        [XmlAttributeAttribute(true)]
+        Nullable<int> CurrentPhotoRevision
+        {
+            get;
+            set;
+        }
+
+        /// <summary>
         /// The categoryKeys property
         /// </summary>
         [DesignerSerializationVisibilityAttribute(DesignerSerializationVisibility.Content)]
@@ -241,6 +267,26 @@ namespace SmartLost.MatchingService.Modeling.Matching
         /// Gets fired before the AuthorId property changes its value
         /// </summary>
         event EventHandler<ValueChangedEventArgs> AuthorIdChanging;
+
+        /// <summary>
+        /// Gets fired when the CurrentPhotoId property changed its value
+        /// </summary>
+        event EventHandler<ValueChangedEventArgs> CurrentPhotoIdChanged;
+
+        /// <summary>
+        /// Gets fired before the CurrentPhotoId property changes its value
+        /// </summary>
+        event EventHandler<ValueChangedEventArgs> CurrentPhotoIdChanging;
+
+        /// <summary>
+        /// Gets fired when the CurrentPhotoRevision property changed its value
+        /// </summary>
+        event EventHandler<ValueChangedEventArgs> CurrentPhotoRevisionChanged;
+
+        /// <summary>
+        /// Gets fired before the CurrentPhotoRevision property changes its value
+        /// </summary>
+        event EventHandler<ValueChangedEventArgs> CurrentPhotoRevisionChanging;
 
         /// <summary>
         /// Gets fired when the Colour property changed its value

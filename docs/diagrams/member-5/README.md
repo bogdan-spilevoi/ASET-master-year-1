@@ -43,7 +43,7 @@ Notation references: [PlantUML sequence syntax](https://plantuml.com/sequence-di
 [C4-PlantUML](https://plantuml-stdlib.github.io/C4-PlantUML/).
 
 The separate [Matching NMF model](../../../src/Services/Matching/SmartLost.MatchingService.Modeling/README.md)
-now represents SearchListing and ImageEmbedding and has model unit tests. It does
+now represents SearchListing, ImageEmbedding and EmbeddingPreparationTask and has model unit tests. It does
 not implement the runtime integrations depicted here.
 
 ## UML sequence interpretation

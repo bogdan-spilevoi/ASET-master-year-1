@@ -21,6 +21,13 @@
     <eLiterals name="Recovered" value="0" />
     <eLiterals name="Withdrawn" value="1" />
   </eClassifiers>
+  <eClassifiers xsi:type="ecore:EEnum" name="MatchDecisionState">
+    <eLiterals name="Suggested" value="0" />
+    <eLiterals name="Accepted" value="1" />
+    <eLiterals name="Rejected" value="2" />
+    <eLiterals name="Confirmed" value="3" />
+    <eLiterals name="Invalidated" value="4" />
+  </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Listing">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="id" lowerBound="1" eType="#//Guid" iD="true" />
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="authorId" lowerBound="1" eType="#//Guid" />
@@ -35,6 +42,8 @@
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="state" lowerBound="1" eType="#//ListingState" defaultValueLiteral="Draft" />
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="closureReason" eType="#//ClosureReason" />
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="revision" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" defaultValueLiteral="1" />
+    <!-- Separate from content revision; runtime starts delivery sequences at publication. -->
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="changeSequence" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//ELong" />
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="publishedAt" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDate" />
     <eStructuralFeatures xsi:type="ecore:EReference" name="photo" containment="true" eType="#//Photo" eOpposite="#//Photo/listing" />
     <!-- Drafts may have no confirmed categories; publication validation is a business rule. -->
@@ -56,5 +65,34 @@
     <!-- Association identity is (Listing.Id, Category.Id), without a separate ID. -->
     <eStructuralFeatures xsi:type="ecore:EReference" name="listing" lowerBound="1" eType="#//Listing" eOpposite="#//Listing/categories" />
     <eStructuralFeatures xsi:type="ecore:EReference" name="category" lowerBound="1" eType="#//Category" />
+  </eClassifiers>
+  <!-- Independent historical roots: references never own/delete the paired listings. -->
+  <eClassifiers xsi:type="ecore:EClass" name="MatchDecision">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="id" lowerBound="1" eType="#//Guid" iD="true" />
+    <eStructuralFeatures xsi:type="ecore:EReference" name="lostListing" lowerBound="1" eType="#//Listing" />
+    <eStructuralFeatures xsi:type="ecore:EReference" name="foundListing" lowerBound="1" eType="#//Listing" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="lostRevision" lowerBound="1" defaultValueLiteral="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="foundRevision" lowerBound="1" defaultValueLiteral="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="state" lowerBound="1" defaultValueLiteral="Suggested" eType="#//MatchDecisionState" />
+    <!-- No user decision exists yet in Suggested state. Actor IDs refer logically to Auth. -->
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="decidedBy" eType="#//Guid" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="decidedAt" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDate" />
+    <eStructuralFeatures xsi:type="ecore:EReference" name="recovery" eType="#//Recovery" eOpposite="#//Recovery/matchDecision" />
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Recovery">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="id" lowerBound="1" eType="#//Guid" iD="true" />
+    <eStructuralFeatures xsi:type="ecore:EReference" name="matchDecision" lowerBound="1" eType="#//MatchDecision" eOpposite="#//MatchDecision/recovery" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="confirmedBy" lowerBound="1" eType="#//Guid" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="confirmedAt" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDate" />
+    <!-- Persist the confirmed recovery and its one eligible ledger entry together. -->
+    <eStructuralFeatures xsi:type="ecore:EReference" name="credibilityEntry" lowerBound="1" eType="#//CredibilityEntry" eOpposite="#//CredibilityEntry/recovery" />
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="CredibilityEntry">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="id" lowerBound="1" eType="#//Guid" iD="true" />
+    <eStructuralFeatures xsi:type="ecore:EReference" name="recovery" lowerBound="1" eType="#//Recovery" eOpposite="#//Recovery/credibilityEntry" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="beneficiaryId" lowerBound="1" eType="#//Guid" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="helpedUserId" lowerBound="1" eType="#//Guid" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="points" lowerBound="1" defaultValueLiteral="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" />
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="awardedAt" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDate" />
   </eClassifiers>
 </ecore:EPackage>

@@ -74,6 +74,7 @@ package "Listings ownership - semester design" {
     +State: ListingState
     +ClosureReason: ClosureReason [0..1]
     +Revision: Integer
+    +ChangeSequence: Long
     +PublishedAt: DateTime [0..1]
     --
     +Publish()
@@ -103,8 +104,8 @@ package "Listings ownership - semester design" {
     +LostRevision: Integer
     +FoundRevision: Integer
     +State: MatchDecisionState
-    +DecidedBy: Guid
-    +DecidedAt: DateTime
+    +DecidedBy: Guid [0..1]
+    +DecidedAt: DateTime [0..1]
     --
     +Accept()
     +Reject()
@@ -128,7 +129,7 @@ package "Listings ownership - semester design" {
   class SynchronisationTask <<Semester>> {
     +Id: Guid
     +ListingId: Guid
-    +ChangeSequence: Integer
+    +ChangeSequence: Long
     +State: ProcessingState
     +Attempts: Integer
     +NextAttemptAt: DateTime [0..1]
@@ -165,9 +166,11 @@ package "Matching ownership - semester design" {
   class SearchListing <<Semester>> {
     +ListingId: Guid
     +SourceRevision: Integer
-    +ChangeSequence: Integer
+    +ChangeSequence: Long
     +Type: ListingType
     +AuthorId: Guid
+    +CurrentPhotoId: Guid [0..1]
+    +CurrentPhotoRevision: Integer [0..1]
     +CategoryKeys: String [0..*]
     +Colour: String [0..1]
     +Traits: String [0..*]
@@ -195,6 +198,26 @@ package "Matching ownership - semester design" {
     +Reasons: String [0..*]
     +RankingVersion: String
   }
+  class EmbeddingPreparationTask <<Semester>> {
+    +Id: Guid
+    +PhotoId: Guid
+    +PhotoRevision: Integer
+    +ModelVersion: String
+    +PreprocessingVersion: String
+    +State: EmbeddingPreparationState
+    +AttemptCount: Integer
+    +NextAttemptAt: DateTime [0..1]
+    +LeaseId: Guid [0..1]
+    +LeaseExpiresAt: DateTime [0..1]
+    +LastError: String [0..1]
+  }
+  enum EmbeddingPreparationState {
+    Pending
+    Processing
+    Ready
+    Failed
+    Obsolete
+  }
 }
 
 UserAccount "1" -- "0..*" RefreshSession : has sessions
@@ -212,6 +235,7 @@ UserAccount "1" -- "0..*" CredibilityEntry : helped user [logical ID]
 Listing "1" -- "0..*" SynchronisationTask : durable updates
 Listing "1" -- "0..1" SearchListing : current projection [logical ID]
 SearchListing "1" -- "0..*" ImageEmbedding : versioned features
+SearchListing "1" -- "0..*" EmbeddingPreparationTask : independent work records
 Photo "1" -- "0..*" ImageEmbedding : source photo [logical ID]
 Listing "1" -- "0..*" MatchSuggestion : lostListing [logical ID]
 Listing "1" -- "0..*" MatchSuggestion : foundListing [logical ID]
@@ -238,6 +262,8 @@ end note
 note bottom of MatchDecision
   One Lost and one Found listing, from different authors.
   DecidedBy identifies the Lost listing owner [logical user ID].
+  Actor/time are absent until a human decision exists.
+  Accept/reject requires the Lost owner and a UTC timestamp.
   At most one Accepted decision per listing in either role.
   Acceptance does not close listings or award points.
   Cancel acceptance -> Suggested; relevant changes invalidate it.
@@ -259,6 +285,22 @@ note bottom of MatchSuggestion
   Missing visual evidence means no VisualScore, not zero.
   Listings rechecks revisions/eligibility before showing 0..3.
   A relevance score is not proof of ownership.
+end note
+note bottom of SearchListing
+  CurrentPhotoId and CurrentPhotoRevision are both absent without a photo.
+  Current visual evidence must match both, plus model/preprocessing versions.
+  Historical cached embeddings can remain after replacement/removal.
+end note
+note bottom of EmbeddingPreparationTask
+  Captures one photo/revision/model/preprocessing target.
+  Listing + target versions form the future unique work key.
+  Projection/checkpoint and required work commit together.
+  Result commits recheck target and current lease ownership.
+  NMF models fields; no worker or database lock is generated.
+end note
+note bottom of SynchronisationTask
+  Conceptual delivery work; planned runtime uses the shared Outbox.
+  No duplicate SynchronisationTask entity is generated in NMF.
 end note
 
 !ifdef SHOW_FUTURE

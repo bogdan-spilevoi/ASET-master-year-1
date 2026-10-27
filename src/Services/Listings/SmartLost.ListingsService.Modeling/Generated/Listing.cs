@@ -140,6 +140,14 @@ namespace SmartLost.ListingsService.Modeling.Listings
         private static Lazy<ITypedElement> _revisionAttribute = new Lazy<ITypedElement>(RetrieveRevisionAttribute);
 
         /// <summary>
+        /// The backing field for the ChangeSequence property
+        /// </summary>
+        [DebuggerBrowsableAttribute(DebuggerBrowsableState.Never)]
+        private long _changeSequence;
+
+        private static Lazy<ITypedElement> _changeSequenceAttribute = new Lazy<ITypedElement>(RetrieveChangeSequenceAttribute);
+
+        /// <summary>
         /// The backing field for the PublishedAt property
         /// </summary>
         [DebuggerBrowsableAttribute(DebuggerBrowsableState.Never)]
@@ -510,6 +518,34 @@ namespace SmartLost.ListingsService.Modeling.Listings
         }
 
         /// <summary>
+        /// The changeSequence property
+        /// </summary>
+        [DisplayNameAttribute("changeSequence")]
+        [CategoryAttribute("Listing")]
+        [XmlElementNameAttribute("changeSequence")]
+        [XmlAttributeAttribute(true)]
+        public long ChangeSequence
+        {
+            get
+            {
+                return this._changeSequence;
+            }
+            set
+            {
+                if ((this._changeSequence != value))
+                {
+                    long old = this._changeSequence;
+                    ValueChangedEventArgs e = new ValueChangedEventArgs(old, value);
+                    this.OnChangeSequenceChanging(e);
+                    this.OnPropertyChanging("ChangeSequence", e, _changeSequenceAttribute);
+                    this._changeSequence = value;
+                    this.OnChangeSequenceChanged(e);
+                    this.OnPropertyChanged("ChangeSequence", e, _changeSequenceAttribute);
+                }
+            }
+        }
+
+        /// <summary>
         /// The publishedAt property
         /// </summary>
         [DisplayNameAttribute("publishedAt")]
@@ -756,6 +792,16 @@ namespace SmartLost.ListingsService.Modeling.Listings
         /// Gets fired before the Revision property changes its value
         /// </summary>
         public event EventHandler<ValueChangedEventArgs> RevisionChanging;
+
+        /// <summary>
+        /// Gets fired when the ChangeSequence property changed its value
+        /// </summary>
+        public event EventHandler<ValueChangedEventArgs> ChangeSequenceChanged;
+
+        /// <summary>
+        /// Gets fired before the ChangeSequence property changes its value
+        /// </summary>
+        public event EventHandler<ValueChangedEventArgs> ChangeSequenceChanging;
 
         /// <summary>
         /// Gets fired when the PublishedAt property changed its value
@@ -1143,6 +1189,37 @@ namespace SmartLost.ListingsService.Modeling.Listings
             }
         }
 
+        private static ITypedElement RetrieveChangeSequenceAttribute()
+        {
+            return ((ITypedElement)(((ModelElement)(SmartLost.ListingsService.Modeling.Listings.Listing.ClassInstance)).Resolve("changeSequence")));
+        }
+
+        /// <summary>
+        /// Raises the ChangeSequenceChanged event
+        /// </summary>
+        /// <param name="eventArgs">The event data</param>
+        protected virtual void OnChangeSequenceChanged(ValueChangedEventArgs eventArgs)
+        {
+            EventHandler<ValueChangedEventArgs> handler = this.ChangeSequenceChanged;
+            if ((handler != null))
+            {
+                handler.Invoke(this, eventArgs);
+            }
+        }
+
+        /// <summary>
+        /// Raises the ChangeSequenceChanging event
+        /// </summary>
+        /// <param name="eventArgs">The event data</param>
+        protected virtual void OnChangeSequenceChanging(ValueChangedEventArgs eventArgs)
+        {
+            EventHandler<ValueChangedEventArgs> handler = this.ChangeSequenceChanging;
+            if ((handler != null))
+            {
+                handler.Invoke(this, eventArgs);
+            }
+        }
+
         private static ITypedElement RetrievePublishedAtAttribute()
         {
             return ((ITypedElement)(((ModelElement)(SmartLost.ListingsService.Modeling.Listings.Listing.ClassInstance)).Resolve("publishedAt")));
@@ -1340,6 +1417,10 @@ namespace SmartLost.ListingsService.Modeling.Listings
             {
                 return this.Revision;
             }
+            if ((attribute == "CHANGESEQUENCE"))
+            {
+                return this.ChangeSequence;
+            }
             if ((attribute == "PUBLISHEDAT"))
             {
                 return this.PublishedAt;
@@ -1432,6 +1513,11 @@ namespace SmartLost.ListingsService.Modeling.Listings
                 this.Revision = ((int)(value));
                 return;
             }
+            if ((feature == "CHANGESEQUENCE"))
+            {
+                this.ChangeSequence = ((long)(value));
+                return;
+            }
             if ((feature == "PUBLISHEDAT"))
             {
                 this.PublishedAt = ((System.DateTime)(value));
@@ -1490,6 +1576,10 @@ namespace SmartLost.ListingsService.Modeling.Listings
             if ((attribute == "REVISION"))
             {
                 return Observable.Box(new ListingRevisionProxy(this));
+            }
+            if ((attribute == "CHANGESEQUENCE"))
+            {
+                return Observable.Box(new ListingChangeSequenceProxy(this));
             }
             if ((attribute == "PUBLISHEDAT"))
             {
@@ -2224,6 +2314,37 @@ namespace SmartLost.ListingsService.Modeling.Listings
                 set
                 {
                     this.ModelElement.Revision = value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Represents a proxy to represent an incremental access to the changeSequence property
+        /// </summary>
+        protected sealed class ListingChangeSequenceProxy : ModelPropertyChange<IListing, long>
+        {
+
+            /// <summary>
+            /// Creates a new observable property access proxy
+            /// </summary>
+            /// <param name="modelElement">The model instance element for which to create the property access proxy</param>
+            public ListingChangeSequenceProxy(IListing modelElement) :
+                    base(modelElement, "ChangeSequence")
+            {
+            }
+
+            /// <summary>
+            /// Gets or sets the value of this expression
+            /// </summary>
+            public override long Value
+            {
+                get
+                {
+                    return this.ModelElement.ChangeSequence;
+                }
+                set
+                {
+                    this.ModelElement.ChangeSequence = value;
                 }
             }
         }

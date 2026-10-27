@@ -17,6 +17,10 @@ Domain classes, multiplicities, service data ownership and future product concep
 
 [Full-size PNG](images/smartlost-domain-classes.png) · [Editable PlantUML](smartlost-domain-classes.puml)
 
+The supplied class PNG predates the latest NMF extensions. The editable source includes
+source ChangeSequence, the current photo pair, nullable decision audit fields and
+EmbeddingPreparationTask; export that source for the current class view.
+
 ### C4 Container
 
 Angular, Auth, Listings, Matching, their databases and private photo storage.
@@ -68,6 +72,11 @@ scope. Selected attributes and responsibilities are shown.
   notifications, benefits and messaging. Their logical areas do not decide
   future microservice or database boundaries.
 
+The Listings NMF model now represents the four publication classes plus MatchDecision,
+Recovery and CredibilityEntry. Their generated links and XMI examples do not implement
+the planned runtime operations. A Suggested decision has nullable DecidedBy/DecidedAt;
+acceptance or rejection requires the Lost owner's ID and a UTC timestamp at runtime.
+
 ## Multiplicities and constraints
 
 | Relationship | Meaning |
@@ -83,7 +92,8 @@ scope. Selected attributes and responsibilities are shown.
 | CredibilityEntry to UserAccount | Beneficiary is the finder; helped user is the Lost owner. These are two different logical user references. |
 | Listing to SynchronisationTask | A listing can have many durable updates. Content revision differs from the sequence that also orders eligibility changes. |
 | Listing to SearchListing | Zero or one current derived projection, owned separately by Matching. |
-| SearchListing/Photo to ImageEmbedding | A source can have many cached feature versions; compatibility includes photo identity/revision, model and preprocessing versions. |
+| SearchListing/Photo to ImageEmbedding | A source can have many cached feature versions; current evidence matches SearchListing.CurrentPhotoId/CurrentPhotoRevision and compatible model/preprocessing versions. Both current-photo fields are absent without a photo. |
+| SearchListing to EmbeddingPreparationTask | One projection has zero or many independent preparation tasks. A task captures photo/model versions and retry/lease metadata; future persistence enforces a unique processing target. |
 | Listing to MatchSuggestion | Each calculated suggestion refers to exactly one Lost and one Found listing and the revisions scored. |
 
 Solid associations express domain relationships. A relationship crossing an
@@ -157,7 +167,7 @@ experiments have no HTTP API. Cloud Matching has internal ingress only.
 | --- | --- |
 | FR01 to FR03 / UC01 to UC03 | UserAccount, RefreshSession, RefreshToken; Angular, Auth and Auth Database |
 | FR04 to FR11 / UC04 to UC07 | Listing, Photo, Category, ListingCategory and revision/state constraints; Listings and private storage |
-| FR12 to FR15, FR20 / UC05, UC08 | SynchronisationTask, SearchListing, ImageEmbedding and MatchSuggestion; internal Matching contracts and its database |
+| FR12 to FR15, FR20 / UC05, UC08 | Source change sequences, conceptual SynchronisationTask via planned Outbox, SearchListing, ImageEmbedding, EmbeddingPreparationTask and MatchSuggestion; internal Matching contracts and its database |
 | FR16 to FR18 / UC09, UC10 | MatchDecision, Recovery and CredibilityEntry with reservation, ownership and consistency rules |
 | FR19 / UC11 | Authorised ledger-derived totals and contributions; no separate points source |
 | FR21, FR22 / UC12 | Azure is the semester release target; detailed deployment is outside this structural view |

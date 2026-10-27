@@ -204,6 +204,19 @@ namespace SmartLost.ListingsService.Modeling.Listings
         }
 
         /// <summary>
+        /// The changeSequence property
+        /// </summary>
+        [DisplayNameAttribute("changeSequence")]
+        [CategoryAttribute("Listing")]
+        [XmlElementNameAttribute("changeSequence")]
+        [XmlAttributeAttribute(true)]
+        long ChangeSequence
+        {
+            get;
+            set;
+        }
+
+        /// <summary>
         /// The publishedAt property
         /// </summary>
         [DisplayNameAttribute("publishedAt")]
@@ -354,6 +367,16 @@ namespace SmartLost.ListingsService.Modeling.Listings
         /// Gets fired before the Revision property changes its value
         /// </summary>
         event EventHandler<ValueChangedEventArgs> RevisionChanging;
+
+        /// <summary>
+        /// Gets fired when the ChangeSequence property changed its value
+        /// </summary>
+        event EventHandler<ValueChangedEventArgs> ChangeSequenceChanged;
+
+        /// <summary>
+        /// Gets fired before the ChangeSequence property changes its value
+        /// </summary>
+        event EventHandler<ValueChangedEventArgs> ChangeSequenceChanging;
 
         /// <summary>
         /// Gets fired when the PublishedAt property changed its value
