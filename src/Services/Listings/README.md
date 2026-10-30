@@ -71,6 +71,7 @@ validates package locks, build, formatting and the existing coverage requirement
 
 ## Design references
 
+- [MDD iteration report and verification evidence](../../../docs/MDD_ITERATIONS.md)
 - [Repository development guide](../../../README.md)
 - [BuildingBlocks](../../../docs/BUILDING_BLOCKS.md)
 - [Planned application architecture](../../../docs/SMARTLOST.md)

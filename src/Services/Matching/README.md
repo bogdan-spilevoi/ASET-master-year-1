@@ -66,6 +66,7 @@ for regeneration and the exact test command. Tests use model files, not a databa
 
 ## Design references
 
+- [MDD iteration report and verification evidence](../../../docs/MDD_ITERATIONS.md)
 - [Repository development guide](../../../README.md)
 - [BuildingBlocks](../../../docs/BUILDING_BLOCKS.md)
 - [Planned application architecture](../../../docs/SMARTLOST.md)
