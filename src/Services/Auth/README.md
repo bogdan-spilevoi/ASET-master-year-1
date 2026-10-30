@@ -14,6 +14,7 @@ Its separate finite worker delivers profile integration events over HTTP.
   structural representations of Auth accounts, sessions and token history. It is separate from
   the runtime domain and does not serialize credentials or tokens.
 - [Repository guide](../../../README.md): complete local stack and CI commands.
+- [Team 1 BPMN](../../../docs/bpmn/team1-authentication/README.md): implemented registration/login process and failure paths.
 
 Keep the communication diagrams current in the same change as service code,
 configuration or tests. If interactions do not change, add a specific explanation
