@@ -580,6 +580,7 @@ change as code/configuration, using relative links and verified, secret-safe exa
 
 ## Further reading
 
+- [BPMN process models for three teams of two: editable diagrams, previews and responsibilities](docs/bpmn/README.md)
 - [Two MDD iterations, commit evidence, current verification and team submission checklist](docs/MDD_ITERATIONS.md)
 - [Design patterns used in the project, source evidence and six-member presentation allocation](docs/DESIGN_PATTERNS.md)
 - [Separate design pattern presentation folders for members 1–6](docs/design-patterns/README.md)
