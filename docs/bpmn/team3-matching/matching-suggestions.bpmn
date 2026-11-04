@@ -1,0 +1,746 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_matching-suggestions" targetNamespace="https://smartlost.example/bpmn/matching-suggestions" exporter="SmartLost BPMN documentation" exporterVersion="1">
+  <bpmn:process id="Process_MatchingQuery" name="Matching Service — planned candidate selection and ranking" isExecutable="false">
+    <bpmn:startEvent id="MatchStart" name="Ranked-candidate request received">
+      <bpmn:outgoing>Flow_matching-suggestions_33</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MatchStart_message" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Projection" name="Load source projection, revision and processing state">
+      <bpmn:incoming>Flow_matching-suggestions_33</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_34</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="ProjectionReady" name="Current and eligible projection?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_matching-suggestions_34</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_35</bpmn:outgoing>
+      <bpmn:outgoing>Flow_matching-suggestions_36</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Select" name="Select eligible opposite-type candidates from other authors">
+      <bpmn:incoming>Flow_matching-suggestions_35</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_37</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Any" name="Candidates found?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_matching-suggestions_37</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_38</bpmn:outgoing>
+      <bpmn:outgoing>Flow_matching-suggestions_39</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="NoCandidates" name="Set ready-empty ranked pool">
+      <bpmn:incoming>Flow_matching-suggestions_39</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_42</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="NotReady" name="Set pending, failed or ineligible outcome">
+      <bpmn:incoming>Flow_matching-suggestions_36</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_43</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="MatchJoin" name="Ranked outcome ready" gatewayDirection="Converging">
+      <bpmn:incoming>Flow_matching-suggestions_41</bpmn:incoming>
+      <bpmn:incoming>Flow_matching-suggestions_42</bpmn:incoming>
+      <bpmn:incoming>Flow_matching-suggestions_43</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_44</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="SendPool" name="Return pool, revisions, reasons and ranking version or status">
+      <bpmn:incoming>Flow_matching-suggestions_44</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_45</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="MatchEnd" name="Matching query completed">
+      <bpmn:incoming>Flow_matching-suggestions_45</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:subProcess id="RankEach" name="Evaluate each candidate using cached evidence">
+      <bpmn:incoming>Flow_matching-suggestions_38</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_40</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" />
+      <bpmn:startEvent id="RankStart" name="Candidate evaluation started">
+        <bpmn:outgoing>Flow_matching-suggestions_25</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:serviceTask id="ReadCache" name="Read version-compatible cached embeddings">
+        <bpmn:incoming>Flow_matching-suggestions_25</bpmn:incoming>
+        <bpmn:outgoing>Flow_matching-suggestions_26</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:exclusiveGateway id="Compatible" name="Both embeddings compatible?" gatewayDirection="Diverging">
+        <bpmn:incoming>Flow_matching-suggestions_26</bpmn:incoming>
+        <bpmn:outgoing>Flow_matching-suggestions_27</bpmn:outgoing>
+        <bpmn:outgoing>Flow_matching-suggestions_28</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:serviceTask id="Visual" name="Calculate visual similarity">
+        <bpmn:incoming>Flow_matching-suggestions_27</bpmn:incoming>
+        <bpmn:outgoing>Flow_matching-suggestions_29</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:task id="NoVisual" name="Omit visual score; retain metadata evidence">
+        <bpmn:incoming>Flow_matching-suggestions_28</bpmn:incoming>
+        <bpmn:outgoing>Flow_matching-suggestions_30</bpmn:outgoing>
+      </bpmn:task>
+      <bpmn:exclusiveGateway id="EvidenceJoin" name="Evidence ready" gatewayDirection="Converging">
+        <bpmn:incoming>Flow_matching-suggestions_29</bpmn:incoming>
+        <bpmn:incoming>Flow_matching-suggestions_30</bpmn:incoming>
+        <bpmn:outgoing>Flow_matching-suggestions_31</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:serviceTask id="Combine" name="Combine available evidence; derive reasons">
+        <bpmn:incoming>Flow_matching-suggestions_31</bpmn:incoming>
+        <bpmn:outgoing>Flow_matching-suggestions_32</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:endEvent id="RankEnd" name="Candidate scored">
+        <bpmn:incoming>Flow_matching-suggestions_32</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_matching-suggestions_25" sourceRef="RankStart" targetRef="ReadCache" />
+      <bpmn:sequenceFlow id="Flow_matching-suggestions_26" sourceRef="ReadCache" targetRef="Compatible" />
+      <bpmn:sequenceFlow id="Flow_matching-suggestions_27" name="Compatible" sourceRef="Compatible" targetRef="Visual">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">compatibleEmbeddings</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+      <bpmn:sequenceFlow id="Flow_matching-suggestions_28" name="Missing or incompatible" sourceRef="Compatible" targetRef="NoVisual">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not compatibleEmbeddings</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+      <bpmn:sequenceFlow id="Flow_matching-suggestions_29" sourceRef="Visual" targetRef="EvidenceJoin" />
+      <bpmn:sequenceFlow id="Flow_matching-suggestions_30" sourceRef="NoVisual" targetRef="EvidenceJoin" />
+      <bpmn:sequenceFlow id="Flow_matching-suggestions_31" sourceRef="EvidenceJoin" targetRef="Combine" />
+      <bpmn:sequenceFlow id="Flow_matching-suggestions_32" sourceRef="Combine" targetRef="RankEnd" />
+    </bpmn:subProcess>
+    <bpmn:serviceTask id="Sort" name="Apply relevance threshold and sort ranked pool">
+      <bpmn:incoming>Flow_matching-suggestions_40</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_41</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_33" sourceRef="MatchStart" targetRef="Projection" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_34" sourceRef="Projection" targetRef="ProjectionReady" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_35" name="Ready" sourceRef="ProjectionReady" targetRef="Select">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">projectionCurrentAndEligible</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_36" name="Not ready" sourceRef="ProjectionReady" targetRef="NotReady">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not projectionCurrentAndEligible</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_37" sourceRef="Select" targetRef="Any" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_38" name="Yes" sourceRef="Any" targetRef="RankEach">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">candidatesFound</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_39" name="No" sourceRef="Any" targetRef="NoCandidates">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not candidatesFound</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_40" sourceRef="RankEach" targetRef="Sort" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_41" sourceRef="Sort" targetRef="MatchJoin" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_42" sourceRef="NoCandidates" targetRef="MatchJoin" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_43" sourceRef="NotReady" targetRef="MatchJoin" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_44" sourceRef="MatchJoin" targetRef="SendPool" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_45" sourceRef="SendPool" targetRef="MatchEnd" />
+  </bpmn:process>
+  <bpmn:process id="Process_ListingsQuery" name="Listings Service — planned authoritative checks and presentation" isExecutable="false">
+    <bpmn:startEvent id="QueryStart" name="Suggestions requested">
+      <bpmn:outgoing>Flow_matching-suggestions_1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="QueryStart_message" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Authorize" name="Check token, ownership and source eligibility">
+      <bpmn:incoming>Flow_matching-suggestions_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Allowed" name="Request allowed?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_matching-suggestions_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_3</bpmn:outgoing>
+      <bpmn:outgoing>Flow_matching-suggestions_4</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="SendQuery" name="Request ranked candidates for expected source revision">
+      <bpmn:incoming>Flow_matching-suggestions_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_5</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:receiveTask id="WaitQuery" name="Receive Matching outcome">
+      <bpmn:incoming>Flow_matching-suggestions_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_6</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:exclusiveGateway id="Ready" name="Ready result?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_matching-suggestions_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_7</bpmn:outgoing>
+      <bpmn:outgoing>Flow_matching-suggestions_8</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Recheck" name="Recheck authoritative source revision and eligibility">
+      <bpmn:incoming>Flow_matching-suggestions_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_9</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="SourceCurrent" name="Source still current?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_matching-suggestions_9</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_10</bpmn:outgoing>
+      <bpmn:outgoing>Flow_matching-suggestions_11</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Filter" name="Recheck candidate revisions and decisions; take zero to three">
+      <bpmn:incoming>Flow_matching-suggestions_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_12</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:task id="GoodResult" name="Set suggestions or ready-empty result">
+      <bpmn:incoming>Flow_matching-suggestions_12</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_13</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Unavailable" name="Set unavailable; preserve published listing">
+      <bpmn:incoming>Flow_matching-suggestions_16</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_18</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="AccessDenied" name="Set access or eligibility error">
+      <bpmn:incoming>Flow_matching-suggestions_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_17</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Status" name="Keep pending, failed or unavailable status">
+      <bpmn:incoming>Flow_matching-suggestions_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_19</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="StaleSource" name="Set refresh-required result">
+      <bpmn:incoming>Flow_matching-suggestions_11</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_20</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="QueryJoin" name="Outcome ready" gatewayDirection="Converging">
+      <bpmn:incoming>Flow_matching-suggestions_13</bpmn:incoming>
+      <bpmn:incoming>Flow_matching-suggestions_17</bpmn:incoming>
+      <bpmn:incoming>Flow_matching-suggestions_18</bpmn:incoming>
+      <bpmn:incoming>Flow_matching-suggestions_19</bpmn:incoming>
+      <bpmn:incoming>Flow_matching-suggestions_20</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_21</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="ReplyUser" name="Return suggestions or explicit status">
+      <bpmn:incoming>Flow_matching-suggestions_21</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_22</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="QueryEnd" name="Request completed">
+      <bpmn:incoming>Flow_matching-suggestions_22</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="QueryTimeout" name="Matching timeout" attachedToRef="WaitQuery">
+      <bpmn:outgoing>Flow_matching-suggestions_14</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="QueryTimeout_definition">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">configuredTimeout</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="QueryFailure" name="Matching unavailable" attachedToRef="SendQuery">
+      <bpmn:outgoing>Flow_matching-suggestions_15</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="QueryFailure_definition" />
+    </bpmn:boundaryEvent>
+    <bpmn:exclusiveGateway id="UnavailableJoin" name="" gatewayDirection="Converging">
+      <bpmn:incoming>Flow_matching-suggestions_14</bpmn:incoming>
+      <bpmn:incoming>Flow_matching-suggestions_15</bpmn:incoming>
+      <bpmn:outgoing>Flow_matching-suggestions_16</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_1" sourceRef="QueryStart" targetRef="Authorize" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_2" sourceRef="Authorize" targetRef="Allowed" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_3" name="Allowed" sourceRef="Allowed" targetRef="SendQuery">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">requestAllowed</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_4" name="Denied" sourceRef="Allowed" targetRef="AccessDenied">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not requestAllowed</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_5" sourceRef="SendQuery" targetRef="WaitQuery" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_6" sourceRef="WaitQuery" targetRef="Ready" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_7" name="Ready" sourceRef="Ready" targetRef="Recheck">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">outcomeReady</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_8" name="Not ready" sourceRef="Ready" targetRef="Status">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not outcomeReady</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_9" sourceRef="Recheck" targetRef="SourceCurrent" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_10" name="Current" sourceRef="SourceCurrent" targetRef="Filter">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">sourceCurrent</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_11" name="Changed" sourceRef="SourceCurrent" targetRef="StaleSource">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not sourceCurrent</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_12" sourceRef="Filter" targetRef="GoodResult" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_13" sourceRef="GoodResult" targetRef="QueryJoin" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_14" sourceRef="QueryTimeout" targetRef="UnavailableJoin" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_15" sourceRef="QueryFailure" targetRef="UnavailableJoin" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_16" sourceRef="UnavailableJoin" targetRef="Unavailable" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_17" sourceRef="AccessDenied" targetRef="QueryJoin" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_18" sourceRef="Unavailable" targetRef="QueryJoin" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_19" sourceRef="Status" targetRef="QueryJoin" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_20" sourceRef="StaleSource" targetRef="QueryJoin" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_21" sourceRef="QueryJoin" targetRef="ReplyUser" />
+    <bpmn:sequenceFlow id="Flow_matching-suggestions_22" sourceRef="ReplyUser" targetRef="QueryEnd" />
+  </bpmn:process>
+  <bpmn:collaboration id="Collaboration_matching-suggestions">
+    <bpmn:participant id="ListingsQuery" name="Listings Service — planned authoritative checks and presentation" processRef="Process_ListingsQuery" />
+    <bpmn:participant id="MatchingQuery" name="Matching Service — planned candidate selection and ranking" processRef="Process_MatchingQuery" />
+    <bpmn:participant id="SuggestionUser" name="Registered User" />
+    <bpmn:messageFlow id="MessageFlow_matching-suggestions_23" name="Suggestion request" sourceRef="SuggestionUser" targetRef="QueryStart" />
+    <bpmn:messageFlow id="MessageFlow_matching-suggestions_24" name="Suggestions or status" sourceRef="ReplyUser" targetRef="SuggestionUser" />
+    <bpmn:messageFlow id="MessageFlow_matching-suggestions_46" name="Source listing ID and expected revision" sourceRef="SendQuery" targetRef="MatchStart" />
+    <bpmn:messageFlow id="MessageFlow_matching-suggestions_47" name="Ranked pool or processing status" sourceRef="SendPool" targetRef="WaitQuery" />
+  </bpmn:collaboration>
+  <bpmndi:BPMNDiagram id="Diagram_matching-suggestions">
+    <bpmndi:BPMNPlane id="Plane_matching-suggestions" bpmnElement="Collaboration_matching-suggestions">
+      <bpmndi:BPMNShape id="ListingsQuery_di" bpmnElement="ListingsQuery" isHorizontal="true">
+        <dc:Bounds x="40" y="200" width="2710" height="670" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="MatchingQuery_di" bpmnElement="MatchingQuery" isHorizontal="true">
+        <dc:Bounds x="40" y="990" width="2710" height="680" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SuggestionUser_di" bpmnElement="SuggestionUser" isHorizontal="true">
+        <dc:Bounds x="40" y="50" width="2710" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="QueryStart_di" bpmnElement="QueryStart">
+        <dc:Bounds x="110" y="330" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="63" y="375" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Authorize_di" bpmnElement="Authorize">
+        <dc:Bounds x="210" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Allowed_di" bpmnElement="Allowed" isMarkerVisible="true">
+        <dc:Bounds x="440" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="400" y="384" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SendQuery_di" bpmnElement="SendQuery">
+        <dc:Bounds x="560" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="WaitQuery_di" bpmnElement="WaitQuery">
+        <dc:Bounds x="790" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Ready_di" bpmnElement="Ready" isMarkerVisible="true">
+        <dc:Bounds x="1020" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="980" y="384" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Recheck_di" bpmnElement="Recheck">
+        <dc:Bounds x="1140" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SourceCurrent_di" bpmnElement="SourceCurrent" isMarkerVisible="true">
+        <dc:Bounds x="1370" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1330" y="384" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Filter_di" bpmnElement="Filter">
+        <dc:Bounds x="1500" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GoodResult_di" bpmnElement="GoodResult">
+        <dc:Bounds x="1740" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Unavailable_di" bpmnElement="Unavailable">
+        <dc:Bounds x="800" y="650" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="AccessDenied_di" bpmnElement="AccessDenied">
+        <dc:Bounds x="500" y="650" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Status_di" bpmnElement="Status">
+        <dc:Bounds x="1100" y="650" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="StaleSource_di" bpmnElement="StaleSource">
+        <dc:Bounds x="1440" y="650" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="QueryJoin_di" bpmnElement="QueryJoin" isMarkerVisible="true">
+        <dc:Bounds x="2020" y="635" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1980" y="694" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ReplyUser_di" bpmnElement="ReplyUser">
+        <dc:Bounds x="2180" y="620" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="QueryEnd_di" bpmnElement="QueryEnd">
+        <dc:Bounds x="2460" y="642" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2413" y="687" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="QueryTimeout_di" bpmnElement="QueryTimeout">
+        <dc:Bounds x="915" y="372" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="868" y="417" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="QueryFailure_di" bpmnElement="QueryFailure">
+        <dc:Bounds x="685" y="372" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="638" y="417" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="UnavailableJoin_di" bpmnElement="UnavailableJoin" isMarkerVisible="true">
+        <dc:Bounds x="920" y="535" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="880" y="594" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_1_di" bpmnElement="Flow_matching-suggestions_1">
+        <di:waypoint x="146" y="348" />
+        <di:waypoint x="178" y="348" />
+        <di:waypoint x="178" y="350" />
+        <di:waypoint x="210" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_2_di" bpmnElement="Flow_matching-suggestions_2">
+        <di:waypoint x="370" y="350" />
+        <di:waypoint x="440" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_3_di" bpmnElement="Flow_matching-suggestions_3">
+        <di:waypoint x="490" y="350" />
+        <di:waypoint x="560" y="350" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="470" y="325" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_4_di" bpmnElement="Flow_matching-suggestions_4">
+        <di:waypoint x="465" y="375" />
+        <di:waypoint x="465" y="690" />
+        <di:waypoint x="500" y="690" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="410" y="507.5" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_5_di" bpmnElement="Flow_matching-suggestions_5">
+        <di:waypoint x="720" y="350" />
+        <di:waypoint x="790" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_6_di" bpmnElement="Flow_matching-suggestions_6">
+        <di:waypoint x="950" y="350" />
+        <di:waypoint x="1020" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_7_di" bpmnElement="Flow_matching-suggestions_7">
+        <di:waypoint x="1070" y="350" />
+        <di:waypoint x="1140" y="350" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1050" y="325" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_8_di" bpmnElement="Flow_matching-suggestions_8">
+        <di:waypoint x="1045" y="375" />
+        <di:waypoint x="1045" y="690" />
+        <di:waypoint x="1100" y="690" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="990" y="507.5" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_9_di" bpmnElement="Flow_matching-suggestions_9">
+        <di:waypoint x="1300" y="350" />
+        <di:waypoint x="1370" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_10_di" bpmnElement="Flow_matching-suggestions_10">
+        <di:waypoint x="1420" y="350" />
+        <di:waypoint x="1500" y="350" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1405" y="325" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_11_di" bpmnElement="Flow_matching-suggestions_11">
+        <di:waypoint x="1395" y="375" />
+        <di:waypoint x="1395" y="690" />
+        <di:waypoint x="1440" y="690" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1340" y="507.5" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_12_di" bpmnElement="Flow_matching-suggestions_12">
+        <di:waypoint x="1660" y="350" />
+        <di:waypoint x="1740" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_13_di" bpmnElement="Flow_matching-suggestions_13">
+        <di:waypoint x="1900" y="350" />
+        <di:waypoint x="2045" y="350" />
+        <di:waypoint x="2045" y="635" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_14_di" bpmnElement="Flow_matching-suggestions_14">
+        <di:waypoint x="933" y="408" />
+        <di:waypoint x="913" y="408" />
+        <di:waypoint x="913" y="500" />
+        <di:waypoint x="945" y="500" />
+        <di:waypoint x="945" y="535" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_15_di" bpmnElement="Flow_matching-suggestions_15">
+        <di:waypoint x="703" y="408" />
+        <di:waypoint x="683" y="408" />
+        <di:waypoint x="683" y="480" />
+        <di:waypoint x="945" y="480" />
+        <di:waypoint x="945" y="535" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_16_di" bpmnElement="Flow_matching-suggestions_16">
+        <di:waypoint x="945" y="585" />
+        <di:waypoint x="945" y="610" />
+        <di:waypoint x="880" y="610" />
+        <di:waypoint x="880" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_17_di" bpmnElement="Flow_matching-suggestions_17">
+        <di:waypoint x="660" y="690" />
+        <di:waypoint x="680" y="690" />
+        <di:waypoint x="680" y="800" />
+        <di:waypoint x="2045" y="800" />
+        <di:waypoint x="2045" y="685" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_18_di" bpmnElement="Flow_matching-suggestions_18">
+        <di:waypoint x="960" y="690" />
+        <di:waypoint x="980" y="690" />
+        <di:waypoint x="980" y="780" />
+        <di:waypoint x="2045" y="780" />
+        <di:waypoint x="2045" y="685" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_19_di" bpmnElement="Flow_matching-suggestions_19">
+        <di:waypoint x="1260" y="690" />
+        <di:waypoint x="1280" y="690" />
+        <di:waypoint x="1280" y="760" />
+        <di:waypoint x="2045" y="760" />
+        <di:waypoint x="2045" y="685" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_20_di" bpmnElement="Flow_matching-suggestions_20">
+        <di:waypoint x="1600" y="690" />
+        <di:waypoint x="1620" y="690" />
+        <di:waypoint x="1620" y="740" />
+        <di:waypoint x="2045" y="740" />
+        <di:waypoint x="2045" y="685" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_21_di" bpmnElement="Flow_matching-suggestions_21">
+        <di:waypoint x="2070" y="660" />
+        <di:waypoint x="2180" y="660" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_22_di" bpmnElement="Flow_matching-suggestions_22">
+        <di:waypoint x="2340" y="660" />
+        <di:waypoint x="2460" y="660" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_matching-suggestions_23_di" bpmnElement="MessageFlow_matching-suggestions_23">
+        <di:waypoint x="1395" y="120" />
+        <di:waypoint x="1395" y="160" />
+        <di:waypoint x="128" y="160" />
+        <di:waypoint x="128" y="330" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="706.5" y="135" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_matching-suggestions_24_di" bpmnElement="MessageFlow_matching-suggestions_24">
+        <di:waypoint x="2340" y="660" />
+        <di:waypoint x="2670" y="660" />
+        <di:waypoint x="2670" y="25" />
+        <di:waypoint x="1395" y="25" />
+        <di:waypoint x="1395" y="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1977.5" y="0" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="MatchStart_di" bpmnElement="MatchStart">
+        <dc:Bounds x="110" y="1190" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="63" y="1235" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Projection_di" bpmnElement="Projection">
+        <dc:Bounds x="210" y="1170" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ProjectionReady_di" bpmnElement="ProjectionReady" isMarkerVisible="true">
+        <dc:Bounds x="440" y="1185" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="400" y="1244" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Select_di" bpmnElement="Select">
+        <dc:Bounds x="560" y="1170" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Any_di" bpmnElement="Any" isMarkerVisible="true">
+        <dc:Bounds x="790" y="1185" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="750" y="1244" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="NoCandidates_di" bpmnElement="NoCandidates">
+        <dc:Bounds x="680" y="1510" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="NotReady_di" bpmnElement="NotReady">
+        <dc:Bounds x="210" y="1510" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="MatchJoin_di" bpmnElement="MatchJoin" isMarkerVisible="true">
+        <dc:Bounds x="2290" y="1185" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2250" y="1244" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SendPool_di" bpmnElement="SendPool">
+        <dc:Bounds x="2420" y="1170" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="MatchEnd_di" bpmnElement="MatchEnd">
+        <dc:Bounds x="2650" y="1192" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2603" y="1237" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="RankEach_di" bpmnElement="RankEach" isExpanded="true">
+        <dc:Bounds x="950" y="1060" width="1260" height="400" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="RankStart_di" bpmnElement="RankStart">
+        <dc:Bounds x="1000" y="1165" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="953" y="1210" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ReadCache_di" bpmnElement="ReadCache">
+        <dc:Bounds x="1090" y="1145" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Compatible_di" bpmnElement="Compatible" isMarkerVisible="true">
+        <dc:Bounds x="1320" y="1160" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1280" y="1219" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Visual_di" bpmnElement="Visual">
+        <dc:Bounds x="1440" y="1100" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="NoVisual_di" bpmnElement="NoVisual">
+        <dc:Bounds x="1440" y="1300" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EvidenceJoin_di" bpmnElement="EvidenceJoin" isMarkerVisible="true">
+        <dc:Bounds x="1670" y="1160" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1630" y="1219" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Combine_di" bpmnElement="Combine">
+        <dc:Bounds x="1790" y="1145" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="RankEnd_di" bpmnElement="RankEnd">
+        <dc:Bounds x="2040" y="1167" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1993" y="1212" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_25_di" bpmnElement="Flow_matching-suggestions_25">
+        <di:waypoint x="1036" y="1183" />
+        <di:waypoint x="1063" y="1183" />
+        <di:waypoint x="1063" y="1185" />
+        <di:waypoint x="1090" y="1185" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_26_di" bpmnElement="Flow_matching-suggestions_26">
+        <di:waypoint x="1250" y="1185" />
+        <di:waypoint x="1320" y="1185" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_27_di" bpmnElement="Flow_matching-suggestions_27">
+        <di:waypoint x="1370" y="1185" />
+        <di:waypoint x="1405" y="1185" />
+        <di:waypoint x="1405" y="1140" />
+        <di:waypoint x="1440" y="1140" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1350" y="1137.5" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_28_di" bpmnElement="Flow_matching-suggestions_28">
+        <di:waypoint x="1345" y="1210" />
+        <di:waypoint x="1345" y="1340" />
+        <di:waypoint x="1440" y="1340" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1290" y="1250" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_29_di" bpmnElement="Flow_matching-suggestions_29">
+        <di:waypoint x="1600" y="1140" />
+        <di:waypoint x="1635" y="1140" />
+        <di:waypoint x="1635" y="1185" />
+        <di:waypoint x="1670" y="1185" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_30_di" bpmnElement="Flow_matching-suggestions_30">
+        <di:waypoint x="1600" y="1340" />
+        <di:waypoint x="1695" y="1340" />
+        <di:waypoint x="1695" y="1210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_31_di" bpmnElement="Flow_matching-suggestions_31">
+        <di:waypoint x="1720" y="1185" />
+        <di:waypoint x="1790" y="1185" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_32_di" bpmnElement="Flow_matching-suggestions_32">
+        <di:waypoint x="1950" y="1185" />
+        <di:waypoint x="2040" y="1185" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Sort_di" bpmnElement="Sort">
+        <dc:Bounds x="1920" y="1510" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_33_di" bpmnElement="Flow_matching-suggestions_33">
+        <di:waypoint x="146" y="1208" />
+        <di:waypoint x="178" y="1208" />
+        <di:waypoint x="178" y="1210" />
+        <di:waypoint x="210" y="1210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_34_di" bpmnElement="Flow_matching-suggestions_34">
+        <di:waypoint x="370" y="1210" />
+        <di:waypoint x="440" y="1210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_35_di" bpmnElement="Flow_matching-suggestions_35">
+        <di:waypoint x="490" y="1210" />
+        <di:waypoint x="560" y="1210" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="470" y="1185" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_36_di" bpmnElement="Flow_matching-suggestions_36">
+        <di:waypoint x="465" y="1235" />
+        <di:waypoint x="465" y="1450" />
+        <di:waypoint x="170" y="1450" />
+        <di:waypoint x="170" y="1550" />
+        <di:waypoint x="210" y="1550" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="262.5" y="1425" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_37_di" bpmnElement="Flow_matching-suggestions_37">
+        <di:waypoint x="720" y="1210" />
+        <di:waypoint x="790" y="1210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_38_di" bpmnElement="Flow_matching-suggestions_38">
+        <di:waypoint x="840" y="1210" />
+        <di:waypoint x="895" y="1210" />
+        <di:waypoint x="895" y="1260" />
+        <di:waypoint x="950" y="1260" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="812.5" y="1185" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_39_di" bpmnElement="Flow_matching-suggestions_39">
+        <di:waypoint x="815" y="1235" />
+        <di:waypoint x="815" y="1480" />
+        <di:waypoint x="640" y="1480" />
+        <di:waypoint x="640" y="1550" />
+        <di:waypoint x="680" y="1550" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="760" y="1332.5" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_40_di" bpmnElement="Flow_matching-suggestions_40">
+        <di:waypoint x="1580" y="1460" />
+        <di:waypoint x="1580" y="1490" />
+        <di:waypoint x="2120" y="1490" />
+        <di:waypoint x="2120" y="1550" />
+        <di:waypoint x="2080" y="1550" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_41_di" bpmnElement="Flow_matching-suggestions_41">
+        <di:waypoint x="2080" y="1550" />
+        <di:waypoint x="2315" y="1550" />
+        <di:waypoint x="2315" y="1235" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_42_di" bpmnElement="Flow_matching-suggestions_42">
+        <di:waypoint x="840" y="1550" />
+        <di:waypoint x="1000" y="1550" />
+        <di:waypoint x="1000" y="1630" />
+        <di:waypoint x="2315" y="1630" />
+        <di:waypoint x="2315" y="1235" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_43_di" bpmnElement="Flow_matching-suggestions_43">
+        <di:waypoint x="370" y="1550" />
+        <di:waypoint x="500" y="1550" />
+        <di:waypoint x="500" y="1650" />
+        <di:waypoint x="2355" y="1650" />
+        <di:waypoint x="2355" y="1300" />
+        <di:waypoint x="2315" y="1300" />
+        <di:waypoint x="2315" y="1235" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_44_di" bpmnElement="Flow_matching-suggestions_44">
+        <di:waypoint x="2340" y="1210" />
+        <di:waypoint x="2420" y="1210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_matching-suggestions_45_di" bpmnElement="Flow_matching-suggestions_45">
+        <di:waypoint x="2580" y="1210" />
+        <di:waypoint x="2650" y="1210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_matching-suggestions_46_di" bpmnElement="MessageFlow_matching-suggestions_46">
+        <di:waypoint x="640" y="390" />
+        <di:waypoint x="640" y="930" />
+        <di:waypoint x="80" y="930" />
+        <di:waypoint x="80" y="1208" />
+        <di:waypoint x="110" y="1208" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="305" y="905" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_matching-suggestions_47_di" bpmnElement="MessageFlow_matching-suggestions_47">
+        <di:waypoint x="2500" y="1170" />
+        <di:waypoint x="2500" y="925" />
+        <di:waypoint x="750" y="925" />
+        <di:waypoint x="750" y="350" />
+        <di:waypoint x="790" y="350" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1570" y="900" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

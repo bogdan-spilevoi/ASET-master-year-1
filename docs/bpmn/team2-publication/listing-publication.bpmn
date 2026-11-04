@@ -1,0 +1,875 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_listing-publication" targetNamespace="https://smartlost.example/bpmn/listing-publication" exporter="SmartLost BPMN documentation" exporterVersion="1">
+  <bpmn:process id="Process_Listings" name="Listings Service — planned publication process" isExecutable="false">
+    <bpmn:startEvent id="PubStart" name="New draft requested">
+      <bpmn:outgoing>Flow_listing-publication_1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="PubStart_message" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="CheckAccess" name="Authenticate caller">
+      <bpmn:incoming>Flow_listing-publication_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Access" name="Authenticated?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_listing-publication_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_3</bpmn:outgoing>
+      <bpmn:outgoing>Flow_listing-publication_4</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Draft" name="Create private draft">
+      <bpmn:incoming>Flow_listing-publication_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_5</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:receiveTask id="Details" name="Receive details and optional photo">
+      <bpmn:incoming>Flow_listing-publication_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_7</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:exclusiveGateway id="HasPhoto" name="Photo supplied?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_listing-publication_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_8</bpmn:outgoing>
+      <bpmn:outgoing>Flow_listing-publication_9</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="ValidatePhoto" name="Validate JPEG/PNG decoding and size up to 10 MiB">
+      <bpmn:incoming>Flow_listing-publication_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_10</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="PhotoValid" name="Photo valid?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_listing-publication_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_11</bpmn:outgoing>
+      <bpmn:outgoing>Flow_listing-publication_12</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Upload" name="Upload photo and associate metadata">
+      <bpmn:incoming>Flow_listing-publication_11</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_16</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="PhotoJoin" name="Photo step complete" gatewayDirection="Converging">
+      <bpmn:incoming>Flow_listing-publication_9</bpmn:incoming>
+      <bpmn:incoming>Flow_listing-publication_16</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_17</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="WantAI" name="Photo present and analysis requested?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_listing-publication_17</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_18</bpmn:outgoing>
+      <bpmn:outgoing>Flow_listing-publication_19</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="AskAI" name="Request bounded photo analysis">
+      <bpmn:incoming>Flow_listing-publication_18</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_20</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Usable" name="Result valid and still current?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_listing-publication_20</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_21</bpmn:outgoing>
+      <bpmn:outgoing>Flow_listing-publication_22</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="Propose" name="Send editable category suggestions">
+      <bpmn:incoming>Flow_listing-publication_21</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_27</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:task id="Fallback" name="Keep manual values; discard failed or stale analysis">
+      <bpmn:incoming>Flow_listing-publication_25</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_28</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="ReviewJoin" name="Review ready" gatewayDirection="Converging">
+      <bpmn:incoming>Flow_listing-publication_19</bpmn:incoming>
+      <bpmn:incoming>Flow_listing-publication_27</bpmn:incoming>
+      <bpmn:incoming>Flow_listing-publication_28</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_29</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="Review" name="Request final category review">
+      <bpmn:incoming>Flow_listing-publication_29</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_30</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:receiveTask id="Confirmed" name="Receive confirmed categories and action">
+      <bpmn:incoming>Flow_listing-publication_30</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_31</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:exclusiveGateway id="PublishNow" name="Publish now?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_listing-publication_31</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_32</bpmn:outgoing>
+      <bpmn:outgoing>Flow_listing-publication_33</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="SaveDraft" name="Save private draft">
+      <bpmn:incoming>Flow_listing-publication_33</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_44</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Idempotency" name="Check prior publication request">
+      <bpmn:incoming>Flow_listing-publication_32</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_34</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Already" name="Already committed?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_listing-publication_34</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_35</bpmn:outgoing>
+      <bpmn:outgoing>Flow_listing-publication_36</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="ValidatePublish" name="Recheck owner, revision and required fields">
+      <bpmn:incoming>Flow_listing-publication_36</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_37</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="CanPublish" name="Current and valid?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_listing-publication_37</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_38</bpmn:outgoing>
+      <bpmn:outgoing>Flow_listing-publication_39</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Normalize" name="Normalize confirmed categories">
+      <bpmn:incoming>Flow_listing-publication_38</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_40</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="PublishCommit" name="Commit Open listing and durable Matching update together">
+      <bpmn:incoming>Flow_listing-publication_40</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_41</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:task id="Published" name="Set publication success; synchronization pending">
+      <bpmn:incoming>Flow_listing-publication_41</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_43</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Existing" name="Use existing publication result">
+      <bpmn:incoming>Flow_listing-publication_35</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_45</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Reject" name="Set access, validation or revision-conflict result">
+      <bpmn:incoming>Flow_listing-publication_26</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_46</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sendTask id="PhotoIssue" name="Report photo issue; request replacement or removal">
+      <bpmn:incoming>Flow_listing-publication_14</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_15</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:exclusiveGateway id="PhotoIssueJoin" name="Photo correction needed" gatewayDirection="Converging">
+      <bpmn:incoming>Flow_listing-publication_12</bpmn:incoming>
+      <bpmn:incoming>Flow_listing-publication_13</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_14</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="CommitFailed" name="Keep draft private; report failed publication">
+      <bpmn:incoming>Flow_listing-publication_42</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_47</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="PubResult" name="Outcome ready" gatewayDirection="Converging">
+      <bpmn:incoming>Flow_listing-publication_43</bpmn:incoming>
+      <bpmn:incoming>Flow_listing-publication_44</bpmn:incoming>
+      <bpmn:incoming>Flow_listing-publication_45</bpmn:incoming>
+      <bpmn:incoming>Flow_listing-publication_46</bpmn:incoming>
+      <bpmn:incoming>Flow_listing-publication_47</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_48</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="PubReply" name="Return draft or publication outcome">
+      <bpmn:incoming>Flow_listing-publication_48</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_49</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="PubEnd" name="Request completed">
+      <bpmn:incoming>Flow_listing-publication_49</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="DetailsJoin" name="" gatewayDirection="Converging">
+      <bpmn:incoming>Flow_listing-publication_5</bpmn:incoming>
+      <bpmn:incoming>Flow_listing-publication_15</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_6</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="FallbackJoin" name="" gatewayDirection="Converging">
+      <bpmn:incoming>Flow_listing-publication_22</bpmn:incoming>
+      <bpmn:incoming>Flow_listing-publication_23</bpmn:incoming>
+      <bpmn:incoming>Flow_listing-publication_24</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_25</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="RejectJoin" name="" gatewayDirection="Converging">
+      <bpmn:incoming>Flow_listing-publication_4</bpmn:incoming>
+      <bpmn:incoming>Flow_listing-publication_39</bpmn:incoming>
+      <bpmn:outgoing>Flow_listing-publication_26</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:boundaryEvent id="UploadError" name="Upload failed" attachedToRef="Upload">
+      <bpmn:outgoing>Flow_listing-publication_13</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="UploadError_definition" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="AITimeout" name="Analysis timeout" attachedToRef="AskAI">
+      <bpmn:outgoing>Flow_listing-publication_23</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="AITimeout_definition">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">configuredTimeout</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="AIError" name="Analysis failed" attachedToRef="AskAI">
+      <bpmn:outgoing>Flow_listing-publication_24</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="AIError_definition" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="PublishError" name="Commit failed" attachedToRef="PublishCommit">
+      <bpmn:outgoing>Flow_listing-publication_42</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="PublishError_definition" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_listing-publication_1" sourceRef="PubStart" targetRef="CheckAccess" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_2" sourceRef="CheckAccess" targetRef="Access" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_3" name="Allowed" sourceRef="Access" targetRef="Draft">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">accessAllowed</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_4" name="Denied" sourceRef="Access" targetRef="RejectJoin">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not accessAllowed</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_5" sourceRef="Draft" targetRef="DetailsJoin" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_6" sourceRef="DetailsJoin" targetRef="Details" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_7" sourceRef="Details" targetRef="HasPhoto" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_8" name="Yes" sourceRef="HasPhoto" targetRef="ValidatePhoto">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">photoSupplied</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_9" name="No" sourceRef="HasPhoto" targetRef="PhotoJoin">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not photoSupplied</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_10" sourceRef="ValidatePhoto" targetRef="PhotoValid" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_11" name="Valid" sourceRef="PhotoValid" targetRef="Upload">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">photoValid</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_12" name="Invalid" sourceRef="PhotoValid" targetRef="PhotoIssueJoin">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not photoValid</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_13" sourceRef="UploadError" targetRef="PhotoIssueJoin" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_14" sourceRef="PhotoIssueJoin" targetRef="PhotoIssue" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_15" sourceRef="PhotoIssue" targetRef="DetailsJoin" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_16" sourceRef="Upload" targetRef="PhotoJoin" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_17" sourceRef="PhotoJoin" targetRef="WantAI" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_18" name="Yes" sourceRef="WantAI" targetRef="AskAI">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">photoPresent and analysisRequested</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_19" name="No" sourceRef="WantAI" targetRef="ReviewJoin">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not (photoPresent and analysisRequested)</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_20" sourceRef="AskAI" targetRef="Usable" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_21" name="Usable" sourceRef="Usable" targetRef="Propose">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">validResult and currentPhotoAndDraft</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_22" name="Stale or invalid" sourceRef="Usable" targetRef="FallbackJoin">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not (validResult and currentPhotoAndDraft)</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_23" sourceRef="AITimeout" targetRef="FallbackJoin" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_24" sourceRef="AIError" targetRef="FallbackJoin" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_25" sourceRef="FallbackJoin" targetRef="Fallback" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_26" sourceRef="RejectJoin" targetRef="Reject" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_27" sourceRef="Propose" targetRef="ReviewJoin" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_28" sourceRef="Fallback" targetRef="ReviewJoin" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_29" sourceRef="ReviewJoin" targetRef="Review" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_30" sourceRef="Review" targetRef="Confirmed" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_31" sourceRef="Confirmed" targetRef="PublishNow" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_32" name="Publish" sourceRef="PublishNow" targetRef="Idempotency">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">publishRequested</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_33" name="Save draft" sourceRef="PublishNow" targetRef="SaveDraft">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not publishRequested</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_34" sourceRef="Idempotency" targetRef="Already" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_35" name="Yes" sourceRef="Already" targetRef="Existing">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">publicationExists</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_36" name="No" sourceRef="Already" targetRef="ValidatePublish">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not publicationExists</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_37" sourceRef="ValidatePublish" targetRef="CanPublish" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_38" name="Valid" sourceRef="CanPublish" targetRef="Normalize">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">authorizedAndCurrentAndValid</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_39" name="Invalid or stale" sourceRef="CanPublish" targetRef="RejectJoin">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not authorizedAndCurrentAndValid</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_listing-publication_40" sourceRef="Normalize" targetRef="PublishCommit" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_41" sourceRef="PublishCommit" targetRef="Published" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_42" sourceRef="PublishError" targetRef="CommitFailed" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_43" sourceRef="Published" targetRef="PubResult" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_44" sourceRef="SaveDraft" targetRef="PubResult" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_45" sourceRef="Existing" targetRef="PubResult" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_46" sourceRef="Reject" targetRef="PubResult" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_47" sourceRef="CommitFailed" targetRef="PubResult" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_48" sourceRef="PubResult" targetRef="PubReply" />
+    <bpmn:sequenceFlow id="Flow_listing-publication_49" sourceRef="PubReply" targetRef="PubEnd" />
+  </bpmn:process>
+  <bpmn:collaboration id="Collaboration_listing-publication">
+    <bpmn:participant id="Listings" name="Listings Service — planned publication process" processRef="Process_Listings" />
+    <bpmn:participant id="User" name="Registered User" />
+    <bpmn:participant id="Storage" name="Private Photo Storage — planned" />
+    <bpmn:participant id="Analysis" name="Matching / local AI analysis — planned" />
+    <bpmn:messageFlow id="MessageFlow_listing-publication_50" name="Draft request" sourceRef="User" targetRef="PubStart" />
+    <bpmn:messageFlow id="MessageFlow_listing-publication_51" name="Draft details and photo" sourceRef="User" targetRef="Details" />
+    <bpmn:messageFlow id="MessageFlow_listing-publication_52" name="Review requested" sourceRef="Review" targetRef="User" />
+    <bpmn:messageFlow id="MessageFlow_listing-publication_53" name="Confirmed values and action" sourceRef="User" targetRef="Confirmed" />
+    <bpmn:messageFlow id="MessageFlow_listing-publication_54" name="Publication outcome" sourceRef="PubReply" targetRef="User" />
+    <bpmn:messageFlow id="MessageFlow_listing-publication_55" name="Photo upload" sourceRef="Upload" targetRef="Storage" />
+    <bpmn:messageFlow id="MessageFlow_listing-publication_56" name="Analysis request" sourceRef="AskAI" targetRef="Analysis" />
+    <bpmn:messageFlow id="MessageFlow_listing-publication_57" name="Analysis response" sourceRef="Analysis" targetRef="AskAI" />
+  </bpmn:collaboration>
+  <bpmndi:BPMNDiagram id="Diagram_listing-publication">
+    <bpmndi:BPMNPlane id="Plane_listing-publication" bpmnElement="Collaboration_listing-publication">
+      <bpmndi:BPMNShape id="Listings_di" bpmnElement="Listings" isHorizontal="true">
+        <dc:Bounds x="40" y="230" width="2740" height="1240" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="User_di" bpmnElement="User" isHorizontal="true">
+        <dc:Bounds x="40" y="50" width="2740" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Storage_di" bpmnElement="Storage" isHorizontal="true">
+        <dc:Bounds x="40" y="1540" width="1100" height="65" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Analysis_di" bpmnElement="Analysis" isHorizontal="true">
+        <dc:Bounds x="1540" y="1540" width="1240" height="65" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PubStart_di" bpmnElement="PubStart">
+        <dc:Bounds x="110" y="330" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="63" y="375" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CheckAccess_di" bpmnElement="CheckAccess">
+        <dc:Bounds x="210" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Access_di" bpmnElement="Access" isMarkerVisible="true">
+        <dc:Bounds x="440" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="400" y="384" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Draft_di" bpmnElement="Draft">
+        <dc:Bounds x="560" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Details_di" bpmnElement="Details">
+        <dc:Bounds x="790" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="HasPhoto_di" bpmnElement="HasPhoto" isMarkerVisible="true">
+        <dc:Bounds x="1020" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="980" y="384" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ValidatePhoto_di" bpmnElement="ValidatePhoto">
+        <dc:Bounds x="1140" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PhotoValid_di" bpmnElement="PhotoValid" isMarkerVisible="true">
+        <dc:Bounds x="1370" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1330" y="384" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Upload_di" bpmnElement="Upload">
+        <dc:Bounds x="1500" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PhotoJoin_di" bpmnElement="PhotoJoin" isMarkerVisible="true">
+        <dc:Bounds x="1790" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1750" y="384" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="WantAI_di" bpmnElement="WantAI" isMarkerVisible="true">
+        <dc:Bounds x="2010" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1970" y="384" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="AskAI_di" bpmnElement="AskAI">
+        <dc:Bounds x="2010" y="620" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Usable_di" bpmnElement="Usable" isMarkerVisible="true">
+        <dc:Bounds x="1780" y="635" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1740" y="694" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Propose_di" bpmnElement="Propose">
+        <dc:Bounds x="1510" y="620" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Fallback_di" bpmnElement="Fallback">
+        <dc:Bounds x="1500" y="860" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ReviewJoin_di" bpmnElement="ReviewJoin" isMarkerVisible="true">
+        <dc:Bounds x="1260" y="635" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1220" y="694" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Review_di" bpmnElement="Review">
+        <dc:Bounds x="1000" y="620" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Confirmed_di" bpmnElement="Confirmed">
+        <dc:Bounds x="760" y="620" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PublishNow_di" bpmnElement="PublishNow" isMarkerVisible="true">
+        <dc:Bounds x="530" y="635" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="490" y="694" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SaveDraft_di" bpmnElement="SaveDraft">
+        <dc:Bounds x="500" y="860" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Idempotency_di" bpmnElement="Idempotency">
+        <dc:Bounds x="210" y="1120" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Already_di" bpmnElement="Already" isMarkerVisible="true">
+        <dc:Bounds x="440" y="1135" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="400" y="1194" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ValidatePublish_di" bpmnElement="ValidatePublish">
+        <dc:Bounds x="560" y="1120" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CanPublish_di" bpmnElement="CanPublish" isMarkerVisible="true">
+        <dc:Bounds x="790" y="1135" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="750" y="1194" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Normalize_di" bpmnElement="Normalize">
+        <dc:Bounds x="910" y="1120" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PublishCommit_di" bpmnElement="PublishCommit">
+        <dc:Bounds x="1140" y="1120" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Published_di" bpmnElement="Published">
+        <dc:Bounds x="1380" y="1120" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Existing_di" bpmnElement="Existing">
+        <dc:Bounds x="470" y="1320" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Reject_di" bpmnElement="Reject">
+        <dc:Bounds x="1760" y="1320" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PhotoIssue_di" bpmnElement="PhotoIssue">
+        <dc:Bounds x="1140" y="480" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PhotoIssueJoin_di" bpmnElement="PhotoIssueJoin" isMarkerVisible="true">
+        <dc:Bounds x="1390" y="495" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1350" y="554" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CommitFailed_di" bpmnElement="CommitFailed">
+        <dc:Bounds x="1510" y="1320" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PubResult_di" bpmnElement="PubResult" isMarkerVisible="true">
+        <dc:Bounds x="2380" y="1135" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2340" y="1194" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PubReply_di" bpmnElement="PubReply">
+        <dc:Bounds x="2500" y="1120" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PubEnd_di" bpmnElement="PubEnd">
+        <dc:Bounds x="2710" y="1142" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2663" y="1187" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DetailsJoin_di" bpmnElement="DetailsJoin" isMarkerVisible="true">
+        <dc:Bounds x="730" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="690" y="384" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="FallbackJoin_di" bpmnElement="FallbackJoin" isMarkerVisible="true">
+        <dc:Bounds x="1770" y="865" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1730" y="924" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="RejectJoin_di" bpmnElement="RejectJoin" isMarkerVisible="true">
+        <dc:Bounds x="1720" y="1250" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1680" y="1309" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="UploadError_di" bpmnElement="UploadError">
+        <dc:Bounds x="1625" y="372" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1578" y="417" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="AITimeout_di" bpmnElement="AITimeout">
+        <dc:Bounds x="2135" y="682" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2088" y="727" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="AIError_di" bpmnElement="AIError">
+        <dc:Bounds x="2045" y="682" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1998" y="727" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PublishError_di" bpmnElement="PublishError">
+        <dc:Bounds x="1265" y="1182" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1218" y="1227" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_1_di" bpmnElement="Flow_listing-publication_1">
+        <di:waypoint x="146" y="348" />
+        <di:waypoint x="178" y="348" />
+        <di:waypoint x="178" y="350" />
+        <di:waypoint x="210" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_2_di" bpmnElement="Flow_listing-publication_2">
+        <di:waypoint x="370" y="350" />
+        <di:waypoint x="440" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_3_di" bpmnElement="Flow_listing-publication_3">
+        <di:waypoint x="490" y="350" />
+        <di:waypoint x="560" y="350" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="470" y="325" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_4_di" bpmnElement="Flow_listing-publication_4">
+        <di:waypoint x="465" y="375" />
+        <di:waypoint x="465" y="1010" />
+        <di:waypoint x="1745" y="1010" />
+        <di:waypoint x="1745" y="1250" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1050" y="985" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_5_di" bpmnElement="Flow_listing-publication_5">
+        <di:waypoint x="720" y="350" />
+        <di:waypoint x="730" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_6_di" bpmnElement="Flow_listing-publication_6">
+        <di:waypoint x="780" y="350" />
+        <di:waypoint x="790" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_7_di" bpmnElement="Flow_listing-publication_7">
+        <di:waypoint x="950" y="350" />
+        <di:waypoint x="1020" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_8_di" bpmnElement="Flow_listing-publication_8">
+        <di:waypoint x="1070" y="350" />
+        <di:waypoint x="1140" y="350" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1050" y="325" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_9_di" bpmnElement="Flow_listing-publication_9">
+        <di:waypoint x="1045" y="325" />
+        <di:waypoint x="1045" y="270" />
+        <di:waypoint x="1815" y="270" />
+        <di:waypoint x="1815" y="325" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1375" y="245" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_10_di" bpmnElement="Flow_listing-publication_10">
+        <di:waypoint x="1300" y="350" />
+        <di:waypoint x="1370" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_11_di" bpmnElement="Flow_listing-publication_11">
+        <di:waypoint x="1420" y="350" />
+        <di:waypoint x="1500" y="350" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1405" y="325" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_12_di" bpmnElement="Flow_listing-publication_12">
+        <di:waypoint x="1395" y="375" />
+        <di:waypoint x="1395" y="450" />
+        <di:waypoint x="1415" y="450" />
+        <di:waypoint x="1415" y="495" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1340" y="387.5" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_13_di" bpmnElement="Flow_listing-publication_13">
+        <di:waypoint x="1643" y="408" />
+        <di:waypoint x="1623" y="408" />
+        <di:waypoint x="1623" y="520" />
+        <di:waypoint x="1390" y="520" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_14_di" bpmnElement="Flow_listing-publication_14">
+        <di:waypoint x="1390" y="520" />
+        <di:waypoint x="1300" y="520" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_15_di" bpmnElement="Flow_listing-publication_15">
+        <di:waypoint x="1140" y="520" />
+        <di:waypoint x="740" y="520" />
+        <di:waypoint x="740" y="400" />
+        <di:waypoint x="755" y="400" />
+        <di:waypoint x="755" y="375" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_16_di" bpmnElement="Flow_listing-publication_16">
+        <di:waypoint x="1660" y="350" />
+        <di:waypoint x="1790" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_17_di" bpmnElement="Flow_listing-publication_17">
+        <di:waypoint x="1840" y="350" />
+        <di:waypoint x="2010" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_18_di" bpmnElement="Flow_listing-publication_18">
+        <di:waypoint x="2035" y="375" />
+        <di:waypoint x="2035" y="540" />
+        <di:waypoint x="2090" y="540" />
+        <di:waypoint x="2090" y="620" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1980" y="432.5" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_19_di" bpmnElement="Flow_listing-publication_19">
+        <di:waypoint x="2060" y="350" />
+        <di:waypoint x="2270" y="350" />
+        <di:waypoint x="2270" y="570" />
+        <di:waypoint x="1285" y="570" />
+        <di:waypoint x="1285" y="635" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1722.5" y="545" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_20_di" bpmnElement="Flow_listing-publication_20">
+        <di:waypoint x="2010" y="660" />
+        <di:waypoint x="1830" y="660" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_21_di" bpmnElement="Flow_listing-publication_21">
+        <di:waypoint x="1780" y="660" />
+        <di:waypoint x="1670" y="660" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1670" y="635" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_22_di" bpmnElement="Flow_listing-publication_22">
+        <di:waypoint x="1805" y="685" />
+        <di:waypoint x="1805" y="800" />
+        <di:waypoint x="1795" y="800" />
+        <di:waypoint x="1795" y="865" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1750" y="717.5" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_23_di" bpmnElement="Flow_listing-publication_23">
+        <di:waypoint x="2153" y="718" />
+        <di:waypoint x="2133" y="718" />
+        <di:waypoint x="2133" y="1000" />
+        <di:waypoint x="1860" y="1000" />
+        <di:waypoint x="1860" y="890" />
+        <di:waypoint x="1820" y="890" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_24_di" bpmnElement="Flow_listing-publication_24">
+        <di:waypoint x="2063" y="718" />
+        <di:waypoint x="2043" y="718" />
+        <di:waypoint x="2043" y="1020" />
+        <di:waypoint x="1880" y="1020" />
+        <di:waypoint x="1880" y="890" />
+        <di:waypoint x="1820" y="890" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_25_di" bpmnElement="Flow_listing-publication_25">
+        <di:waypoint x="1770" y="890" />
+        <di:waypoint x="1715" y="890" />
+        <di:waypoint x="1715" y="900" />
+        <di:waypoint x="1660" y="900" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_26_di" bpmnElement="Flow_listing-publication_26">
+        <di:waypoint x="1745" y="1300" />
+        <di:waypoint x="1745" y="1360" />
+        <di:waypoint x="1760" y="1360" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_27_di" bpmnElement="Flow_listing-publication_27">
+        <di:waypoint x="1510" y="660" />
+        <di:waypoint x="1310" y="660" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_28_di" bpmnElement="Flow_listing-publication_28">
+        <di:waypoint x="1500" y="900" />
+        <di:waypoint x="1285" y="900" />
+        <di:waypoint x="1285" y="685" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_29_di" bpmnElement="Flow_listing-publication_29">
+        <di:waypoint x="1260" y="660" />
+        <di:waypoint x="1160" y="660" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_30_di" bpmnElement="Flow_listing-publication_30">
+        <di:waypoint x="1000" y="660" />
+        <di:waypoint x="920" y="660" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_31_di" bpmnElement="Flow_listing-publication_31">
+        <di:waypoint x="760" y="660" />
+        <di:waypoint x="580" y="660" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_32_di" bpmnElement="Flow_listing-publication_32">
+        <di:waypoint x="530" y="660" />
+        <di:waypoint x="460" y="660" />
+        <di:waypoint x="460" y="1040" />
+        <di:waypoint x="170" y="1040" />
+        <di:waypoint x="170" y="1160" />
+        <di:waypoint x="210" y="1160" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="405" y="825" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_33_di" bpmnElement="Flow_listing-publication_33">
+        <di:waypoint x="555" y="685" />
+        <di:waypoint x="555" y="820" />
+        <di:waypoint x="580" y="820" />
+        <di:waypoint x="580" y="860" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="500" y="727.5" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_34_di" bpmnElement="Flow_listing-publication_34">
+        <di:waypoint x="370" y="1160" />
+        <di:waypoint x="440" y="1160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_35_di" bpmnElement="Flow_listing-publication_35">
+        <di:waypoint x="465" y="1185" />
+        <di:waypoint x="465" y="1360" />
+        <di:waypoint x="470" y="1360" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="410" y="1247.5" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_36_di" bpmnElement="Flow_listing-publication_36">
+        <di:waypoint x="490" y="1160" />
+        <di:waypoint x="560" y="1160" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="470" y="1135" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_37_di" bpmnElement="Flow_listing-publication_37">
+        <di:waypoint x="720" y="1160" />
+        <di:waypoint x="790" y="1160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_38_di" bpmnElement="Flow_listing-publication_38">
+        <di:waypoint x="840" y="1160" />
+        <di:waypoint x="910" y="1160" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="820" y="1135" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_39_di" bpmnElement="Flow_listing-publication_39">
+        <di:waypoint x="815" y="1185" />
+        <di:waypoint x="815" y="1275" />
+        <di:waypoint x="1720" y="1275" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1212.5" y="1250" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_40_di" bpmnElement="Flow_listing-publication_40">
+        <di:waypoint x="1070" y="1160" />
+        <di:waypoint x="1140" y="1160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_41_di" bpmnElement="Flow_listing-publication_41">
+        <di:waypoint x="1300" y="1160" />
+        <di:waypoint x="1380" y="1160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_42_di" bpmnElement="Flow_listing-publication_42">
+        <di:waypoint x="1283" y="1218" />
+        <di:waypoint x="1263" y="1218" />
+        <di:waypoint x="1263" y="1360" />
+        <di:waypoint x="1510" y="1360" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_43_di" bpmnElement="Flow_listing-publication_43">
+        <di:waypoint x="1540" y="1160" />
+        <di:waypoint x="2170" y="1160" />
+        <di:waypoint x="2380" y="1160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_44_di" bpmnElement="Flow_listing-publication_44">
+        <di:waypoint x="660" y="900" />
+        <di:waypoint x="720" y="900" />
+        <di:waypoint x="720" y="980" />
+        <di:waypoint x="2405" y="980" />
+        <di:waypoint x="2405" y="1135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_45_di" bpmnElement="Flow_listing-publication_45">
+        <di:waypoint x="630" y="1360" />
+        <di:waypoint x="700" y="1360" />
+        <di:waypoint x="700" y="1430" />
+        <di:waypoint x="2405" y="1430" />
+        <di:waypoint x="2405" y="1185" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_46_di" bpmnElement="Flow_listing-publication_46">
+        <di:waypoint x="1920" y="1360" />
+        <di:waypoint x="2200" y="1360" />
+        <di:waypoint x="2200" y="1240" />
+        <di:waypoint x="2405" y="1240" />
+        <di:waypoint x="2405" y="1185" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_47_di" bpmnElement="Flow_listing-publication_47">
+        <di:waypoint x="1670" y="1360" />
+        <di:waypoint x="1710" y="1360" />
+        <di:waypoint x="1710" y="1410" />
+        <di:waypoint x="2445" y="1410" />
+        <di:waypoint x="2445" y="1220" />
+        <di:waypoint x="2405" y="1220" />
+        <di:waypoint x="2405" y="1185" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_48_di" bpmnElement="Flow_listing-publication_48">
+        <di:waypoint x="2430" y="1160" />
+        <di:waypoint x="2500" y="1160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_listing-publication_49_di" bpmnElement="Flow_listing-publication_49">
+        <di:waypoint x="2660" y="1160" />
+        <di:waypoint x="2710" y="1160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_listing-publication_50_di" bpmnElement="MessageFlow_listing-publication_50">
+        <di:waypoint x="1410" y="120" />
+        <di:waypoint x="1410" y="170" />
+        <di:waypoint x="128" y="170" />
+        <di:waypoint x="128" y="330" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="714" y="145" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_listing-publication_51_di" bpmnElement="MessageFlow_listing-publication_51">
+        <di:waypoint x="1410" y="120" />
+        <di:waypoint x="1410" y="190" />
+        <di:waypoint x="870" y="190" />
+        <di:waypoint x="870" y="310" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1085" y="165" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_listing-publication_52_di" bpmnElement="MessageFlow_listing-publication_52">
+        <di:waypoint x="1080" y="620" />
+        <di:waypoint x="1080" y="160" />
+        <di:waypoint x="1410" y="160" />
+        <di:waypoint x="1410" y="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1025" y="365" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_listing-publication_53_di" bpmnElement="MessageFlow_listing-publication_53">
+        <di:waypoint x="1410" y="120" />
+        <di:waypoint x="1410" y="210" />
+        <di:waypoint x="840" y="210" />
+        <di:waypoint x="840" y="610" />
+        <di:waypoint x="840" y="620" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1070" y="185" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_listing-publication_54_di" bpmnElement="MessageFlow_listing-publication_54">
+        <di:waypoint x="2660" y="1160" />
+        <di:waypoint x="2750" y="1160" />
+        <di:waypoint x="2750" y="25" />
+        <di:waypoint x="1410" y="25" />
+        <di:waypoint x="1410" y="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2025" y="0" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_listing-publication_55_di" bpmnElement="MessageFlow_listing-publication_55">
+        <di:waypoint x="1580" y="390" />
+        <di:waypoint x="1580" y="430" />
+        <di:waypoint x="100" y="430" />
+        <di:waypoint x="100" y="1572" />
+        <di:waypoint x="40" y="1572" />
+        <di:waypoint x="40" y="1572.5" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="785" y="405" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_listing-publication_56_di" bpmnElement="MessageFlow_listing-publication_56">
+        <di:waypoint x="2170" y="660" />
+        <di:waypoint x="2710" y="660" />
+        <di:waypoint x="2710" y="1640" />
+        <di:waypoint x="2160" y="1640" />
+        <di:waypoint x="2160" y="1605" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2655" y="1125" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_listing-publication_57_di" bpmnElement="MessageFlow_listing-publication_57">
+        <di:waypoint x="2160" y="1540" />
+        <di:waypoint x="2160" y="1500" />
+        <di:waypoint x="2680" y="1500" />
+        <di:waypoint x="2680" y="720" />
+        <di:waypoint x="2210" y="720" />
+        <di:waypoint x="2210" y="660" />
+        <di:waypoint x="2170" y="660" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2625" y="1085" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

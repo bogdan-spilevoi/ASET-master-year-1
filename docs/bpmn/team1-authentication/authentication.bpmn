@@ -1,0 +1,417 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_authentication" targetNamespace="https://smartlost.example/bpmn/authentication" exporter="SmartLost BPMN documentation" exporterVersion="1">
+  <bpmn:process id="Process_Auth" name="Auth Service — implemented registration and login" isExecutable="false">
+    <bpmn:startEvent id="AuthStart" name="Authentication request received">
+      <bpmn:outgoing>Flow_authentication_1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="AuthStart_message" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Validate" name="Map and validate request">
+      <bpmn:incoming>Flow_authentication_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Valid" name="Request valid?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_authentication_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_3</bpmn:outgoing>
+      <bpmn:outgoing>Flow_authentication_4</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="Kind" name="Register or login?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_authentication_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_5</bpmn:outgoing>
+      <bpmn:outgoing>Flow_authentication_6</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="UniqueCheck" name="Check normalized username and email">
+      <bpmn:incoming>Flow_authentication_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_7</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Unique" name="Account available?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_authentication_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_8</bpmn:outgoing>
+      <bpmn:outgoing>Flow_authentication_9</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Create" name="Create account and hash password">
+      <bpmn:incoming>Flow_authentication_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_10</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Credentials" name="Load account and verify password">
+      <bpmn:incoming>Flow_authentication_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_11</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="CredentialValid" name="Credentials valid?" gatewayDirection="Diverging">
+      <bpmn:incoming>Flow_authentication_11</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_12</bpmn:outgoing>
+      <bpmn:outgoing>Flow_authentication_13</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="JoinAuth" name="Authenticated operation" gatewayDirection="Converging">
+      <bpmn:incoming>Flow_authentication_10</bpmn:incoming>
+      <bpmn:incoming>Flow_authentication_12</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_14</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Session" name="Prepare JWT, session and token history">
+      <bpmn:incoming>Flow_authentication_14</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_15</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Commit" name="Atomically save tracked rows and selected outbox events">
+      <bpmn:incoming>Flow_authentication_15</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_16</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:task id="Success" name="Set success: 201 register / 200 login">
+      <bpmn:incoming>Flow_authentication_16</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_18</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Invalid" name="Set 400 validation result">
+      <bpmn:incoming>Flow_authentication_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_21</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Conflict" name="Set 409 account conflict">
+      <bpmn:incoming>Flow_authentication_9</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_20</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Unauthorized" name="Set 401 invalid credentials">
+      <bpmn:incoming>Flow_authentication_13</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_22</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="SaveError" name="Map save error to 409 or sanitized 500">
+      <bpmn:incoming>Flow_authentication_17</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_19</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="ResponseJoin" name="Response ready" gatewayDirection="Converging">
+      <bpmn:incoming>Flow_authentication_18</bpmn:incoming>
+      <bpmn:incoming>Flow_authentication_19</bpmn:incoming>
+      <bpmn:incoming>Flow_authentication_20</bpmn:incoming>
+      <bpmn:incoming>Flow_authentication_21</bpmn:incoming>
+      <bpmn:incoming>Flow_authentication_22</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_23</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="Reply" name="Return authentication result">
+      <bpmn:incoming>Flow_authentication_23</bpmn:incoming>
+      <bpmn:outgoing>Flow_authentication_24</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="AuthEnd" name="Request completed">
+      <bpmn:incoming>Flow_authentication_24</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="CommitError" name="Save failed" attachedToRef="Commit">
+      <bpmn:outgoing>Flow_authentication_17</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="CommitError_definition" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_authentication_1" sourceRef="AuthStart" targetRef="Validate" />
+    <bpmn:sequenceFlow id="Flow_authentication_2" sourceRef="Validate" targetRef="Valid" />
+    <bpmn:sequenceFlow id="Flow_authentication_3" name="Valid" sourceRef="Valid" targetRef="Kind">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">requestValid</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_authentication_4" name="Invalid" sourceRef="Valid" targetRef="Invalid">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not requestValid</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_authentication_5" name="Register" sourceRef="Kind" targetRef="UniqueCheck">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">operation = register</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_authentication_6" name="Login" sourceRef="Kind" targetRef="Credentials">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">operation = login</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_authentication_7" sourceRef="UniqueCheck" targetRef="Unique" />
+    <bpmn:sequenceFlow id="Flow_authentication_8" name="Available" sourceRef="Unique" targetRef="Create">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not accountExists</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_authentication_9" name="Exists" sourceRef="Unique" targetRef="Conflict">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">accountExists</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_authentication_10" sourceRef="Create" targetRef="JoinAuth" />
+    <bpmn:sequenceFlow id="Flow_authentication_11" sourceRef="Credentials" targetRef="CredentialValid" />
+    <bpmn:sequenceFlow id="Flow_authentication_12" name="Valid" sourceRef="CredentialValid" targetRef="JoinAuth">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">credentialsValid</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_authentication_13" name="Invalid" sourceRef="CredentialValid" targetRef="Unauthorized">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not credentialsValid</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_authentication_14" sourceRef="JoinAuth" targetRef="Session" />
+    <bpmn:sequenceFlow id="Flow_authentication_15" sourceRef="Session" targetRef="Commit" />
+    <bpmn:sequenceFlow id="Flow_authentication_16" sourceRef="Commit" targetRef="Success" />
+    <bpmn:sequenceFlow id="Flow_authentication_17" sourceRef="CommitError" targetRef="SaveError" />
+    <bpmn:sequenceFlow id="Flow_authentication_18" sourceRef="Success" targetRef="ResponseJoin" />
+    <bpmn:sequenceFlow id="Flow_authentication_19" sourceRef="SaveError" targetRef="ResponseJoin" />
+    <bpmn:sequenceFlow id="Flow_authentication_20" sourceRef="Conflict" targetRef="ResponseJoin" />
+    <bpmn:sequenceFlow id="Flow_authentication_21" sourceRef="Invalid" targetRef="ResponseJoin" />
+    <bpmn:sequenceFlow id="Flow_authentication_22" sourceRef="Unauthorized" targetRef="ResponseJoin" />
+    <bpmn:sequenceFlow id="Flow_authentication_23" sourceRef="ResponseJoin" targetRef="Reply" />
+    <bpmn:sequenceFlow id="Flow_authentication_24" sourceRef="Reply" targetRef="AuthEnd" />
+  </bpmn:process>
+  <bpmn:collaboration id="Collaboration_authentication">
+    <bpmn:participant id="Auth" name="Auth Service — implemented registration and login" processRef="Process_Auth" />
+    <bpmn:participant id="Client" name="API Client" />
+    <bpmn:messageFlow id="MessageFlow_authentication_25" name="Register / login request" sourceRef="Client" targetRef="AuthStart" />
+    <bpmn:messageFlow id="MessageFlow_authentication_26" name="HTTP response" sourceRef="Reply" targetRef="Client" />
+  </bpmn:collaboration>
+  <bpmndi:BPMNDiagram id="Diagram_authentication">
+    <bpmndi:BPMNPlane id="Plane_authentication" bpmnElement="Collaboration_authentication">
+      <bpmndi:BPMNShape id="Auth_di" bpmnElement="Auth" isHorizontal="true">
+        <dc:Bounds x="40" y="200" width="2530" height="850" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Client_di" bpmnElement="Client" isHorizontal="true">
+        <dc:Bounds x="40" y="50" width="2530" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="AuthStart_di" bpmnElement="AuthStart">
+        <dc:Bounds x="110" y="330" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="63" y="375" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Validate_di" bpmnElement="Validate">
+        <dc:Bounds x="210" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Valid_di" bpmnElement="Valid" isMarkerVisible="true">
+        <dc:Bounds x="440" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="400" y="384" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Kind_di" bpmnElement="Kind" isMarkerVisible="true">
+        <dc:Bounds x="620" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="580" y="384" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="UniqueCheck_di" bpmnElement="UniqueCheck">
+        <dc:Bounds x="790" y="270" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Unique_di" bpmnElement="Unique" isMarkerVisible="true">
+        <dc:Bounds x="1020" y="285" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="980" y="344" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Create_di" bpmnElement="Create">
+        <dc:Bounds x="1150" y="270" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Credentials_di" bpmnElement="Credentials">
+        <dc:Bounds x="790" y="500" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CredentialValid_di" bpmnElement="CredentialValid" isMarkerVisible="true">
+        <dc:Bounds x="1020" y="515" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="980" y="574" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="JoinAuth_di" bpmnElement="JoinAuth" isMarkerVisible="true">
+        <dc:Bounds x="1410" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1370" y="384" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Session_di" bpmnElement="Session">
+        <dc:Bounds x="1530" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Commit_di" bpmnElement="Commit">
+        <dc:Bounds x="1760" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Success_di" bpmnElement="Success">
+        <dc:Bounds x="2000" y="310" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Invalid_di" bpmnElement="Invalid">
+        <dc:Bounds x="390" y="850" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Conflict_di" bpmnElement="Conflict">
+        <dc:Bounds x="1140" y="710" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Unauthorized_di" bpmnElement="Unauthorized">
+        <dc:Bounds x="1140" y="850" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SaveError_di" bpmnElement="SaveError">
+        <dc:Bounds x="1730" y="620" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ResponseJoin_di" bpmnElement="ResponseJoin" isMarkerVisible="true">
+        <dc:Bounds x="2010" y="835" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1970" y="894" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Reply_di" bpmnElement="Reply">
+        <dc:Bounds x="2170" y="820" width="160" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="AuthEnd_di" bpmnElement="AuthEnd">
+        <dc:Bounds x="2420" y="842" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2373" y="887" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CommitError_di" bpmnElement="CommitError">
+        <dc:Bounds x="1885" y="372" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1838" y="417" width="130" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_authentication_1_di" bpmnElement="Flow_authentication_1">
+        <di:waypoint x="146" y="348" />
+        <di:waypoint x="178" y="348" />
+        <di:waypoint x="178" y="350" />
+        <di:waypoint x="210" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_2_di" bpmnElement="Flow_authentication_2">
+        <di:waypoint x="370" y="350" />
+        <di:waypoint x="440" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_3_di" bpmnElement="Flow_authentication_3">
+        <di:waypoint x="490" y="350" />
+        <di:waypoint x="620" y="350" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="500" y="325" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_4_di" bpmnElement="Flow_authentication_4">
+        <di:waypoint x="465" y="375" />
+        <di:waypoint x="465" y="780" />
+        <di:waypoint x="470" y="780" />
+        <di:waypoint x="470" y="850" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="410" y="552.5" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_5_di" bpmnElement="Flow_authentication_5">
+        <di:waypoint x="670" y="350" />
+        <di:waypoint x="730" y="350" />
+        <di:waypoint x="730" y="310" />
+        <di:waypoint x="790" y="310" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="645" y="325" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_6_di" bpmnElement="Flow_authentication_6">
+        <di:waypoint x="645" y="375" />
+        <di:waypoint x="645" y="540" />
+        <di:waypoint x="790" y="540" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="590" y="432.5" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_7_di" bpmnElement="Flow_authentication_7">
+        <di:waypoint x="950" y="310" />
+        <di:waypoint x="1020" y="310" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_8_di" bpmnElement="Flow_authentication_8">
+        <di:waypoint x="1070" y="310" />
+        <di:waypoint x="1150" y="310" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1055" y="285" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_9_di" bpmnElement="Flow_authentication_9">
+        <di:waypoint x="1045" y="335" />
+        <di:waypoint x="1045" y="420" />
+        <di:waypoint x="1090" y="420" />
+        <di:waypoint x="1090" y="680" />
+        <di:waypoint x="1220" y="680" />
+        <di:waypoint x="1220" y="710" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1035" y="525" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_10_di" bpmnElement="Flow_authentication_10">
+        <di:waypoint x="1310" y="310" />
+        <di:waypoint x="1360" y="310" />
+        <di:waypoint x="1360" y="350" />
+        <di:waypoint x="1410" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_11_di" bpmnElement="Flow_authentication_11">
+        <di:waypoint x="950" y="540" />
+        <di:waypoint x="1020" y="540" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_12_di" bpmnElement="Flow_authentication_12">
+        <di:waypoint x="1070" y="540" />
+        <di:waypoint x="1350" y="540" />
+        <di:waypoint x="1350" y="350" />
+        <di:waypoint x="1410" y="350" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1155" y="515" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_13_di" bpmnElement="Flow_authentication_13">
+        <di:waypoint x="1045" y="565" />
+        <di:waypoint x="1045" y="890" />
+        <di:waypoint x="1140" y="890" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="990" y="702.5" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_14_di" bpmnElement="Flow_authentication_14">
+        <di:waypoint x="1460" y="350" />
+        <di:waypoint x="1530" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_15_di" bpmnElement="Flow_authentication_15">
+        <di:waypoint x="1690" y="350" />
+        <di:waypoint x="1760" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_16_di" bpmnElement="Flow_authentication_16">
+        <di:waypoint x="1920" y="350" />
+        <di:waypoint x="2000" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_17_di" bpmnElement="Flow_authentication_17">
+        <di:waypoint x="1903" y="408" />
+        <di:waypoint x="1883" y="408" />
+        <di:waypoint x="1883" y="540" />
+        <di:waypoint x="1810" y="540" />
+        <di:waypoint x="1810" y="620" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_18_di" bpmnElement="Flow_authentication_18">
+        <di:waypoint x="2080" y="390" />
+        <di:waypoint x="2080" y="720" />
+        <di:waypoint x="2035" y="720" />
+        <di:waypoint x="2035" y="835" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_19_di" bpmnElement="Flow_authentication_19">
+        <di:waypoint x="1890" y="660" />
+        <di:waypoint x="1960" y="660" />
+        <di:waypoint x="1960" y="860" />
+        <di:waypoint x="2010" y="860" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_20_di" bpmnElement="Flow_authentication_20">
+        <di:waypoint x="1300" y="750" />
+        <di:waypoint x="1470" y="750" />
+        <di:waypoint x="1470" y="800" />
+        <di:waypoint x="1970" y="800" />
+        <di:waypoint x="1970" y="860" />
+        <di:waypoint x="2010" y="860" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_21_di" bpmnElement="Flow_authentication_21">
+        <di:waypoint x="550" y="890" />
+        <di:waypoint x="680" y="890" />
+        <di:waypoint x="680" y="990" />
+        <di:waypoint x="1950" y="990" />
+        <di:waypoint x="1950" y="860" />
+        <di:waypoint x="2010" y="860" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_22_di" bpmnElement="Flow_authentication_22">
+        <di:waypoint x="1300" y="890" />
+        <di:waypoint x="1440" y="890" />
+        <di:waypoint x="1440" y="950" />
+        <di:waypoint x="1930" y="950" />
+        <di:waypoint x="1930" y="860" />
+        <di:waypoint x="2010" y="860" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_23_di" bpmnElement="Flow_authentication_23">
+        <di:waypoint x="2060" y="860" />
+        <di:waypoint x="2170" y="860" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_authentication_24_di" bpmnElement="Flow_authentication_24">
+        <di:waypoint x="2330" y="860" />
+        <di:waypoint x="2420" y="860" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_authentication_25_di" bpmnElement="MessageFlow_authentication_25">
+        <di:waypoint x="1305" y="120" />
+        <di:waypoint x="1305" y="160" />
+        <di:waypoint x="128" y="160" />
+        <di:waypoint x="128" y="330" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="661.5" y="135" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_authentication_26_di" bpmnElement="MessageFlow_authentication_26">
+        <di:waypoint x="2330" y="860" />
+        <di:waypoint x="2500" y="860" />
+        <di:waypoint x="2500" y="25" />
+        <di:waypoint x="1305" y="25" />
+        <di:waypoint x="1305" y="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1847.5" y="0" width="110" height="25" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
