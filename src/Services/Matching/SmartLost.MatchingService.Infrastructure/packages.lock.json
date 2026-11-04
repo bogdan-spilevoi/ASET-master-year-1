@@ -190,6 +190,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
+          "Microsoft.Extensions.Caching.Memory": "[10.0.12, )",
           "SmartLost.BuildingBlocks.Application": "[1.0.0, )"
         }
       },

@@ -8,7 +8,7 @@ namespace SmartLost.BuildingBlocks.Application;
 public static class DependencyInjection
 {
     public static IServiceCollection AddBuildingBlocksApplication(
-        this IServiceCollection services, Assembly serviceAssembly, bool useTransactions = false)
+        this IServiceCollection services, Assembly serviceAssembly, bool useTransactions = false, bool useCaching = false)
     {
         services.AddValidatorsFromAssembly(serviceAssembly);
         services.AddMediatR(configuration =>
@@ -16,6 +16,11 @@ public static class DependencyInjection
             configuration.RegisterServicesFromAssembly(serviceAssembly);
             configuration.AddOpenBehavior(typeof(ExceptionToResultBehavior<,>));
             configuration.AddOpenBehavior(typeof(ValidationBehavior<,>));
+            if (useCaching)
+            {
+                configuration.AddOpenBehavior(typeof(CachingBehavior<,>));
+            }
+
             if (useTransactions)
             {
                 configuration.AddOpenBehavior(typeof(TransactionBehavior<,>));

@@ -1,44 +1,47 @@
-# Listings model unit tests
+# Listings tests
 
-This xUnit suite references the Listings Modeling assembly and collects its generated
-C# coverage with Coverlet. It is included in the root and focused Listings solutions.
-CI discovers it automatically through the existing `tests/<Service>/*.UnitTests` convention.
+This suite has three independent responsibilities:
 
-The tests cover:
+- `ListingsModelTests*.cs`: NMF structure, metadata, defaults, opposites, containment,
+  notifications, generated expressions and publication/recovery XMI round trips.
+- `ListingsBehaviorTests*.cs` and `DomainStructureTests.cs`: conventional Domain
+  factories/guards, revisions/sequences, lifecycle, decisions, recovery/award construction,
+  local events, encapsulation and consistency of manually maintained Domain fields/enums/defaults
+  with the Ecore model. Reflection is used only
+  in tests to simulate corrupted materialized state and exercise defensive guards.
+- [EfCompatibility](EfCompatibility/): the real seven-entity Infrastructure context and
+  relational checks for round trips, private setters, collection backing fields,
+  bidirectional navigations, photo replacement/removal, category assignment removal,
+  historical FK/unique links, cascades and stale-writer rejection. SQLite is a relational
+  database in memory, not EF's InMemory provider. Npgsql generates schema SQL offline.
+  `ListingsPersistenceTests` additionally checks migration/snapshot drift, unique/composite
+  keys, SQL/rollback generation, design-time settings and scoped DI without connecting.
 
-- Embedded metamodel registration, class identity, enum defaults and relationship multiplicities.
-- Loading the sample XMI, shared category references and save/load round trips.
-- Scalar properties, reflective NMF access, change notifications and reversible expressions.
-- Photo replacement, association ownership and independent category lifetime.
-- Generated child/reference collection adapters, their observable updates and deletion handling.
-- Identifier changes, URI resolution and moves between model roots.
-- Suggested decisions with no human actor/timestamp and shared Lost/Found references.
-- Confirmed-recovery XMI, one-to-one inverse links and a single fictional finder award.
-- Independent decision/recovery/ledger roots, reference observers and model-deletion cleanup.
-- Long source change sequences, independent content revisions and sequence-bearing XMI examples.
-
-These are C# tests of the generated model and its XML/XMI data. They do not start the
-Listings API, connect to PostgreSQL or Blob Storage, or require Docker/model downloads.
-They do not assert that future business validation is implemented by generated setters.
-Reassignment/deletion tests check NMF mechanics, not permission to mutate business history.
-Atomic recovery/award persistence, idempotency, reservations and owner authorization
-require future runtime tests after those layers are implemented.
-Tests in this model class run sequentially under xUnit's normal collection behavior.
-Each round-trip test writes and deletes its own uniquely named temporary XMI file.
+The suite requires no Docker or external database. ListingsQueryFlowTests runs the real
+API in TestServer against isolated SQLite: filters/paging, DTOs, Open-only visibility,
+400/404, development seed idempotency, Development-only Swagger and production seed suppression.
+It also verifies that the standalone seed-only entry point populates Development data
+without starting the HTTP host and rejects Production before inserting records.
+Swagger checks include document title, UI document URL and Production unavailability.
+It does not deliver Outbox events or award points to real users. The
+[separate integration suite](../SmartLost.ListingsService.IntegrationTests/README.md)
+applies actual migrations on disposable PostgreSQL 16 and 17.
+See [Domain](../../../src/Services/Listings/SmartLost.ListingsService.Domain/README.md),
+[modeling](../../../src/Services/Listings/SmartLost.ListingsService.Modeling/README.md)
+and the [EF verification report](../../../docs/LISTINGS_EF_COMPATIBILITY.md).
 
 From the repository root:
 
 ```sh
-dotnet restore Aset.slnx --locked-mode
-dotnet build Aset.slnx --no-restore --configuration Release --warnaserror
+dotnet restore src/Services/Listings/Listings.slnx --locked-mode
+dotnet build src/Services/Listings/Listings.slnx --no-restore --configuration Release --warnaserror
 dotnet test tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.ListingsService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
 ```
 
-The existing CI gates require strictly above 80% overall and on changed executable
-lines. No generated implementation is excluded from coverage. Pure interfaces and
-enums and const-only static classes have no executable lines; the workflow checks those
-declarations with Roslyn. Static initializers and mixed implementation files still require coverage.
-Raw `dotnet test` collects coverage; the workflow enforces its thresholds separately.
+CI inventories this project and includes executable Domain, Infrastructure and Modeling code in the
+unchanged strictly-above-80% overall/changed-code Coverlet gates. The Ecore source is copied into test output for structural consistency checks.
+Domain declarations are maintained manually; no Python or Domain generation step is required.
 
-See the [model and regeneration guide](../../../src/Services/Listings/SmartLost.ListingsService.Modeling/README.md)
-and the [CI guide](../../../.github/README.md).
+CategoryCachingTests counts category SELECTs through the real HTTP/MediatR/EF flow, verifies
+one read for repeated requests, absolute TTL refresh using an injected clock and immutable
+cached DTOs. It uses an isolated SQLite connection and no real-time sleep.

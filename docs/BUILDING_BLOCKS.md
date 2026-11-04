@@ -180,6 +180,21 @@ Unmarked queries/commands bypass the transaction. These are local service transa
 the abstractions do not coordinate transactions across microservices. AuthService does not
 enable this behavior or implement a unit-of-work adapter.
 
+## Opt-in query caching
+
+`AddBuildingBlocksApplication(..., useCaching: true)` inserts CachingBehavior after
+Validation and before the optional transaction behavior. A service must also register
+`AddBuildingBlocksQueryCache()` from Infrastructure. Defaults stay uncached; Auth has
+not opted in. Requests without CacheableQueryAttribute bypass cache handling.
+
+The attribute declares a prefix and positive TTL. Keys include request/response types
+and a hash of serialized query properties. Only successful, non-cancelled immutable
+snapshots are retained. The initial active query is GetCategoriesQuery in Listings,
+with a read-only category DTO collection and 300-second absolute lifetime. The backend
+uses process-local MemoryCache, bounded entry count and striped miss coordination.
+See [complete policy, tests and AOP explanation](QUERY_CACHING.md). No mutation
+invalidation or distributed cache is implemented in this phase.
+
 ## Pagination
 
 The pagination types use `SmartLost.BuildingBlocks.Core.Pagination`; the request contract

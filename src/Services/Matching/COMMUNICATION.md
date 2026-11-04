@@ -79,6 +79,8 @@ eligibility checking and ranking details; these arrows summarize that design.
 
 ## Review notes
 
+- 2026-11-04: reviewed shared query-cache additions. Matching remains a runtime scaffold and does not register query caching. Its current NMF test interactions and planned service arrows are unchanged.
+
 - 2026-10-26: added the independent EmbeddingPreparationTask model, five state values
   and model tests. The current diagram includes task property notifications. Dashed
   arrows refine the proposed snapshot/checkpoint commit and future leased worker flow;

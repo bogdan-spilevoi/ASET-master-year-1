@@ -6,20 +6,25 @@ for confirmed recoveries. Qwen3-VL-4B-Instruct is selected for traits/categories
 ViT-L/16 for image similarity. The selected stack is .NET 10, Angular and PostgreSQL, with
 local model inference (ONNX Runtime verified in a standalone CPU experiment; optional NVIDIA CUDA execution is configured but not locally inferred yet; service integration
 is not implemented) and Azure Blob Storage for
-photos. The repository now includes the first runtime microservice: `SmartLost.AuthService.Api`, a dedicated
-authentication API with its own PostgreSQL database, Dockerfile and Compose setup.
+photos. The repository includes an Auth API with its own PostgreSQL database/Docker setup and a
+Listings API exposing public category/listing/detail reads through CQRS and service-owned persistence.
 
 ## Architecture
 
 The intended architecture separates services by responsibility, with each service owning its
 data and communicating through explicit contracts. `SmartLost.AuthService.Api` currently implements that
 split with API, Application, Domain and Infrastructure projects, a dedicated PostgreSQL
-database connection and JWT issuance. Listings and Matching have buildable project
-scaffolds; their application functionality is not implemented.
+database connection and JWT issuance. Listings implements its Domain model, EF persistence/migrations and three public HTTP
+read queries through MediatR. Matching remains a runtime scaffold; inter-service workflows
+are not implemented.
 
 The [SmartLost project description](docs/SMARTLOST.md) documents the proposed Listings and
 Matching services, their data ownership, C4 diagrams, publication/matching flows and credibility
-rules. Their behavior remains a design proposal.
+rules. Their network workflows remain a design proposal. Listings now has service-owned
+EF mappings, a first migration and [conventional Domain entities](src/Services/Listings/SmartLost.ListingsService.Domain/README.md)
+maintained manually, with shared AggregateRoot/Entity bases and guarded partial methods.
+NMF remains separate for modeling/XMI; Domain has no NMF dependency or code-generation step. [EF verification](docs/LISTINGS_EF_COMPATIBILITY.md) exercises the checked-in
+Infrastructure model/migration without a running Listings API.
 
 Application depends on Domain and its repository/security abstractions; Infrastructure
 implements those abstractions. API composes the service. Domain uses framework-free Core
@@ -36,7 +41,7 @@ src/
       Auth.slnx        # Auth runtime projects, NMF Modeling, shared dependencies and Auth tests
       SmartLost.AuthService.*/
     Listings/
-      Listings.slnx    # Runtime scaffolds, NMF Modeling, shared dependencies and model tests
+      Listings.slnx    # Read API/CQRS, Domain, EF Infrastructure, Modeling and tests
       SmartLost.ListingsService.*/
     Matching/
       Matching.slnx    # Runtime scaffolds, NMF Modeling, shared dependencies and model tests
@@ -47,7 +52,7 @@ src/
 tests/
   Auth/                # Auth unit and integration test projects
   BuildingBlocks/      # Shared-library unit test project
-  Listings/            # Listings NMF model unit test project
+  Listings/            # Listings NMF/Domain/EF unit tests and PostgreSQL integration tests
   Matching/            # Matching NMF model unit test project
 ```
 
@@ -58,7 +63,7 @@ Future services belong under `src/Services/<Service>/`, with tests under
 | --- | --- |
 | [Aset.slnx](Aset.slnx) | All backend projects and tests; the main CI entry point |
 | [Auth.slnx](src/Services/Auth/Auth.slnx) | Five Auth runtime projects, NMF Modeling, four BuildingBlocks libraries and the two Auth test projects |
-| [Listings.slnx](src/Services/Listings/Listings.slnx) | Four Listings runtime-layer scaffolds, NMF Modeling, four BuildingBlocks libraries and the Listings unit suite |
+| [Listings.slnx](src/Services/Listings/Listings.slnx) | Listings read API/CQRS, Domain/Infrastructure, NMF Modeling, four BuildingBlocks libraries and Listings unit/integration suites |
 | [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching runtime scaffolds, NMF Modeling, four BuildingBlocks libraries and the Matching unit suite |
 | [BuildingBlocks.slnx](src/BuildingBlocks/BuildingBlocks.slnx) | Four shared libraries and their existing unit test project |
 
@@ -69,10 +74,11 @@ solution's `Tests` group. Open the focused solution to work on one area, or
 Deployment is inactive; see the
 [deployment plan](docs/DEPLOYMENT.md).
 
-The runtime layers of Listings and Matching contain only project definitions and documentation. Their API projects
-temporarily build as libraries until an entry point is implemented. They have no endpoints,
-database contexts, migrations, workers or containers. Service implementations
-will use the existing BuildingBlocks; neither service references the other's projects.
+Listings has an executable public read API, CQRS queries, manual Domain entities and EF
+Infrastructure. Matching runtime remains a scaffold with its API building as a library.
+Listings can run locally through dotnet or in its own API container alongside its
+PostgreSQL container. Matching has no API container, and neither service has a worker.
+Neither service references the other's projects.
 Listings and Auth have separate [NMF structural models](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md)
 and [Auth model documentation](src/Services/Auth/SmartLost.AuthService.Modeling/README.md).
 They contain Ecore sources and generated NMeta/C# representations; Listings also has a sample
@@ -215,13 +221,13 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | [`.github/`](.github/) | GitHub Actions workflows, PR/main validation, Coverlet gates, security and container checks | [CI guide](.github/README.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Finite Auth Outbox job delivering versioned public-profile snapshots to configured HTTP receivers | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
-| [`src/Services/Listings/`](src/Services/Listings/) | Runtime scaffold and separate NMF models for listings with change sequences, photos, categories, match decisions, recoveries and credibility entries; runtime functionality pending | [Module README](src/Services/Listings/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md) |
+| [`src/Services/Listings/`](src/Services/Listings/) | Manually maintained Domain aggregates/entities with guarded listing, decision, recovery and credibility behavior; separate NMF/XMI models; EF context/configurations and InitialCreate; public GET categories/listings/details through CQRS | [Module README](src/Services/Listings/README.md), [API](src/Services/Listings/SmartLost.ListingsService.Api/README.md), [Application](src/Services/Listings/SmartLost.ListingsService.Application/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md), [Domain and behavior](src/Services/Listings/SmartLost.ListingsService.Domain/README.md), [Infrastructure](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md) |
 | [`src/Services/Matching/`](src/Services/Matching/) | Runtime scaffold plus NMF search projections with current photo identity/revision, versioned embeddings and preparation tasks; worker/ranking/client integration pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
 | [`SmartLost.BuildingBlocks.*`](src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | Reusable domain/event/result/pagination primitives, application behaviors, HTTP adapters and opt-in EF Core Outbox | [Building blocks guide](docs/BUILDING_BLOCKS.md) |
 | [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen CPU/NVIDIA CUDA label extraction and DINOv3 CPU/NVIDIA CUDA normalized image embeddings | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
 
-`SmartLost.AuthService.Api` owns its database. Listings and Matching will each own a separate
-database; their scaffolds do not create or connect to databases. Cross-service identifiers
+`SmartLost.AuthService.Api` owns its database. Listings owns a separate PostgreSQL database
+through its Infrastructure context/migrations; the Matching scaffold does not connect to a database. Cross-service identifiers
 will be logical references, without foreign keys between service databases.
 
 ## Shared libraries/building blocks
@@ -229,9 +235,9 @@ will be logical references, without foreign keys between service databases.
 | Project | Responsibility |
 | --- | --- |
 | `SmartLost.BuildingBlocks.Core` | Type-aware `Entity<TId>`, `AggregateRoot<TId>`, domain-event contracts, domain `Guard`, immutable `Result`/`Result<T>`, errors, explicit domain exceptions, `PageSlice<T>`/`PagedResult<T>` and pagination defaults; no framework dependencies |
-| `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction behavior, transaction/Outbox contracts and `ICurrentUser` |
+| `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction/cache behaviors, query cache metadata/contract, transaction/Outbox contracts and `ICurrentUser` |
 | `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped HTTP current-user adapter and API registration |
-| `SmartLost.BuildingBlocks.Infrastructure` | Opt-in EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its table and delivery adapter |
+| `SmartLost.BuildingBlocks.Infrastructure` | Opt-in process-local query cache; EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its table and delivery adapter |
 
 See [dependencies, domain primitives, Outbox integration and transaction opt-in](docs/BUILDING_BLOCKS.md).
 `AddBuildingBlocksApi()` also registers scoped `ICurrentUser` access to authenticated
@@ -331,7 +337,10 @@ Docker-related configuration includes [`.dockerignore`](.dockerignore),
 [`docker-compose.yml`](docker-compose.yml) and
 [`src/Services/Auth/SmartLost.AuthService.Api/Dockerfile`](src/Services/Auth/SmartLost.AuthService.Api/Dockerfile), plus
 [the Auth worker Dockerfile](src/Services/Auth/SmartLost.AuthService.Worker/Dockerfile).
-The default stack uses one API container and one PostgreSQL container; the optional
+Listings adds its own [API Dockerfile](src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile),
+[database Compose file](src/Services/Listings/compose.database.yml) and
+[API Compose override](src/Services/Listings/compose.api.yml).
+The root Auth stack uses one API container and one PostgreSQL container; the optional
 `workers` profile adds a finite Outbox job without an exposed port.
 The API image uses locked restore and excludes local settings from its build context.
 The standalone `AIModels/` folder is also excluded from the AuthService image build context.
@@ -406,6 +415,86 @@ schedule has not been deployed. Stop/remove optional-profile containers with
 Volume removal remains destructive.
 
 
+Listings has a separate [database-only Compose file](src/Services/Listings/compose.database.yml).
+It exposes PostgreSQL on `127.0.0.1:5433` and uses its own named volume; it starts no API.
+Create ignored local files from templates and set matching development passwords:
+
+```sh
+cp -n src/Services/Listings/.env.example src/Services/Listings/.env
+cp -n src/Services/Listings/SmartLost.ListingsService.Api/appsettings.example.json src/Services/Listings/SmartLost.ListingsService.Api/appsettings.json
+docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml config --quiet
+docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml up -d --wait
+```
+
+Lifecycle commands for this separate stack:
+
+```sh
+docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml stop
+docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml down
+# Destructive: also removes the Listings database volume/data.
+docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml down --volumes
+```
+
+`stop` retains containers/data; `down` removes containers/network and retains data.
+`.env` is for Compose; EF uses appsettings or `ConnectionStrings__ListingsDatabase`.
+See [Listings Infrastructure](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md)
+for password setup, migration and configuration precedence details.
+
+After applying the Listings migration, add its API container with the Compose override:
+
+```sh
+docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml config --quiet
+docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml up -d --build
+```
+
+This reuses the existing Listings database/network/volume. The API runs as a non-root
+user, connects to `listings-db:5432` inside Docker and exposes **127.0.0.1:5081** on the
+host. Its connection string is supplied at runtime from the ignored Listings `.env`;
+local JSON settings are excluded from the image. This is a Development stack, with
+Swagger enabled and seeding disabled by default. Stop any local API using port 5081 first.
+
+Use both files for lifecycle commands when the API container is included:
+
+```sh
+docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml stop
+docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml down
+# Destructive: also deletes the Listings database volume/data.
+docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml down --volumes
+```
+
+Seed through the built API image, without a host .NET SDK or HTTP listener:
+
+```sh
+docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml run --rm --no-deps listings-service --SeedData:Only=true
+```
+
+The database must already be running and migrated. Neither image build nor API/Compose
+startup applies migrations. The existing CI Dockerfile discovery will build/scan this
+image; no deployment workflow is activated.
+
+
+The Listings API and EF CLI now share the ignored local connection file at
+`src/Services/Listings/SmartLost.ListingsService.Api/appsettings.json` (Infrastructure links
+it into design-time output). After applying the migration, run the public read API:
+
+```sh
+dotnet run --project src/Services/Listings/SmartLost.ListingsService.Api --launch-profile http
+```
+
+It listens on **http://localhost:5081**; Development-only Swagger UI is at
+`/swagger/index.html` and OpenAPI at `/openapi/v1.json`. The local launch profile requests
+opening Swagger in a browser. Seed the migrated database without starting HTTP:
+
+```sh
+sh src/Services/Listings/seed.sh
+```
+
+The script runs the API project's Development-only seed command and exits. Alternatively,
+opt into fixtures during API startup with `-- --SeedData:Enabled=true`. The seeder reuses three
+categories and six listings on sequential runs, including hidden Draft/Closed examples;
+it is off by default, Development-only and never applies migrations. See the
+[API setup and seed guide](src/Services/Listings/SmartLost.ListingsService.Api/README.md).
+
 ## Database and migrations
 
 `SmartLost.AuthService.Api` owns the `authservice` PostgreSQL database. The service uses EF Core with a
@@ -438,6 +527,22 @@ application is an explicit operation; no deployment workflow is active.
 The checked-in EF migrations are the source of truth. See
 [manual application commands](docs/AUTHSERVICE.md#apply-the-refresh-token-migration-yourself).
 Generate SQL on demand for review; SQL exports do not need to be committed.
+
+Listings owns `listingsservice` with connection key `ListingsDatabase`. Its
+[Infrastructure](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md)
+contains ListingsDbContext, seven configurations, a design-time factory and InitialCreate.
+The schema stores listings, photos, categories/assignments, decisions, recoveries and
+credibility entries. Auth identities are GUID references with no cross-database FKs.
+Apply the existing migration explicitly after configuring the local database:
+
+```sh
+dotnet ef database update --project src/Services/Listings/SmartLost.ListingsService.Infrastructure --startup-project src/Services/Listings/SmartLost.ListingsService.Infrastructure --context ListingsDbContext
+```
+
+Infrastructure is also the CLI startup project; migrations do not start the Listings API.
+The [module guide](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md#ef-cli)
+has offline inspection, new migration and SQL generation commands. Domain events are
+currently ignored by EF; Listings Outbox integration and application transactions remain pending.
 
 ## API surface
 
@@ -472,13 +577,29 @@ field errors when applicable (400 validation, 409 duplicate account, 401 invalid
 Malformed request bodies use ASP.NET validation problems. Unexpected exceptions return a
 sanitized 500 problem and are logged server-side.
 
+
+Listings also exposes public read endpoints:
+
+| Method | Route | Description |
+| --- | --- | --- |
+| GET | `/api/categories` | Category IDs/names, ordered by normalized name |
+| GET | `/api/listings` | Open listings, optional type/category filters and zero-based pagination |
+| GET | `/api/listings/{id:guid}` | Open listing details and safe optional photo metadata; hidden/missing records return 404 |
+
+`pageIndex` defaults to 0 and `pageSize` to 10 (1..100); optional `type=Lost`/`Found`
+and `categoryId=<guid>` combine with AND. Validation failures return 400. No BlobKey,
+image URL or bytes are returned. These endpoints need no JWT; authenticated mutations,
+image delivery and listing/detail cache behavior remain pending. GET /api/categories
+uses a 300-second process-local MediatR cache; failures/cancellation are not stored. Development-only OpenAPI/Swagger and
+[full HTTP examples](src/Services/Listings/SmartLost.ListingsService.Api/README.md) are documented separately.
+
 ## Quality and CI
 
 | Area | Current configuration |
 | --- | --- |
-| SDK / target | SDK **10.0.401** pinned exactly in `global.json` and the Docker build image; `SmartLost.AuthService.Api` targets `net10.0`; the runtime image uses `aspnet:10.0` |
+| SDK / target | SDK **10.0.401** pinned exactly in `global.json` and Docker build images; backend targets `net10.0`; Auth runtime uses `aspnet:10.0`, Listings runtime uses `aspnet:10.0.12`; Listings base images are also pinned by manifest digest |
 | Style / analysis | `.editorconfig`, .NET 10 recommended analyzers, nullable references, warnings as errors |
-| Dependencies | Locked restore and direct/transitive NuGet auditing; lock files required with projects; local `dotnet-ef` 10.0.12 and `NMF-Ecore2Code` 2.0.467 pinned in `.config/dotnet-tools.json`; Auth and Listings Modeling reference `NMF-Basics` 2.0.467 |
+| Dependencies | Locked restore and direct/transitive NuGet auditing; lock files required with projects; local `dotnet-ef` 10.0.12 and `NMF-Ecore2Code` 2.0.467 pinned in `.config/dotnet-tools.json`; Auth, Listings and Matching Modeling reference `NMF-Basics` 2.0.467 |
 | Tests / coverage | All tests must pass; unit tests check Auth migration/model drift, PostgreSQL SQL generation and the NMF Auth and Listings models; **Coverlet** collects unit line coverage; inline workflow gates require **strictly above 80%** overall and on changed executable code; declaration-only interfaces, enums and const-only static classes are recognized regardless of location |
 | Security | Configured Gitleaks history/file scans with redacted diagnostics and one exact historical test-placeholder exception in [`.gitleaksignore`](.gitleaksignore); Trivy dependency, infrastructure and image scans; checksum-pinned tools |
 | Dependency updates | [Weekly Dependabot configuration](.github/dependabot.yml) for Actions, NuGet and Docker |
@@ -522,6 +643,7 @@ dotnet test tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/SmartLost.Bu
 dotnet test tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.ListingsService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
 dotnet test tests/Matching/SmartLost.MatchingService.UnitTests/SmartLost.MatchingService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.MatchingService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
 dotnet test tests/Auth/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
+dotnet test tests/Listings/SmartLost.ListingsService.IntegrationTests/SmartLost.ListingsService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.ListingsService.IntegrationTests
 ```
 
 Coverlet configuration and the inline coverage/test gates are documented in the
@@ -530,7 +652,13 @@ Empty scaffold projects participate in inventory, locked restore, build and form
 The coverage assembly check requires reports once a project has C# compile items; the
 strictly-above-80% overall and changed-code gates remain in place.
 Coverage file paths and project directories use the same separators on Linux, Windows and macOS.
-The Listings and Matching unit suites cover their generated NMF implementations. Pure interfaces, enums
+The Listings and Matching unit suites cover their generated NMF implementations.
+Listings separately tests manually maintained Domain entities, guarded behavior, domain events,
+encapsulation and structural consistency with the Ecore model. TestServer/SQLite tests
+exercise public HTTP → CQRS → EF reads, validation, seed idempotency and documentation visibility. EF checks use the real Infrastructure mapping on isolated SQLite and offline Npgsql,
+including snapshot drift, configuration and SQL generation. The Listings integration suite
+applies, rolls back and reapplies the checked-in migration on PostgreSQL 16 and 17.
+[Verification details](docs/LISTINGS_EF_COMPATIBILITY.md) distinguish persistence setup from pending API/Outbox integration. Pure interfaces, enums
 and const-only static classes are recognized as declarations; executable generated code remains covered by
 the existing gates.
 Collection settings live in [coverage.runsettings](coverage.runsettings).
@@ -544,6 +672,10 @@ README-writing workflow is active; the [deployment template](docs/examples/deplo
 outside `.github/workflows/` and its unfinished inline steps fail until implemented.
 
 ## Development conventions
+
+Listings query results use records named `CategoryDto`, `PhotoDto`, `ListingSummaryDto`
+and `ListingDetailsDto` in [Application/Dtos](src/Services/Listings/SmartLost.ListingsService.Application/Dtos/).
+HTTP input contracts keep the `Request` suffix in the API layer.
 
 AuthService uses AutoMapper 16.2.0 to map API request DTOs to Application commands.
 Profiles are registered through the API's `AddApiMapping` extension; domain entities retain their factory
@@ -580,6 +712,9 @@ change as code/configuration, using relative links and verified, secret-safe exa
 
 ## Further reading
 
+- [Attribute-driven query cache: implementation, flow, AOP explanation and observation commands](docs/QUERY_CACHING.md)
+
+- [Listings Domain / EF Core verification and historical NMF findings](docs/LISTINGS_EF_COMPATIBILITY.md)
 - [BPMN process models for three teams of two: editable diagrams, previews and responsibilities](docs/bpmn/README.md)
 - [Two MDD iterations, commit evidence, current verification and team submission checklist](docs/MDD_ITERATIONS.md)
 - [Design patterns used in the project, source evidence and six-member presentation allocation](docs/DESIGN_PATTERNS.md)

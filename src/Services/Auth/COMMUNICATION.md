@@ -114,6 +114,8 @@ No cloud schedule or receiver is configured by the repository examples.
 
 ## Review notes
 
+- 2026-11-04: reviewed shared query-cache additions. Auth still calls AddBuildingBlocksApplication without useCaching and does not register IQueryCache. Its credential/session commands and numbered runtime/database/Outbox arrows are unchanged.
+
 - Initial diagrams checked against the API, handlers, session service, context and
   outbox implementation. Update affected flows with service changes; if communication
   is unchanged, record what changed and why these diagrams still apply here.

@@ -14,5 +14,6 @@
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="../../../tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj" />
+    <Project Path="../../../tests/Listings/SmartLost.ListingsService.IntegrationTests/SmartLost.ListingsService.IntegrationTests.csproj" />
   </Folder>
 </Solution>
