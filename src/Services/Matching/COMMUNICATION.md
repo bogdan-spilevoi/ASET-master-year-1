@@ -1,20 +1,21 @@
 # Matching communication diagram
 
-Matching now contains runtime Domain and Application code, plus the separate NMF Modeling
-library and unit tests. The Application layer implements three MediatR use cases:
-suggestion ranking, embedding preparation and photo analysis. It also adds a profiling
-pipeline behavior and profiling decorators. Persistence, Listings photo access and the
-local AI runtime are **ports only**. No adapter, API entry point, endpoint, database
-context, worker or container exists yet. Unit tests replace these ports with in-memory fakes.
+Matching runs as an ASP.NET Core API with its own PostgreSQL database. The Application layer
+implements three MediatR use cases: suggestion ranking, embedding preparation and photo
+analysis. Every request passes through the profiling pipeline behavior and profiling
+decorators. The Listings photo reader and the DINOv3/Qwen adapters are **mocks**; no real
+Listings or AI runtime connection exists. All HTTP routes are development-only test endpoints
+without service authentication.
 
-## Current in-process runtime interactions
+## Current implemented interactions
 
-Solid arrows are implemented in-process calls that unit tests exercise. Nodes marked
-"port" are interfaces without a production implementation.
+Solid arrows are implemented and exercised by unit tests and by the Compose container.
 
 ```mermaid
 flowchart LR
-    Caller["Caller (unit tests; future internal API/job)"]
+    Client["Developer / .http file / unit tests"]
+    Api["MatchingController / MatchingDemoController (Development only)"]
+    Seeder["MatchingDemoSeeder"]
     Mediator["MediatR ISender"]
     Profiling["ProfilingBehavior (outermost)"]
     Pipeline["ExceptionToResult + Validation behaviors"]
@@ -22,50 +23,48 @@ flowchart LR
     Selector["ProfiledCandidateSelector -> CandidateSelector"]
     Ranker["ProfiledRelevanceRanker -> RelevanceRanker"]
     AiDecorators["ProfiledImageEmbeddingGenerator / ProfiledPhotoAnalyzer"]
+    MockAi["Mock DINOv3 / Qwen adapters"]
+    MockPhotos["MockListingPhotoReader (static demo photos)"]
     Profiler["MatchingProfiler (AsyncLocal operation profile)"]
-    Logs[("ILogger structured events 1301-1304")]
-    Repos["Repository ports: SearchListing, ImageEmbedding, EmbeddingPreparationTask, IUnitOfWork"]
-    Photos["IListingPhotoReader port"]
-    Ai["IImageEmbeddingGenerator / IPhotoAnalyzer ports"]
-    Domain["Domain: SearchListing, ImageEmbedding, EmbeddingPreparationTask, CandidatePolicy, RelevanceScorer"]
+    Logs[("ILogger events 1301-1304 (container stdout)")]
+    DB[("matchingservice PostgreSQL: SearchListings, ImageEmbeddings, EmbeddingPreparationTasks")]
 
-    Caller -->|"1. Send query/command with optional CorrelationId"| Mediator
-    Mediator -->|"2. Start profile; correlation ID from request, W3C trace or new ID"| Profiling
-    Profiling -->|"3. Continue pipeline"| Pipeline
-    Pipeline -->|"4. Valid request"| Handler
-    Handler -->|"5. GetMatchSuggestions: read source projection"| Repos
-    Handler -->|"5.1 Select candidates"| Selector
-    Selector -->|"5.1.1 Coarse pool"| Repos
-    Selector -->|"5.1.2 Apply eligibility rules"| Domain
-    Selector -->|"5.1.3 Record duration and selected count"| Profiler
-    Handler -->|"5.2 Rank candidates"| Ranker
-    Ranker -->|"5.2.1 Read cached vectors only"| Repos
-    Ranker -->|"5.2.2 Score, threshold and sort"| Domain
-    Ranker -->|"5.2.3 Record duration and processed count"| Profiler
-    Handler -->|"6. PrepareImageEmbedding: load task/projection; commit claim"| Repos
-    Handler -->|"6.1 Read photo revision"| Photos
-    Handler -->|"6.2 DINOv3 embedding / 7. AnalyzeListingPhoto: Qwen labels"| AiDecorators
-    AiDecorators -->|"6.3 Bounded call with AI timeout"| Ai
-    AiDecorators -->|"6.4 Record duration, timeout, cancellation or failure"| Profiler
-    Handler -->|"6.5 Commit vector + Ready, or retry/Failed with sanitized error code"| Repos
-    Profiler -->|"8. Warn on AI problems and slow AI calls"| Logs
-    Profiling -->|"9. Log outcome, total duration and stage breakdown; warn above threshold"| Logs
+    Client -->|"1. HTTP POST with optional X-Correlation-ID"| Api
+    Api -->|"1.1 demo/seed: delete all rows, insert fixed scenario"| Seeder
+    Seeder -->|"1.2 Write projections and Pending tasks"| DB
+    Api -->|"2. Send query/command"| Mediator
+    Mediator -->|"3. Start profile and resolve correlation ID"| Profiling
+    Profiling -->|"4. Continue pipeline"| Pipeline
+    Pipeline -->|"5. Valid request"| Handler
+    Handler -->|"6. Suggestions: read source projection"| DB
+    Handler -->|"6.1 Select candidates"| Selector
+    Selector -->|"6.1.1 Coarse pool query; domain rules applied in memory"| DB
+    Handler -->|"6.2 Rank candidates"| Ranker
+    Ranker -->|"6.2.1 Read cached vectors only"| DB
+    Selector -->|"6.3 Record duration and counts"| Profiler
+    Ranker -->|"6.3 Record duration and counts"| Profiler
+    Handler -->|"7. Embedding: load task/projection; commit claim"| DB
+    Handler -->|"7.1 Read photo revision"| MockPhotos
+    Handler -->|"7.2 Embedding / 8. analysis call"| AiDecorators
+    AiDecorators -->|"7.3 Bounded call with AI timeout"| MockAi
+    AiDecorators -->|"7.4 Record duration, timeout, cancellation or failure"| Profiler
+    Handler -->|"7.5 Commit vector + Ready, or retry/Failed with sanitized code"| DB
+    Profiler -->|"9. Warn on AI problems and slow AI calls"| Logs
+    Profiling -->|"10. Log outcome, total duration and stages; warn above threshold"| Logs
+    Logs -->|"10.1 Copy last 100 Matching entries (Development)"| LogBuffer["RecentLogBuffer"]
+    Client -->|"12. GET demo/logs?count=10"| Api
+    Api -->|"12.1 Read newest entries"| LogBuffer
+    Api -->|"11. JSON result or problem details (AI failures: 503)"| Client
 ```
-
-The handlers contain no measurement code. Stage timings come from the decorators
-registered in `AddApplication`. AI timings come from `AddMatchingAiProfiling`, which
-must be called after a future Infrastructure layer registers the AI adapters.
-Profiling logs contain error codes and exception type names. They never contain
-exception messages, photo bytes or model output.
 
 Failure and retry paths that are implemented:
 
 - **Suggestions.** A missing or older projection returns `Pending`. An ineligible source
-  returns `Unavailable`. A newer projection returns the `matching.source_revision_newer`
+  returns `Unavailable`. A newer projection returns the 409 `matching.source_revision_newer`
   conflict. An empty candidate pool returns `Ready` with no suggestions.
 - **Embedding preparation.** An outdated photo/model target becomes `Obsolete` without
-  inference. Several failures return the task to `Pending` with `NextAttemptAtUtc`, or
-  make it `Failed` once `MaximumAttempts` is reached:
+  inference. A task that is not due returns 409. The following failures return the task to
+  `Pending` with `NextAttemptAtUtc`, or make it `Failed` at `MaximumAttempts`:
   - an unavailable photo
   - an AI timeout
   - an `AiInferenceException`
@@ -73,7 +72,8 @@ Failure and retry paths that are implemented:
   - an invalid vector
 
   If the caller cancels, the lease is left to expire so a later claim can retry the task.
-- **Photo analysis.** Missing photos and AI failures map to explicit result errors.
+  No worker re-runs due tasks automatically; they are processed through the test endpoints.
+- **Photo analysis.** Missing photos return 404 and AI failures return 503.
 
 ## Current model-test interactions
 
@@ -87,47 +87,51 @@ Every arrow is dashed to mark design intent. These are not existing calls or rou
 ```mermaid
 flowchart LR
     Listings["Future Listings service"]
-    Matching["Future Matching API / job entry point"]
-    DB[("Future Matching-owned database adapters for the repository ports")]
+    Matching["Matching API with service authentication"]
+    Worker["Future Matching preparation job"]
+    DB[("matchingservice PostgreSQL")]
     Tunnel["Future authenticated HTTPS tunnel"]
     AI["Future local Qwen / DINOv3 HTTP runtime"]
 
-    Listings -.->|"1. Internal suggestion/analysis request with correlation ID"| Matching
-    Matching -.->|"1.1 Read/write projections, vectors and tasks"| DB
-    Matching -.->|"1.2 Obtain authorized photo (IListingPhotoReader adapter)"| Listings
-    Matching -.->|"1.3 AI adapter request"| Tunnel
-    Tunnel -.->|"1.4 Forward to local runtime"| AI
-    AI -.->|"1.5 Vector or labels"| Matching
-    Matching -.->|"1.6 Ranked pool or explicit status"| Listings
-    Listings -.->|"2. Deliver search snapshots"| Matching
+    Listings -.->|"1. Authenticated internal suggestion/analysis request"| Matching
+    Listings -.->|"2. Deliver search snapshots (Outbox)"| Matching
+    Matching -.->|"2.1 Apply snapshot with ChangeSequence checkpoint"| DB
+    Worker -.->|"3. Claim due tasks; retry expired leases"| DB
+    Worker -.->|"3.1 Obtain authorized photo (real IListingPhotoReader)"| Listings
+    Worker -.->|"3.2 Real AI adapter request"| Tunnel
+    Tunnel -.->|"3.3 Forward to local runtime"| AI
+    AI -.->|"3.4 Vector or labels"| Worker
 ```
 
 Matching will own only derived search data and model evidence. It will obtain photos
-through Listings and will not read Auth/Listings databases directly. Snapshot
-application (`ChangeSequence` checkpoints), pair rejections and category synonym
-normalization are not implemented.
+through Listings and will not read Auth/Listings databases directly. Pair rejections and
+category synonym normalization are not implemented.
 
 ## Source references
 
-- [Current state and project references](README.md)
+- [Current state, endpoints and tables](README.md)
+- [Test requests](SmartLost.MatchingService.Api/MatchingService.Api.http)
 - [Profiling behavior](SmartLost.MatchingService.Application/Profiling/ProfilingBehavior.cs)
   and [profiler](SmartLost.MatchingService.Application/Profiling/MatchingProfiler.cs)
-- [Registration](SmartLost.MatchingService.Application/DependencyInjection.cs)
+- [Persistence](SmartLost.MatchingService.Infrastructure/Persistence/MatchingDbContext.cs)
+  and [migration](SmartLost.MatchingService.Infrastructure/Persistence/Migrations/)
 - [Proposed matching sequence](../../../docs/diagrams/member-5/smartlost-matching-sequence.puml)
 - [Proposed matching components](../../../docs/diagrams/member-5/smartlost-matching-components.puml)
-- [Separate AI experiments](../../../AIModels/README.md)
 
 ## Review notes
 
-- 2026-11-05: added the runtime Domain entities (reproduced from `matching.ecore`) and
-  Application use cases. Also added `ProfilingBehavior`, stage/AI profiling decorators and
-  the unit tests for them. The current diagram now shows these in-process calls. Planned
-  arrows were reduced to the adapters and entry points that still do not exist. No
-  Listings, Auth, BuildingBlocks or Compose code changed. Domain files are grouped as
-  `Entities/`, `ValueObjects/`, `Enums/`, `Suggestions/` and `Errors/`, following Auth's
-  `Domain/Entities/` convention. This is a namespace change only; communication is unchanged.
-  Application use cases follow Auth's `Commands/<UseCase>/` layout, with `Queries/<UseCase>/`,
-  `Contracts/`, `Interfaces/`, `Services/` and `Exceptions/`; also a namespace change only.
+- 2026-11-05: added `GET /api/matching/demo/logs`, backed by a Development-only logging
+  provider that copies the last 100 Matching log entries into `RecentLogBuffer`. Added arrows 10.1, 12 and 12.1.
+- 2026-11-05: added the API entry point, development test endpoints, Dockerfile and Compose
+  services (`matching-db`, `matching-service`), the `matchingservice` database with the
+  `InitialCreate` migration, EF repositories, mock photo/AI adapters and the demo seeder.
+  The current diagram now includes HTTP, PostgreSQL and mock adapter arrows. The planned
+  diagram keeps only the real Listings, worker and AI runtime integrations.
+- 2026-11-05: added the runtime Domain entities (reproduced from `matching.ecore`),
+  Application use cases, `ProfilingBehavior`, stage/AI profiling decorators and unit tests.
+  Domain files are grouped as `Entities/`, `ValueObjects/`, `Enums/`, `Suggestions/` and
+  `Errors/`. Application use cases follow Auth's `Commands/<UseCase>/` layout, with
+  `Queries/<UseCase>/`, `Contracts/`, `Interfaces/`, `Services/` and `Exceptions/`.
 - 2026-10-26: added the independent EmbeddingPreparationTask model, five state values
   and model tests.
 - 2026-10-26: added nullable CurrentPhotoId/CurrentPhotoRevision to SearchListing.

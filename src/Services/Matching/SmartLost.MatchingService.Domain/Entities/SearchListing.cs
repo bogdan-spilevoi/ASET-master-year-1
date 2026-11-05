@@ -41,11 +41,21 @@ public sealed class SearchListing : AggregateRoot<Guid>
         get; private set;
     }
 
-    /// <summary>Current photo pair, or null when the source listing has no photo.</summary>
-    public PhotoReference? CurrentPhoto
+    /// <summary>Current photo identifier, or null when the source listing has no photo.</summary>
+    public Guid? CurrentPhotoId
     {
         get; private set;
     }
+
+    public int? CurrentPhotoRevision
+    {
+        get; private set;
+    }
+
+    /// <summary>Current photo pair, or null when the source listing has no photo.</summary>
+    public PhotoReference? CurrentPhoto => CurrentPhotoId is Guid photoId && CurrentPhotoRevision is int revision
+        ? new PhotoReference(photoId, revision)
+        : null;
 
     public IReadOnlySet<string> CategoryKeys { get; private set; } = new HashSet<string>();
 
@@ -99,7 +109,8 @@ public sealed class SearchListing : AggregateRoot<Guid>
             ChangeSequence = changeSequence,
             Type = type,
             AuthorId = authorId,
-            CurrentPhoto = currentPhoto,
+            CurrentPhotoId = currentPhoto?.PhotoId,
+            CurrentPhotoRevision = currentPhoto?.Revision,
             CategoryKeys = NormalizeKeys(categoryKeys, MatchingErrors.InvalidCategoryKey),
             Colour = colour?.Trim().ToLowerInvariant(),
             Traits = NormalizeKeys(traits, MatchingErrors.InvalidTrait),

@@ -6,8 +6,10 @@ for confirmed recoveries. Qwen3-VL-4B-Instruct is selected for traits/categories
 ViT-L/16 for image similarity. The selected stack is .NET 10, Angular and PostgreSQL, with
 local model inference (ONNX Runtime verified in a standalone CPU experiment; optional NVIDIA CUDA execution is configured but not locally inferred yet; service integration
 is not implemented) and Azure Blob Storage for
-photos. The repository now includes the first runtime microservice: `SmartLost.AuthService.Api`, a dedicated
-authentication API with its own PostgreSQL database, Dockerfile and Compose setup.
+photos. The repository includes two runtime microservices with their own PostgreSQL databases, Dockerfiles
+and Compose services: `SmartLost.AuthService.Api`, a dedicated authentication API, and
+`SmartLost.MatchingService.Api`, which ranks suggestions and profiles its operations using mock photo/AI
+adapters and development-only test endpoints.
 
 ## Architecture
 
@@ -15,9 +17,10 @@ The intended architecture separates services by responsibility, with each servic
 data and communicating through explicit contracts. `SmartLost.AuthService.Api` currently implements that
 split with API, Application, Domain and Infrastructure projects, a dedicated PostgreSQL
 database connection and JWT issuance. Listings has a buildable project scaffold without application
-functionality. Matching has Domain entities and Application use cases (suggestion ranking, embedding
-preparation, photo analysis) with a profiling pipeline behavior and AI-call decorators; its
-persistence, photo and AI adapters and its API entry point are not implemented.
+functionality. Matching implements all four layers: Domain entities, Application use cases (suggestion
+ranking, embedding preparation, photo analysis) with a profiling pipeline behavior and AI-call
+decorators, EF Core persistence, and an API with development-only test endpoints. Its Listings photo
+reader and DINOv3/Qwen adapters are mocks; real integrations are not implemented.
 
 The [SmartLost project description](docs/SMARTLOST.md) documents the proposed Listings and
 Matching services, their data ownership, C4 diagrams, publication/matching flows and credibility
@@ -71,11 +74,11 @@ solution's `Tests` group. Open the focused solution to work on one area, or
 Deployment is inactive; see the
 [deployment plan](docs/DEPLOYMENT.md).
 
-The runtime layers of Listings contain only project definitions and documentation. Matching's Domain and
-Application layers contain code; its Infrastructure layer is empty. Both API projects
-temporarily build as libraries until an entry point is implemented. They have no endpoints,
-database contexts, migrations, workers or containers. Service implementations
-will use the existing BuildingBlocks; neither service references the other's projects.
+The runtime layers of Listings contain only project definitions and documentation. Its API project
+temporarily builds as a library until an entry point is implemented; it has no endpoints,
+database context, migrations, workers or containers. Matching has an API entry point, a database
+context with migrations and a container, but no worker. Service implementations use the existing
+BuildingBlocks; neither service references the other's projects.
 Listings and Auth have separate [NMF structural models](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md)
 and [Auth model documentation](src/Services/Auth/SmartLost.AuthService.Modeling/README.md).
 They contain Ecore sources and generated NMeta/C# representations; Listings also has a sample
@@ -98,8 +101,8 @@ Current service communication documentation lives beside each service:
 [Listings](src/Services/Listings/COMMUNICATION.md) and
 [Matching](src/Services/Matching/COMMUNICATION.md). Numbered arrows show interactions;
 planned integrations are explicitly marked. Auth includes its outbox worker flow;
-Listings documents current model-test interactions. Matching documents its in-process use-case and profiling
-flow. Their service integrations remain planned.
+Listings documents current model-test interactions. Matching documents its HTTP, profiling, database and
+mock-adapter flow. Their service integrations remain planned.
 Keep these documents current with service changes, or add a specific review note when
 communication is unchanged. CI requires the corresponding document change for service
 code/configuration/test changes; shared BuildingBlocks implementation or root Compose
@@ -220,12 +223,12 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Finite Auth Outbox job delivering versioned public-profile snapshots to configured HTTP receivers | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
 | [`src/Services/Listings/`](src/Services/Listings/) | Runtime scaffold and separate NMF models for listings with change sequences, photos, categories, match decisions, recoveries and credibility entries; runtime functionality pending | [Module README](src/Services/Listings/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md) |
-| [`src/Services/Matching/`](src/Services/Matching/) | Domain projection/embedding/preparation-task aggregates, candidate selection and relevance ranking, embedding preparation and photo-analysis use cases, `ProfilingBehavior` and AI-call profiling decorators; adapters, API and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
+| [`src/Services/Matching/`](src/Services/Matching/) | Suggestion ranking, embedding preparation and photo-analysis use cases with `ProfilingBehavior` and AI-call profiling decorators, a Matching-only PostgreSQL database, mock photo/AI adapters and development-only test endpoints; real Listings/AI integration and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
 | [`SmartLost.BuildingBlocks.*`](src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | Reusable domain/event/result/pagination primitives, application behaviors, HTTP adapters and opt-in EF Core Outbox | [Building blocks guide](docs/BUILDING_BLOCKS.md) |
 | [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen CPU/NVIDIA CUDA label extraction and DINOv3 CPU/NVIDIA CUDA normalized image embeddings | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
 
-`SmartLost.AuthService.Api` owns its database. Listings and Matching will each own a separate
-database; their scaffolds do not create or connect to databases. Cross-service identifiers
+`SmartLost.AuthService.Api` owns its database. Matching owns the separate `matchingservice` database.
+Listings will own its own database; its scaffold does not create or connect to one. Cross-service identifiers
 will be logical references, without foreign keys between service databases.
 
 ## Shared libraries/building blocks
@@ -333,10 +336,14 @@ locally after the upgrade; hosted CI and container verification remain separate.
 
 Docker-related configuration includes [`.dockerignore`](.dockerignore),
 [`docker-compose.yml`](docker-compose.yml) and
-[`src/Services/Auth/SmartLost.AuthService.Api/Dockerfile`](src/Services/Auth/SmartLost.AuthService.Api/Dockerfile), plus
-[the Auth worker Dockerfile](src/Services/Auth/SmartLost.AuthService.Worker/Dockerfile).
-The default stack uses one API container and one PostgreSQL container; the optional
-`workers` profile adds a finite Outbox job without an exposed port.
+[`src/Services/Auth/SmartLost.AuthService.Api/Dockerfile`](src/Services/Auth/SmartLost.AuthService.Api/Dockerfile),
+[the Auth worker Dockerfile](src/Services/Auth/SmartLost.AuthService.Worker/Dockerfile) and
+[`src/Services/Matching/SmartLost.MatchingService.Api/Dockerfile`](src/Services/Matching/SmartLost.MatchingService.Api/Dockerfile).
+The default stack has `auth-db` + `auth-service` and `matching-db` + `matching-service`: two API
+containers, each with its own PostgreSQL container. The optional `workers` profile adds a finite
+Auth Outbox job without an exposed port. Matching setup, migration and test-flow commands are in the
+[Matching README](src/Services/Matching/README.md#local-development); copy its two
+`appsettings*.example.json` files before starting `matching-service`.
 The API image uses locked restore and excludes local settings from its build context.
 The standalone `AIModels/` folder is also excluded from the AuthService image build context.
 Compose mounts the ignored Docker settings file read-only at runtime.
@@ -389,8 +396,8 @@ docker compose down -v
 ```
 
 `stop` preserves containers and data; `down` removes containers/network but preserves the
-named database volume. The API URL is `http://localhost:8080` with Docker Compose;
-PostgreSQL is exposed on `localhost:5432`.
+named database volumes. With Docker Compose the Auth API is `http://localhost:8080` (PostgreSQL
+`localhost:5432`) and the Matching API is `http://localhost:8081` (PostgreSQL `localhost:5433`).
 Local `dotnet run` still uses the launch profile ports in
 [`src/Services/Auth/SmartLost.AuthService.Api/Properties/launchSettings.json`](src/Services/Auth/SmartLost.AuthService.Api/Properties/launchSettings.json).
 
@@ -443,6 +450,24 @@ The checked-in EF migrations are the source of truth. See
 [manual application commands](docs/AUTHSERVICE.md#apply-the-refresh-token-migration-yourself).
 Generate SQL on demand for review; SQL exports do not need to be committed.
 
+`SmartLost.MatchingService.Api` owns the separate `matchingservice` PostgreSQL database
+(connection string `MatchingDatabase`). It is reachable only from Matching. Its
+[`InitialCreate` migration](src/Services/Matching/SmartLost.MatchingService.Infrastructure/Persistence/Migrations/)
+creates three tables:
+- `SearchListings`
+- `ImageEmbeddings`, with a `real[]` vector column
+- `EmbeddingPreparationTasks`
+
+It also creates the unique photo/model target indexes. Listing IDs are logical
+references; there are no foreign keys to Listings or Auth. Apply it explicitly after
+starting `matching-db`:
+
+```sh
+dotnet ef database update --project src/Services/Matching/SmartLost.MatchingService.Infrastructure --startup-project src/Services/Matching/SmartLost.MatchingService.Infrastructure --context MatchingDbContext
+```
+
+See [Matching tables and migration commands](src/Services/Matching/README.md#data-and-integration-ownership).
+
 ## API surface
 
 `SmartLost.AuthService.Api` exposes these endpoints:
@@ -475,6 +500,22 @@ Application failures use `application/problem+json` with an error code, trace id
 field errors when applicable (400 validation, 409 duplicate account, 401 invalid credentials).
 Malformed request bodies use ASP.NET validation problems. Unexpected exceptions return a
 sanitized 500 problem and are logged server-side.
+
+`SmartLost.MatchingService.Api` exposes **development-only test endpoints**. They return 404 outside
+Development and have no service authentication. They are not the final Listings-to-Matching contract:
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `POST` | `/api/matching/demo/seed` | Deletes all Matching rows and seeds the fixed demo scenario |
+| `POST` | `/api/matching/demo/listings/{listingId}/embedding/process` | Processes the embedding task of a listing's current photo |
+| `POST` | `/api/matching/embedding-tasks/{taskId}/process` | Processes one embedding preparation task |
+| `POST` | `/api/matching/suggestions` | Ranked suggestion pool or Pending/Unavailable status |
+| `POST` | `/api/matching/photo-analysis` | Mock Qwen labels for a listing photo |
+| `GET` | `/api/matching/demo/logs?count=10` | Last Matching log entries (in-memory, newest first) |
+
+Photo and AI calls use mock adapters. Swagger is available at `http://localhost:8081/swagger` in Development.
+See the [Matching README](src/Services/Matching/README.md#test-endpoints-development-only) and
+[test requests](src/Services/Matching/SmartLost.MatchingService.Api/MatchingService.Api.http).
 
 ## Quality and CI
 
@@ -535,7 +576,7 @@ The coverage assembly check requires reports once a project has C# compile items
 strictly-above-80% overall and changed-code gates remain in place.
 Coverage file paths and project directories use the same separators on Linux, Windows and macOS.
 The Listings and Matching unit suites cover their generated NMF implementations; the Matching suite also covers
-its runtime Domain/Application code with in-memory fakes. Pure interfaces, enums
+its Domain, Application, Infrastructure and HTTP endpoints using fakes, EF InMemory and `WebApplicationFactory`. Pure interfaces, enums
 and const-only static classes are recognized as declarations; executable generated code remains covered by
 the existing gates.
 Collection settings live in [coverage.runsettings](coverage.runsettings).

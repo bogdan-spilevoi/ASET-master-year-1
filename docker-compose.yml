@@ -57,5 +57,46 @@ services:
         bind:
           create_host_path: false
 
+  matching-db:
+    image: postgres:16-alpine
+    container_name: aset-matching-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: matchingservice
+      POSTGRES_USER: matchingservice
+      # Local development value; match the ignored Matching appsettings.Docker.json.
+      POSTGRES_PASSWORD: change-me-dev-matching-db-password
+    ports:
+      - "5433:5432"
+    volumes:
+      - matching-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  matching-service:
+    container_name: aset-matching-service
+    build:
+      context: .
+      dockerfile: src/Services/Matching/SmartLost.MatchingService.Api/Dockerfile
+    depends_on:
+      matching-db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+    volumes:
+      - type: bind
+        source: ./src/Services/Matching/SmartLost.MatchingService.Api/appsettings.Docker.json
+        target: /app/appsettings.json
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "8081:8080"
+
 volumes:
   auth-db-data:
+  matching-db-data:

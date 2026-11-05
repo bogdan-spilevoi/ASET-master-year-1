@@ -120,3 +120,6 @@ No cloud schedule or receiver is configured by the repository examples.
 - 2026-10-22: Added a separate NMF structural-model project for Auth entities. It has no
   runtime references from the API, application, domain, infrastructure or worker layers, and
   does not add persistence, messages, workers or outgoing calls; all numbered flows remain unchanged.
+- 2026-11-05: root `docker-compose.yml` gained the separate `matching-db` (host port 5433,
+  volume `matching-db-data`) and `matching-service` (host port 8081) services. Auth services,
+  ports, settings, database and flows are unchanged; Auth has no connection to Matching.

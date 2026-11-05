@@ -24,9 +24,23 @@ public sealed class EmbeddingPreparationTask : AggregateRoot<Guid>
         get; private set;
     }
 
-    public PhotoReference Photo { get; private set; } = null!;
+    public Guid PhotoId
+    {
+        get; private set;
+    }
 
-    public EmbeddingVersion Version { get; private set; } = null!;
+    public int PhotoRevision
+    {
+        get; private set;
+    }
+
+    public string ModelVersion { get; private set; } = string.Empty;
+
+    public string PreprocessingVersion { get; private set; } = string.Empty;
+
+    public PhotoReference Photo => new(PhotoId, PhotoRevision);
+
+    public EmbeddingVersion Version => new(ModelVersion, PreprocessingVersion);
 
     public EmbeddingPreparationState State
     {
@@ -69,8 +83,10 @@ public sealed class EmbeddingPreparationTask : AggregateRoot<Guid>
         {
             Id = Guid.NewGuid(),
             ListingId = listingId,
-            Photo = photo,
-            Version = version,
+            PhotoId = photo.PhotoId,
+            PhotoRevision = photo.Revision,
+            ModelVersion = version.ModelVersion,
+            PreprocessingVersion = version.PreprocessingVersion,
             State = EmbeddingPreparationState.Pending,
             NextAttemptAtUtc = nowUtc
         };
