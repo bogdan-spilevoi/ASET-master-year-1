@@ -120,6 +120,8 @@ category synonym normalization are not implemented.
 
 ## Review notes
 
+- 2026-11-05: the Dockerfile runtime stage runs `apt-get upgrade` so the image includes Ubuntu
+  security fixes newer than `aspnet:10.0` and passes the CI Trivy image gate. Communication is unchanged.
 - 2026-11-05: added `GET /api/matching/demo/logs`, backed by a Development-only logging
   provider that copies the last 100 Matching log entries into `RecentLogBuffer`. Added arrows 10.1, 12 and 12.1.
 - 2026-11-05: added the API entry point, development test endpoints, Dockerfile and Compose

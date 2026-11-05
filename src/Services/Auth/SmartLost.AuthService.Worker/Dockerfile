@@ -6,6 +6,10 @@ RUN dotnet publish "src/Services/Auth/SmartLost.AuthService.Worker/SmartLost.Aut
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
+
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/publish .
 RUN useradd -m -u 1001 appuser
 USER appuser

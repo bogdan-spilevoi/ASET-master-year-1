@@ -345,6 +345,9 @@ Auth Outbox job without an exposed port. Matching setup, migration and test-flow
 [Matching README](src/Services/Matching/README.md#local-development); copy its two
 `appsettings*.example.json` files before starting `matching-service`.
 The API image uses locked restore and excludes local settings from its build context.
+All three runtime images run `apt-get upgrade`, so they include Ubuntu security fixes that are
+newer than the `aspnet:10.0` base image. The CI Trivy image gate fails on HIGH/CRITICAL findings
+that already have a fix.
 The standalone `AIModels/` folder is also excluded from the AuthService image build context.
 Compose mounts the ignored Docker settings file read-only at runtime.
 
