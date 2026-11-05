@@ -95,3 +95,6 @@ are unimplemented. The model tests do not establish any of these integrations.
 - Initial diagrams checked against the empty runtime projects, Modeling project and
   model tests. Update affected flows with service changes; if communication is
   unchanged, record what changed and why these diagrams still apply here.
+- 2026-11-05: root `docker-compose.yml` gained the separate `matching-db` and
+  `matching-service` services for Matching. Listings still has no Compose service or runtime
+  code, and no Listings-to-Matching call is implemented; all diagrams here remain accurate.

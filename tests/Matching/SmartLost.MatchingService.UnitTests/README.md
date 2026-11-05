@@ -1,4 +1,27 @@
-# Matching model unit tests
+# Matching unit tests
+
+The suite covers the NMF model and the runtime Matching code. Runtime tests live in
+[Runtime/](Runtime/) and use in-memory fakes for the repository, photo and AI ports:
+
+- `MatchingDomainTests`: SearchListing normalization and guards, photo/version value
+  objects, embedding normalization and compatibility, and preparation-task transitions.
+- `MatchingRankingTests`: the eligibility rules (including the one-day Found-before-Lost
+  tolerance), weighted relevance with missing evidence, thresholds and cached-vector ranking.
+- `MatchingHandlerTests`: suggestion statuses, embedding preparation success, obsolete
+  and retry paths, and photo-analysis error mapping.
+- `MatchingProfilingTests`: stage and AI decorators, timeouts, cancellations, failures,
+  slow-call warnings, correlation-ID sanitization and the MediatR pipeline order.
+- `MatchingInfrastructureTests`: the `InitialCreate` migration against the PostgreSQL model
+  (no connection), EF repositories and unit of work on the EF InMemory provider, the demo
+  seeder and the mock photo/DINOv3/Qwen adapters.
+- `MatchingApiTests`: the HTTP test endpoints through `WebApplicationFactory` with EF InMemory.
+  This covers the seeded flow, the recent-logs endpoint and buffer, 400/404/409/503 mapping, the Development-only restriction and
+  the startup checks for the mock opt-in and connection string.
+
+No network, real database, AI runtime or Docker is used. Key sets are stored as PostgreSQL
+`text[]` in production and as a delimited string on the InMemory provider.
+
+## NMF model tests
 
 The SearchListing model includes nullable CurrentPhotoId/CurrentPhotoRevision. Tests
 check optional metadata/defaults, scalar notifications, reflective clearing, and XMI
