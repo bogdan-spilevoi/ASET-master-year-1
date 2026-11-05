@@ -4,6 +4,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../src/Services/Matching/SmartLost.MatchingService.Modeling/SmartLost.MatchingService.Modeling.csproj" />
+    <ProjectReference Include="../../../src/Services/Matching/SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj" />
+    <ProjectReference Include="../../../src/Services/Matching/SmartLost.MatchingService.Domain/SmartLost.MatchingService.Domain.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.12" />
     <PackageReference Include="coverlet.collector" Version="10.1.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

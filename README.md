@@ -14,8 +14,10 @@ authentication API with its own PostgreSQL database, Dockerfile and Compose setu
 The intended architecture separates services by responsibility, with each service owning its
 data and communicating through explicit contracts. `SmartLost.AuthService.Api` currently implements that
 split with API, Application, Domain and Infrastructure projects, a dedicated PostgreSQL
-database connection and JWT issuance. Listings and Matching have buildable project
-scaffolds; their application functionality is not implemented.
+database connection and JWT issuance. Listings has a buildable project scaffold without application
+functionality. Matching has Domain entities and Application use cases (suggestion ranking, embedding
+preparation, photo analysis) with a profiling pipeline behavior and AI-call decorators; its
+persistence, photo and AI adapters and its API entry point are not implemented.
 
 The [SmartLost project description](docs/SMARTLOST.md) documents the proposed Listings and
 Matching services, their data ownership, C4 diagrams, publication/matching flows and credibility
@@ -39,7 +41,7 @@ src/
       Listings.slnx    # Runtime scaffolds, NMF Modeling, shared dependencies and model tests
       SmartLost.ListingsService.*/
     Matching/
-      Matching.slnx    # Runtime scaffolds, NMF Modeling, shared dependencies and model tests
+      Matching.slnx    # Runtime layers, NMF Modeling, shared dependencies and unit tests
       SmartLost.MatchingService.*/
   BuildingBlocks/
     BuildingBlocks.slnx
@@ -48,7 +50,7 @@ tests/
   Auth/                # Auth unit and integration test projects
   BuildingBlocks/      # Shared-library unit test project
   Listings/            # Listings NMF model unit test project
-  Matching/            # Matching NMF model unit test project
+  Matching/            # Matching model and runtime unit test project
 ```
 
 Future services belong under `src/Services/<Service>/`, with tests under
@@ -59,7 +61,7 @@ Future services belong under `src/Services/<Service>/`, with tests under
 | [Aset.slnx](Aset.slnx) | All backend projects and tests; the main CI entry point |
 | [Auth.slnx](src/Services/Auth/Auth.slnx) | Five Auth runtime projects, NMF Modeling, four BuildingBlocks libraries and the two Auth test projects |
 | [Listings.slnx](src/Services/Listings/Listings.slnx) | Four Listings runtime-layer scaffolds, NMF Modeling, four BuildingBlocks libraries and the Listings unit suite |
-| [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching runtime scaffolds, NMF Modeling, four BuildingBlocks libraries and the Matching unit suite |
+| [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching runtime-layer projects, NMF Modeling, four BuildingBlocks libraries and the Matching unit suite |
 | [BuildingBlocks.slnx](src/BuildingBlocks/BuildingBlocks.slnx) | Four shared libraries and their existing unit test project |
 
 Solutions list the same `.csproj` files directly; they do not nest other solutions
@@ -69,7 +71,8 @@ solution's `Tests` group. Open the focused solution to work on one area, or
 Deployment is inactive; see the
 [deployment plan](docs/DEPLOYMENT.md).
 
-The runtime layers of Listings and Matching contain only project definitions and documentation. Their API projects
+The runtime layers of Listings contain only project definitions and documentation. Matching's Domain and
+Application layers contain code; its Infrastructure layer is empty. Both API projects
 temporarily build as libraries until an entry point is implemented. They have no endpoints,
 database contexts, migrations, workers or containers. Service implementations
 will use the existing BuildingBlocks; neither service references the other's projects.
@@ -95,7 +98,8 @@ Current service communication documentation lives beside each service:
 [Listings](src/Services/Listings/COMMUNICATION.md) and
 [Matching](src/Services/Matching/COMMUNICATION.md). Numbered arrows show interactions;
 planned integrations are explicitly marked. Auth includes its outbox worker flow;
-Listings and Matching document current model-test interactions; their service integrations remain planned.
+Listings documents current model-test interactions. Matching documents its in-process use-case and profiling
+flow. Their service integrations remain planned.
 Keep these documents current with service changes, or add a specific review note when
 communication is unchanged. CI requires the corresponding document change for service
 code/configuration/test changes; shared BuildingBlocks implementation or root Compose
@@ -216,7 +220,7 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Finite Auth Outbox job delivering versioned public-profile snapshots to configured HTTP receivers | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
 | [`src/Services/Listings/`](src/Services/Listings/) | Runtime scaffold and separate NMF models for listings with change sequences, photos, categories, match decisions, recoveries and credibility entries; runtime functionality pending | [Module README](src/Services/Listings/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md) |
-| [`src/Services/Matching/`](src/Services/Matching/) | Runtime scaffold plus NMF search projections with current photo identity/revision, versioned embeddings and preparation tasks; worker/ranking/client integration pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
+| [`src/Services/Matching/`](src/Services/Matching/) | Domain projection/embedding/preparation-task aggregates, candidate selection and relevance ranking, embedding preparation and photo-analysis use cases, `ProfilingBehavior` and AI-call profiling decorators; adapters, API and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
 | [`SmartLost.BuildingBlocks.*`](src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | Reusable domain/event/result/pagination primitives, application behaviors, HTTP adapters and opt-in EF Core Outbox | [Building blocks guide](docs/BUILDING_BLOCKS.md) |
 | [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen CPU/NVIDIA CUDA label extraction and DINOv3 CPU/NVIDIA CUDA normalized image embeddings | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
 
@@ -530,7 +534,8 @@ Empty scaffold projects participate in inventory, locked restore, build and form
 The coverage assembly check requires reports once a project has C# compile items; the
 strictly-above-80% overall and changed-code gates remain in place.
 Coverage file paths and project directories use the same separators on Linux, Windows and macOS.
-The Listings and Matching unit suites cover their generated NMF implementations. Pure interfaces, enums
+The Listings and Matching unit suites cover their generated NMF implementations; the Matching suite also covers
+its runtime Domain/Application code with in-memory fakes. Pure interfaces, enums
 and const-only static classes are recognized as declarations; executable generated code remains covered by
 the existing gates.
 Collection settings live in [coverage.runsettings](coverage.runsettings).
