@@ -63,9 +63,18 @@ Startup does not create databases or apply migrations.
 ## Docker API and database
 
 The [multi-stage Dockerfile](Dockerfile) uses a repository-root build context, locked
-restore with SDK 10.0.401 and an ASP.NET 10.0.12 runtime. Both base images are pinned by
+restore with SDK 10.0.401 and an ASP.NET 10.0.14 runtime. Both base images are pinned by
 multi-platform manifest digest. The final image runs as the built-in non-root `app` user;
 the root `.dockerignore` and publish settings exclude local credentials/settings.
+
+The runtime stage also updates inherited Ubuntu `apt` and `libapt-pkg6.0t64` over HTTPS,
+requires both versions to be at least `2.8.4ubuntu0.1` for
+[USN-8996-1](https://ubuntu.com/security/notices/USN-8996-1) and removes package lists.
+This is a targeted OS package update on top of the pinned base, not a NuGet dependency
+change or scan exclusion. Builds fail if the fixed packages are unavailable; CI's
+HIGH/CRITICAL and secret-scan gates remain active.
+The runtime was raised from 10.0.12 to 10.0.14 to incorporate .NET security fixes,
+including [GHSA-p3jp-9v83-76w9](https://github.com/dotnet/runtime/security/advisories/GHSA-p3jp-9v83-76w9).
 
 Configure the ignored Listings `.env`, start the database and apply the existing migration
 as described above. Then, from the repository root:
@@ -179,4 +188,12 @@ Because the local dotnet API occupied 5081, a temporary container was checked on
 two category requests produced one SELECT. Its runtime UID was 1654 and no appsettings
 JSON existed in `/app`. The temporary container and the unstarted conflicting API
 container were removed afterward; the existing database/volume and local API were preserved.
-The normal Compose mapping remains 5081. No hosted image security scan was run locally.
+The normal Compose mapping remains 5081. Image security scanning was not performed in
+that 2026-11-04 check.
+
+On 2026-11-06 the repaired Linux/arm64 image was rebuilt with ASP.NET/.NET runtime
+10.0.14 and both APT packages at `2.8.4ubuntu0.1`. Trivy 0.74.0 image scanning passed
+with no HIGH/CRITICAL vulnerabilities or secrets, and the repository filesystem scan
+passed without HIGH/CRITICAL dependency/configuration findings. Swagger/OpenAPI returned
+200 from a temporary container on loopback 5082, which was removed afterward. The
+temporary check did not connect to an application database. Hosted CI validation is separate.

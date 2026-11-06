@@ -346,6 +346,21 @@ The API image uses locked restore and excludes local settings from its build con
 The standalone `AIModels/` folder is also excluded from the AuthService image build context.
 Compose mounts the ignored Docker settings file read-only at runtime.
 
+All three application runtime Dockerfiles update inherited Ubuntu `apt` and
+`libapt-pkg6.0t64` packages for [USN-8996-1 / CVE-2026-109518](https://ubuntu.com/security/notices/USN-8996-1).
+They use HTTPS package sources during the update, require both packages to be at least
+`2.8.4ubuntu0.1`, clear package lists and then run the application as a non-root user.
+If the fixed packages are unavailable, image build fails. Existing Trivy HIGH/CRITICAL
+and secret-scan failure gates remain enabled; updating NuGet packages alone cannot fix
+an inherited operating-system package.
+Listings also pins its final runtime to ASP.NET `10.0.14`, including the patched .NET
+runtime for [GHSA-p3jp-9v83-76w9](https://github.com/dotnet/runtime/security/advisories/GHSA-p3jp-9v83-76w9).
+Local Linux/arm64 verification on 2026-11-06 rebuilt all three images, confirmed both
+APT package versions as `2.8.4ubuntu0.1` and passed Trivy 0.74.0 image scans with no
+HIGH/CRITICAL vulnerabilities or secrets. The repository filesystem vulnerability/
+misconfiguration scan also passed. Listings startup/Swagger/OpenAPI were checked in a
+temporary container. These are local checks; hosted CI/Linux-amd64 validation is separate.
+
 Copy the JSON setup templates from the repository root:
 
 ```sh
@@ -597,7 +612,7 @@ uses a 300-second process-local MediatR cache; failures/cancellation are not sto
 
 | Area | Current configuration |
 | --- | --- |
-| SDK / target | SDK **10.0.401** pinned exactly in `global.json` and Docker build images; backend targets `net10.0`; Auth runtime uses `aspnet:10.0`, Listings runtime uses `aspnet:10.0.12`; Listings base images are also pinned by manifest digest |
+| SDK / target | SDK **10.0.401** pinned exactly in `global.json` and Docker build images; backend targets `net10.0`; Auth runtime uses `aspnet:10.0`, Listings runtime uses `aspnet:10.0.14`; Listings base images are also pinned by manifest digest |
 | Style / analysis | `.editorconfig`, .NET 10 recommended analyzers, nullable references, warnings as errors |
 | Dependencies | Locked restore and direct/transitive NuGet auditing; lock files required with projects; local `dotnet-ef` 10.0.12 and `NMF-Ecore2Code` 2.0.467 pinned in `.config/dotnet-tools.json`; Auth, Listings and Matching Modeling reference `NMF-Basics` 2.0.467 |
 | Tests / coverage | All tests must pass; unit tests check Auth migration/model drift, PostgreSQL SQL generation and the NMF Auth and Listings models; **Coverlet** collects unit line coverage; inline workflow gates require **strictly above 80%** overall and on changed executable code; declaration-only interfaces, enums, empty records without primary constructors/members and const-only static classes are recognized regardless of location; 17 inline classifier regression checks run before missing-file exceptions |

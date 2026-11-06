@@ -276,6 +276,12 @@ snapshot delivery, inference calls and workers are not implemented in Listings.
 
 ## Review notes
 
+- 2026-11-06: the API runtime Dockerfile now patches/version-checks inherited Ubuntu
+  APT packages for USN-8996-1 using HTTPS sources and pins the final ASP.NET runtime to
+  patched version 10.0.14. The existing build arrow includes
+  this OS maintenance; runtime ports/settings, CQRS/cache/EF arrows, seeding and data
+  ownership are unchanged. No new runtime communication or retries were introduced.
+
 - 2026-11-04: added a non-root, digest-pinned API Dockerfile and optional Compose override
   beside the existing database-only stack. New arrows cover image build, runtime settings,
   health ordering, loopback HTTP mapping, internal database DNS and image-based seeding.

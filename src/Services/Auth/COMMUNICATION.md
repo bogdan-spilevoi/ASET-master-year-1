@@ -114,6 +114,11 @@ No cloud schedule or receiver is configured by the repository examples.
 
 ## Review notes
 
+- 2026-11-06: API/worker Dockerfiles now patch and version-check the inherited Ubuntu
+  APT packages for USN-8996-1 using HTTPS sources before non-root execution. This is a
+  build-time OS package update; numbered HTTP, persistence, Outbox and receiver arrows,
+  runtime settings and failure/retry behavior are unchanged.
+
 - 2026-11-04: reviewed shared query-cache additions. Auth still calls AddBuildingBlocksApplication without useCaching and does not register IQueryCache. Its credential/session commands and numbered runtime/database/Outbox arrows are unchanged.
 
 - Initial diagrams checked against the API, handlers, session service, context and
