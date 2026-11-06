@@ -184,10 +184,17 @@ jobs:
           # PowerShell bundles Roslyn; inspect contracts regardless of their folder/name.
           [void] [Reflection.Assembly]::LoadFrom((Join-Path $PSHOME 'Microsoft.CodeAnalysis.dll'))
           [void] [Reflection.Assembly]::LoadFrom((Join-Path $PSHOME 'Microsoft.CodeAnalysis.CSharp.dll'))
-          function Test-DeclarationOnlyContract([string] $file) {
-            $tree = [Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([IO.File]::ReadAllText($file))
+          function Test-DeclarationOnlyContract([string] $source) {
+            $tree = [Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText($source)
             $syntax = $tree.GetRoot()
+            if ($syntax.ContainsDiagnostics) { return $false }
             $nodes = @($syntax.DescendantNodes())
+            # Empty records have only compiler-generated members, with no Coverlet sequence points.
+            # Primary constructors, properties and all other declared members still require coverage.
+            $emptyRecords = @($nodes | Where-Object {
+              $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.RecordDeclarationSyntax] -and
+              $null -eq $_.ParameterList -and $_.Members.Count -eq 0
+            })
             $constantContainers = @($nodes | Where-Object {
               $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax] -and
               'static' -in @($_.Modifiers | ForEach-Object { $_.ValueText }) -and
@@ -200,6 +207,7 @@ jobs:
             $contracts = @($nodes | Where-Object {
               $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.InterfaceDeclarationSyntax] -or
               $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.EnumDeclarationSyntax] -or
+              $_ -in $emptyRecords -or
               $_ -in $constantContainers
             })
             if ($contracts.Count -eq 0) { return $false }
@@ -212,6 +220,7 @@ jobs:
               ($_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseTypeDeclarationSyntax] -and
                $_ -isnot [Microsoft.CodeAnalysis.CSharp.Syntax.InterfaceDeclarationSyntax] -and
                $_ -isnot [Microsoft.CodeAnalysis.CSharp.Syntax.EnumDeclarationSyntax] -and
+               $_ -notin $emptyRecords -and
                $_ -notin $constantContainers) -or
               $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.DelegateDeclarationSyntax] -or
               $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.GlobalStatementSyntax] -or
@@ -223,6 +232,32 @@ jobs:
             })
             return $implementation.Count -eq 0
           }
+          # Exercise the actual classifier before permitting any missing-file exception.
+          $contractCases = @(
+            @{ Name = 'interface'; Source = 'public interface IQuery { void Read(); }'; Expected = $true }
+            @{ Name = 'enum'; Source = 'public enum State { Open = 1 }'; Expected = $true }
+            @{ Name = 'constants'; Source = 'public static class Names { public const string Key = "key"; }'; Expected = $true }
+            @{ Name = 'empty record'; Source = 'public sealed record Query;'; Expected = $true }
+            @{ Name = 'record braces'; Source = 'public record Query { }'; Expected = $true }
+            @{ Name = 'empty record struct'; Source = 'public record struct Query;'; Expected = $true }
+            @{ Name = 'attributed query'; Source = '[CacheableQuery("probe", TtlSeconds = 300)] public sealed record Query : IRequest<Result<string>>;'; Expected = $true }
+            @{ Name = 'positional record'; Source = 'public record Query(int Id);'; Expected = $false }
+            @{ Name = 'record property'; Source = 'public record Query { public int Id { get; init; } }'; Expected = $false }
+            @{ Name = 'record initializer'; Source = 'public record Query { public int Id = 1; }'; Expected = $false }
+            @{ Name = 'record constructor'; Source = 'public record Query { public Query() { } }'; Expected = $false }
+            @{ Name = 'record method'; Source = 'public record Query { public int Read() => 1; }'; Expected = $false }
+            @{ Name = 'mixed file'; Source = 'public record Query; public class Handler { public int Read() => 1; }'; Expected = $false }
+            @{ Name = 'interface body'; Source = 'public interface IQuery { int Read() => 1; }'; Expected = $false }
+            @{ Name = 'runtime field'; Source = 'public static class Names { public static readonly string Key = "key"; }'; Expected = $false }
+            @{ Name = 'empty class'; Source = 'public class Query { }'; Expected = $false }
+            @{ Name = 'invalid syntax'; Source = 'public record Query {'; Expected = $false }
+          )
+          foreach ($case in $contractCases) {
+            if ((Test-DeclarationOnlyContract $case.Source) -ne $case.Expected) {
+              throw "Declaration-only classifier regression: $($case.Name)"
+            }
+          }
+          "Declaration-only classifier checks passed: $($contractCases.Count)"
           $changedHits = [Collections.Generic.List[bool]]::new()
           $coveredFiles = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
           foreach ($key in $hits.Keys) { [void] $coveredFiles.Add($key.Substring(0, $key.LastIndexOf(':'))) }
@@ -230,7 +265,7 @@ jobs:
           foreach ($file in $files | Where-Object {
             $_.EndsWith('.cs', [StringComparison]::Ordinal) -and $_.StartsWith('src/', [StringComparison]::Ordinal)
           }) {
-            if (!$coveredFiles.Contains($file) -and (Test-DeclarationOnlyContract $file)) {
+            if (!$coveredFiles.Contains($file) -and (Test-DeclarationOnlyContract ([IO.File]::ReadAllText($file)))) {
               "Declaration-only contract (no executable lines): $file"
               continue
             }

@@ -29,7 +29,8 @@ The [project file](SmartLost.ListingsService.Modeling.csproj) embeds the NMeta r
 registers it through an assembly `ModelMetadata` attribute and copies example XMI files
 to build output. The URI `https://smartlost.example/models/listings/v1` identifies
 the metamodel; it is not an implemented HTTP endpoint.
-There are no custom generation scripts, automatic build-generation steps or NMF-specific CI jobs.
+NMF regeneration affects only Modeling. Runtime Domain entities are maintained manually;
+there is no Domain generator, automatic build-generation step or NMF-specific CI job.
 The optional `NMF-Transformations` package is not installed; add it only if custom NTL
 rules are selected for the exercise.
 
@@ -89,7 +90,7 @@ These in-memory operations do not delete a blob from Azure.
 Enums are `ListingType { Lost, Found }`, `ListingState { Draft, Open, Closed }` and
 `ClosureReason { Recovered, Withdrawn }`. Defaults are Lost, Draft and revision 1.
 `ClosureReason` and `PublishedAt` are nullable. Ecore `EDate` maps to `DateTime`;
-`OccurredOn` has calendar-date business meaning, with runtime conversion/validation pending.
+`OccurredOn` has calendar-date business meaning. The manually maintained Domain property uses `DateOnly`; the NMF representation remains `DateTime`.
 
 `Listing.ChangeSequence` is a required `long`, separate from the integer content
 Revision. It defaults to 0 for an unsubmitted draft. Runtime publication starts at 1;
@@ -147,8 +148,7 @@ NMF opposite setters keep the current in-memory links consistent but allow reass
 and null during construction. They do not enforce historical immutability, authorization,
 pair eligibility, reservation uniqueness or persistence. The runtime must enforce unique
 recovery/award keys and commit recovery, its eligible award, listing changes and durable
-updates consistently. No API, database mapping, migration or point-awarding workflow is
-implemented by this model extension. Model tests that delete or relink roots exercise
+updates consistently. The separate Domain behavioral API constructs a recovery and its award in memory. Public read APIs are implemented, while the durable point-awarding application workflow remains pending; Domain persistence mappings and InitialCreate now exist in Infrastructure. Model tests that delete or relink roots exercise
 NMF reference cleanup; they do not authorize deletion of business history.
 
 ## Modelled entities and proposed runtime roles
@@ -156,17 +156,16 @@ NMF reference cleanup; they do not authorize deletion of business history.
 This is a proposal derived from the current
 [class diagram](../../../../docs/diagrams/member-2/smartlost-domain-classes.puml)
 and [Listings workflows](../../../../docs/diagrams/member-4/README.md).
-All seven rows now have NMF representations. These are not runtime domain entities;
-runtime aggregate and transaction boundaries remain proposals.
+All seven rows have NMF representations. The separate [Domain model](../SmartLost.ListingsService.Domain/README.md) now implements the runtime roles and manual partial behavior. NMF types remain structural model elements; Infrastructure now has EF mappings and InitialCreate; application transaction coordination remains unimplemented.
 
 | Candidate | Responsibility and main relationships | Proposed domain role |
 | --- | --- | --- |
 | `Listing` | Lost/found report: logical `AuthorId`, type, title, description, location, occurrence date, optional colour/traits, lifecycle, closure reason and revision. Owns the current photo and confirmed category assignments. | Aggregate root |
 | `Photo` | One current photo per listing at most: private blob key, format, byte size and photo revision. File bytes stay in Blob Storage. | Entity inside Listing |
-| `Category` | A normalized reusable category referenced by confirmed listing assignments. Catalog management and synonym rules remain to be decided. | Independent entity; aggregate boundary pending |
+| `Category` | A normalized reusable category referenced by confirmed listing assignments. Catalog management and synonym rules remain to be decided. | Aggregate root in Domain |
 | `ListingCategory` | Joins a listing and a confirmed category; duplicate assignments are disallowed. Does not imply that Listing owns the shared category. | Association; a composite key may be sufficient |
-| `MatchDecision` | Records a decision about one Lost/Found pair, source revisions, deciding user, state and time. An accepted pair reserves both listings. | Candidate aggregate root; transaction/locking design pending |
-| `Recovery` | Immutable confirmation of physical handover for an accepted pair, including confirming user and timestamp. At most one per decision. | Historical entity; commit boundary pending |
+| `MatchDecision` | Records a decision about one Lost/Found pair, source revisions, deciding user, state and time. An accepted pair reserves both listings. | Aggregate root in Domain; transaction/locking integration pending |
+| `Recovery` | Immutable confirmation of physical handover for an accepted pair, including confirming user and timestamp. At most one per decision. | Historical entity linked to decision |
 | `CredibilityEntry` | Immutable ledger award tied to one recovery, finder beneficiary, helped user and point amount. Totals are derived from the ledger. | Ledger entity; commits consistently with Recovery |
 
 Auth identities are referenced by GUID. A minimal `UserProfileProjection` may be added
@@ -191,11 +190,12 @@ not a second account aggregate, and must not contain passwords or session tokens
 - Listing content revision and matching-eligibility change sequence are distinct. Updates
   must be delivered durably, and duplicate/older deliveries must be handled safely.
 
-These are requirements for future domain/application validation. This structural model
-does not enforce the lifecycle transitions, author-only access, future-date checks,
-unique category assignments, photo content/size checks or valid closure combinations.
-Required metamodel fields do not replace guards against empty GUIDs, blank values or
-invalid partially constructed objects. Generated setters are not the future domain API.
+The Domain partial methods enforce local owner-ID/revision/state checks, required values,
+future-date checks, category-ID uniqueness and photo metadata bounds. Domain setters are private;
+NMF setters intentionally remain public for structural modeling. Actual authentication, byte decoding, global reservations,
+consumed eligibility, automatic invalidation of other decision roots and atomic persistence
+remain application/infrastructure responsibilities. Required metamodel fields do not replace
+validation of loaded graphs. See [the Domain behavioral API](../SmartLost.ListingsService.Domain/README.md).
 
 ### Technical state and other service boundaries
 
@@ -212,50 +212,15 @@ invalid partially constructed objects. Generated setters are not the future doma
 ## Next modeling decisions
 
 The Ecore model covers all seven business concepts and the source ChangeSequence.
-Next, implement runtime aggregate boundaries, accepted-pair reservation concurrency,
-the atomic recovery/award commit and Outbox snapshot delivery. Match processing status
-must reflect the consumer checkpoint as well as delivery acknowledgement. Explicit C#
-validation is required; structural multiplicities do not enforce those operations.
+Next, implement accepted-pair reservation concurrency, the atomic recovery/award commit
+and Outbox snapshot delivery. Match processing status must reflect the consumer checkpoint
+as well as delivery acknowledgement. Structural multiplicities do not enforce these operations.
 
-NMF generates model representation classes. Integration with existing `AggregateRoot`,
-domain events, EF Core mappings, transactions and runtime use cases is a separate decision.
-Keep generated model types and hand-written domain types in separate namespaces/projects
-until an explicit mapping or generation strategy is selected.
-
-## Verification scope and CI
-
-The pinned generator was run, the resulting library was compiled, and the example XMI
-was authored using NMF serialization. The
-[Listings unit suite](../../../../tests/Listings/SmartLost.ListingsService.UnitTests/README.md)
-now loads the XMI, verifies a save/load round trip, checks metamodel structure and
-exercises generated property/notification, identity and collection behavior.
-
-The existing overall and changed-code coverage gates remain strictly above 80%.
-The tests load Modeling so its executable generated C# appears in Coverlet reports.
-Pure interfaces, enums and const-only static classes are declaration-only contracts checked with Roslyn;
-generated implementation remains subject to coverage. No implementation exclusion
-or percentage relaxation has been introduced. Hosted CI verification is separate
-from local test results.
-
-## Local verification on 2026-10-26
-
-The pinned generator and generated-code whitespace formatter completed successfully.
-Locked root restore with NuGet audit, Release build with warnings as errors and root
-format/analyzer verification passed. All 28 Listings model tests passed; Coverlet
-reported 94.35% line coverage for the Modeling assembly. The existing four backend
-unit suites passed 180 tests in total after the Matching preparation-task extension.
-The CI coverage logic, evaluated locally against the full working change including
-new files, passed at 93.40% overall and 95.81% for
-changed executable lines. No coverage exclusions or thresholds changed.
-
-Gitleaks scans of Listings source and tests found no secrets. Documentation links and
-Ecore/NMeta XML were checked. PostgreSQL integration tests, hosted Windows/Linux CI,
-containers and Azure were not run for this structural extension.
-
-## References
-
-- [Official first-project tutorial](https://nmfcode.github.io/models/FirstNmfProject.html)
-- [NMeta](https://nmfcode.github.io/models/NMeta.html)
-- [NMF transformation language](https://nmfcode.github.io/transformations/index.html)
-- [Pinned generator package](https://www.nuget.org/packages/NMF-Ecore2Code/2.0.467)
-- [Pinned modeling library](https://www.nuget.org/packages/NMF-Basics/2.0.467)
+NMF still generates ModelElement representations for model/XMI work. Runtime entities now
+live in Domain and inherit the shared AggregateRoot/Entity bases. Their declarations and
+behavior are maintained manually in the same entity files. No runtime project references
+Modeling. When the model changes, update Domain manually and regenerate the NMF
+representation as appropriate; structural tests check consistency. Regeneration does not
+change Domain classes, migrate a database or copy live model instances.
+See the [EF verification report](../../../../docs/LISTINGS_EF_COMPATIBILITY.md) for historical
+NMF limitations and the conventional Domain checks. EF mappings, the design-time factory and InitialCreate now live in [Infrastructure](../SmartLost.ListingsService.Infrastructure/README.md); public read API wiring is implemented; mutation use-case transactions remain pending.

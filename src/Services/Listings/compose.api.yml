@@ -1,0 +1,18 @@
+# Combine with compose.database.yml; both use the existing Listings project/network/volume.
+services:
+  listings-service:
+    image: smartlost-listings-api:local
+    build:
+      context: ../../..
+      dockerfile: src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      listings-db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__ListingsDatabase: Host=listings-db;Port=5432;Database=listingsservice;Username=listingsservice;Password=${LISTINGS_POSTGRES_PASSWORD:?Set LISTINGS_POSTGRES_PASSWORD in the local .env file}
+      SeedData__Enabled: "false"
+    ports:
+      - "127.0.0.1:5081:8080"

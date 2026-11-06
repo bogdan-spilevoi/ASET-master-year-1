@@ -101,6 +101,12 @@ docker compose up -d --wait auth-db
 docker compose --profile workers run --build --rm auth-outbox-worker
 ```
 
+The runtime stage updates inherited `apt`/`libapt-pkg6.0t64` packages over HTTPS and
+requires version `2.8.4ubuntu0.1` or newer for
+[USN-8996-1](https://ubuntu.com/security/notices/USN-8996-1), then clears package lists.
+This build-time OS update does not change the job's configuration, delivery behavior or
+non-root execution. The existing Trivy image gate remains enabled.
+
 The Docker template uses `Host=auth-db`. Container-local `localhost` addresses the
 worker container; set a reachable receiver hostname or `host.docker.internal` with
 HTTPS when the receiver runs on the host. Configure its real certificate trust.

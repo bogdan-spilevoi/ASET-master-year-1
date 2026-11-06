@@ -78,11 +78,18 @@ and production project directories use `/` separators before comparison, includi
 
 Every production assembly with C# compile items must appear in the reports, and every changed source file containing
 added lines must appear in coverage, except declaration-only contracts with no executable code:
-pure interfaces, enums and static classes containing only const fields.
+pure interfaces, enums, empty records without primary constructors or declared members,
+and static classes containing only const fields.
 The changed-line gate recognizes these with the C# parser bundled with PowerShell,
 regardless of folder or filename. Enum values and const fields are compile-time constants;
 mixed implementation files and interfaces with executable bodies or initializers still
 require coverage. Static readonly fields and static constructors still require coverage.
+The empty-record rule includes attribute-only marker queries such as Listings
+`GetCategoriesQuery`: attributes are metadata, while its handler/cache behavior has the
+executable code. It applies only when Coverlet omits the file; positional records and
+records with any declared member still require coverage. Invalid C# syntax is never
+accepted as a declaration-only exception. Seventeen inline regression fixtures exercise
+the classifier in each build/test job, including mixed files and record implementations.
 Coverlet omits these declaration-only files from executable
 line counts. The assembly check evaluates MSBuild's
 `Compile` items; genuinely empty scaffold projects have no executable coverage to collect.
