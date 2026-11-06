@@ -600,7 +600,7 @@ uses a 300-second process-local MediatR cache; failures/cancellation are not sto
 | SDK / target | SDK **10.0.401** pinned exactly in `global.json` and Docker build images; backend targets `net10.0`; Auth runtime uses `aspnet:10.0`, Listings runtime uses `aspnet:10.0.12`; Listings base images are also pinned by manifest digest |
 | Style / analysis | `.editorconfig`, .NET 10 recommended analyzers, nullable references, warnings as errors |
 | Dependencies | Locked restore and direct/transitive NuGet auditing; lock files required with projects; local `dotnet-ef` 10.0.12 and `NMF-Ecore2Code` 2.0.467 pinned in `.config/dotnet-tools.json`; Auth, Listings and Matching Modeling reference `NMF-Basics` 2.0.467 |
-| Tests / coverage | All tests must pass; unit tests check Auth migration/model drift, PostgreSQL SQL generation and the NMF Auth and Listings models; **Coverlet** collects unit line coverage; inline workflow gates require **strictly above 80%** overall and on changed executable code; declaration-only interfaces, enums and const-only static classes are recognized regardless of location |
+| Tests / coverage | All tests must pass; unit tests check Auth migration/model drift, PostgreSQL SQL generation and the NMF Auth and Listings models; **Coverlet** collects unit line coverage; inline workflow gates require **strictly above 80%** overall and on changed executable code; declaration-only interfaces, enums, empty records without primary constructors/members and const-only static classes are recognized regardless of location; 17 inline classifier regression checks run before missing-file exceptions |
 | Security | Configured Gitleaks history/file scans with redacted diagnostics and one exact historical test-placeholder exception in [`.gitleaksignore`](.gitleaksignore); Trivy dependency, infrastructure and image scans; checksum-pinned tools |
 | Dependency updates | [Weekly Dependabot configuration](.github/dependabot.yml) for Actions, NuGet and Docker |
 
@@ -658,8 +658,9 @@ encapsulation and structural consistency with the Ecore model. TestServer/SQLite
 exercise public HTTP → CQRS → EF reads, validation, seed idempotency and documentation visibility. EF checks use the real Infrastructure mapping on isolated SQLite and offline Npgsql,
 including snapshot drift, configuration and SQL generation. The Listings integration suite
 applies, rolls back and reapplies the checked-in migration on PostgreSQL 16 and 17.
-[Verification details](docs/LISTINGS_EF_COMPATIBILITY.md) distinguish persistence setup from pending API/Outbox integration. Pure interfaces, enums
-and const-only static classes are recognized as declarations; executable generated code remains covered by
+[Verification details](docs/LISTINGS_EF_COMPATIBILITY.md) distinguish persistence setup from pending API/Outbox integration. Pure interfaces, enums,
+empty records without primary constructors or declared members, and const-only static classes
+are recognized as declarations when absent from Coverlet; executable generated code remains covered by
 the existing gates.
 Collection settings live in [coverage.runsettings](coverage.runsettings).
 After adding projects, apply formatting locally with `dotnet format Aset.slnx`.
