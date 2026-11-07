@@ -11,13 +11,28 @@ Content-Type: application/json
 
 ###
 
+# Demo seeded user login
+# @name login
 POST {{SmartLost.AuthService.Api_HostAddress}}/api/auth/login
 Content-Type: application/json
 
 {
-  "email": "alex.popescu@example.com",
-  "password": "P@ssw0rd123!"
+  "email": "demo@smartlost.local",
+  "password": "DemoUser123!"
 }
+
+###
+
+@authToken = {{login.response.body.token}}
+
+# Current authenticated user details
+GET {{SmartLost.AuthService.Api_HostAddress}}/api/auth/me
+Authorization: Bearer {{authToken}}
+
+###
+
+# Security audit log inspection (Aspect-Oriented pipeline behavior demonstration)
+GET {{SmartLost.AuthService.Api_HostAddress}}/api/auth/security/audit-logs?limit=20
 
 ###
 

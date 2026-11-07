@@ -9,6 +9,7 @@ using SmartLost.AuthService.Infrastructure.Authentication;
 using SmartLost.AuthService.Infrastructure.Outbox;
 using SmartLost.AuthService.Infrastructure.Persistence;
 using SmartLost.AuthService.Infrastructure.Security;
+using SmartLost.AuthService.Infrastructure.Seeding;
 using SmartLost.BuildingBlocks.Application.Outbox;
 using SmartLost.BuildingBlocks.Application.Security;
 using SmartLost.BuildingBlocks.Infrastructure;
@@ -33,6 +34,7 @@ public static class DependencyInjection
         services.AddSingleton<ITokenService, TokenService>();
         services.AddScoped<IAuthenticationSessionService, AuthenticationSessionService>();
         services.AddSingleton<ISecurityAuditSink, DbSecurityAuditSink>();
+        services.AddScoped<AuthDevelopmentSeeder>();
         return services;
     }
 
