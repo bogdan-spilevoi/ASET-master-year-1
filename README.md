@@ -213,7 +213,7 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | Module | Responsibility | Documentation |
 | --- | --- | --- |
 | [`.github/`](.github/) | GitHub Actions workflows, PR/main validation, Coverlet gates, security and container checks | [CI guide](.github/README.md) |
-| [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
+| [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions, security audit and an Auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Finite Auth Outbox job delivering versioned public-profile snapshots to configured HTTP receivers | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
 | [`src/Services/Listings/`](src/Services/Listings/) | Runtime scaffold and separate NMF models for listings with change sequences, photos, categories, match decisions, recoveries and credibility entries; runtime functionality pending | [Module README](src/Services/Listings/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md) |
 | [`src/Services/Matching/`](src/Services/Matching/) | Runtime scaffold plus NMF search projections with current photo identity/revision, versioned embeddings and preparation tasks; worker/ranking/client integration pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
@@ -229,14 +229,15 @@ will be logical references, without foreign keys between service databases.
 | Project | Responsibility |
 | --- | --- |
 | `SmartLost.BuildingBlocks.Core` | Type-aware `Entity<TId>`, `AggregateRoot<TId>`, domain-event contracts, domain `Guard`, immutable `Result`/`Result<T>`, errors, explicit domain exceptions, `PageSlice<T>`/`PagedResult<T>` and pagination defaults; no framework dependencies |
-| `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction behavior, transaction/Outbox contracts and `ICurrentUser` |
-| `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped HTTP current-user adapter and API registration |
-| `SmartLost.BuildingBlocks.Infrastructure` | Opt-in EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its table and delivery adapter |
+| `SmartLost.BuildingBlocks.Application` | FluentValidation and opt-in security-audit pipeline behaviors, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction behavior, transaction/Outbox contracts and `ICurrentUser` |
+| `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped current-user and HTTP audit-context adapters, and API registration |
+| `SmartLost.BuildingBlocks.Infrastructure` | Opt-in logging security-audit sink and EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its audit/outbox persistence |
 
 See [dependencies, domain primitives, Outbox integration and transaction opt-in](docs/BUILDING_BLOCKS.md).
 `AddBuildingBlocksApi()` also registers scoped `ICurrentUser` access to authenticated
-user/token claims. Auth already calls this registration; its existing endpoints remain
-register/login/refresh. See [current-user usage and claim mapping](docs/BUILDING_BLOCKS.md#current-user-identity).
+user/token claims and HTTP security-audit context. Auth opts into the shared security-audit
+behavior for its register/login/refresh commands. See [current-user usage and claim mapping](docs/BUILDING_BLOCKS.md#current-user-identity)
+and the [Auth security audit guide](docs/AUTHSERVICE.md#security-audit-pipeline).
 Auth now uses the shared Outbox library: its EF context saves profile messages atomically
 with business changes, and the separate worker performs bounded HTTP delivery. Receiver
 routes and a service key must be configured before running the worker. Unit tests cover
@@ -412,7 +413,8 @@ Volume removal remains destructive.
 dedicated connection string named `AuthDatabase`. Its [Infrastructure migrations](src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Migrations/)
 contain `InitialCreate`, which creates `Users` and the unique normalized-identity indexes,
 `AddRefreshTokens`, which creates per-login sessions and hashed refresh-token history,
-and `AddAuthOutbox`, which adds `OutboxMessages` and the user identity-version column.
+`AddAuthOutbox`, which adds `OutboxMessages` and the user identity-version column, and
+`AddSecurityAuditRecords`, which creates the security-audit table and its indexes.
 Apply the latest migration before starting either updated Auth process.
 The `Users` mapping lives in [UserAccountConfiguration](src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Configurations/UserAccountConfiguration.cs);
 `AuthDbContext` applies service entity configurations and the shared Outbox mapping.
@@ -436,7 +438,7 @@ commands use the Infrastructure factory without running API startup. Migration
 application is an explicit operation; no deployment workflow is active.
 
 The checked-in EF migrations are the source of truth. See
-[manual application commands](docs/AUTHSERVICE.md#apply-the-refresh-token-migration-yourself).
+[manual application commands](docs/AUTHSERVICE.md#apply-the-auth-migrations).
 Generate SQL on demand for review; SQL exports do not need to be committed.
 
 ## API surface
@@ -448,6 +450,8 @@ Generate SQL on demand for review; SQL exports do not need to be committed.
 | `POST` | `/api/auth/register` | Creates a new user and returns access/refresh tokens |
 | `POST` | `/api/auth/login` | Authenticates by email and password and creates a token session |
 | `POST` | `/api/auth/refresh` | Rotates a refresh token and returns a new access/refresh pair |
+| `GET` | `/api/auth/me` | Returns the authenticated user's identity; requires a bearer access token |
+| `GET` | `/api/auth/security/audit-logs` | Lists recent audit events; currently does not require authorization |
 
 Login accepts `{ "email": "user@example.com", "password": "your-password" }`.
 Email matching trims whitespace and ignores casing.
@@ -467,6 +471,8 @@ Expiry values use PostgreSQL's microsecond precision consistently in responses a
 See [refresh token behavior and migration scripts](docs/AUTHSERVICE.md#refresh-tokens).
 Refresh-token tests use isolated SQLite databases for rotation, expiry, replay and competing
 updates; they do not apply migrations to the local PostgreSQL database.
+The audit-log endpoint includes usernames/emails, client IPs and user agents; it is currently
+unauthenticated and is intended only for trusted local/demo use until access is restricted.
 Application failures use `application/problem+json` with an error code, trace identifier and
 field errors when applicable (400 validation, 409 duplicate account, 401 invalid credentials).
 Malformed request bodies use ASP.NET validation problems. Unexpected exceptions return a

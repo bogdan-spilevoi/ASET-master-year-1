@@ -18,9 +18,9 @@ root solution to validate consumers together with the shared libraries.
 | Library | Contents | Dependencies |
 | --- | --- | --- |
 | [Core](../src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | `Entity<TId>`, `AggregateRoot<TId>`, `IDomainEvent`, `IHasDomainEvents`, `Guard`, `Result`, `Result<T>`, `IResult`, `Error`, `ErrorKind`, `DomainException`, `PageSlice<T>`, `PagedResult<T>`, `PagedDataGuard` | .NET only |
-| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/) | Validation/exception/optional transaction behaviors, transaction and Outbox contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
-| [AspNetCore](../src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/) | `ToActionResult`, `ProblemDetails`, unexpected-exception handler, `HttpCurrentUser`, API registration | Application/Core, ASP.NET Core framework |
-| [Infrastructure](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/) | EF Outbox model/configuration, writer, leased batch processor and registration | Application, EF Core Relational 10.0.12 |
+| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/) | Validation/exception/optional transaction/security-audit behaviors, audit and Outbox contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
+| [AspNetCore](../src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/) | `ToActionResult`, `ProblemDetails`, unexpected-exception handler, `HttpCurrentUser`, HTTP audit context and API registration | Application/Core, ASP.NET Core framework |
+| [Infrastructure](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/) | EF Outbox model/configuration, writer, leased batch processor, logging security-audit sink and registration | Application, EF Core Relational 10.0.12 |
 
 Service Domain projects reference Core; service Application projects reference Application;
 service API projects reference AspNetCore. Service Infrastructure implements persistence contracts and may opt into shared
@@ -159,7 +159,9 @@ and finite worker host; Azure scale-to-zero consumers still require an external 
 
 `AddBuildingBlocksApplication(serviceAssembly)` discovers handlers and validators in the
 service's Application assembly and registers `ExceptionToResult → Validation → Handler`.
-AuthService wraps this through its `AddApplication()` extension.
+Security auditing is opt-in: pass `useSecurityAudit: true` to add
+`SecurityAuditBehavior<TRequest,TResponse>` between exception mapping and validation. Auth
+wraps this through `AddApplication()` and enables the behavior for its audited commands.
 
 - Validation calls `ValidateAsync` sequentially because validators may share scoped
   dependencies. Invalid commands return deduplicated field errors without invoking handlers.
@@ -168,6 +170,20 @@ AuthService wraps this through its `AddApplication()` extension.
   normally be returned directly by handlers.
 - Behaviors apply to responses implementing `IResult<TSelf>`; other MediatR response types
   do not participate in this result pipeline.
+
+### Security audit behavior
+
+`ISecurityAuditedRequest` marks requests for auditing and supplies an event type plus a
+`TargetSubject`. The behavior records result failures and thrown exceptions through
+`ISecurityAuditSink`; it does not inspect request properties or automatically redact values.
+Implementations must therefore keep passwords, hashes and tokens out of `TargetSubject`.
+The event can include the subject, client IP, user agent, outcome, failure code and UTC time.
+
+`AddBuildingBlocksApi()` registers the scoped `HttpSecurityAuditContext` that reads client
+metadata from the current HTTP request. Non-HTTP hosts can use the default context and
+`AddBuildingBlocksSecurityAudit()` registration. That registration supplies a logging sink;
+services can replace it with a service-owned sink, as Auth does with its database-backed
+`DbSecurityAuditSink`. BuildingBlocks defines no audit table or migration.
 
 Transactions are optional. A service must supply scoped `IUnitOfWork` / `ITransaction`
 implementations, mark selected requests with `ITransactionalCommand`, and register with
@@ -242,7 +258,7 @@ method or endpoint.
 ## HTTP mapping
 
 `AddBuildingBlocksApi()` registers problem details, the unexpected-exception handler,
-`IHttpContextAccessor` and scoped `ICurrentUser` / `HttpCurrentUser`.
+`IHttpContextAccessor`, scoped `ICurrentUser` / `HttpCurrentUser` and the HTTP audit context.
 Call `app.UseExceptionHandler()` in the API pipeline, as AuthService does.
 
 `controller.ToActionResult(result)` returns 200 with a generic success value, or 204 for
@@ -273,8 +289,9 @@ reads the first authenticated `ClaimsIdentity` in `HttpContext.User`. It never d
 an Authorization header or validates a JWT itself. The host must configure authentication,
 call `UseAuthentication()` before authorization/endpoints and protect restricted endpoints
 with `[Authorize]` or a policy. Auth already has authentication middleware and calls
-`AddBuildingBlocksApi()`, so the adapter is registered there. Its public auth routes do not
-require an access token, and no new endpoint is introduced.
+`AddBuildingBlocksApi()`, so the adapter is registered there. Register/login/refresh remain
+public. Auth's `/api/auth/me` endpoint requires authentication; its audit-log inspection route
+currently does not require authorization and should remain restricted to trusted demo use.
 
 | Member | Source / behavior |
 | --- | --- |

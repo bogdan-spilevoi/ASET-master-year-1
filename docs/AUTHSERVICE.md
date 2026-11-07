@@ -26,11 +26,12 @@ main CI entry point.
 
 Application depends on Domain; Infrastructure implements Application abstractions; API
 composes both. Each layer references the appropriate [building blocks](BUILDING_BLOCKS.md).
-The pipeline is `ExceptionToResult → Validation → Handler`: expected duplicate/credential
-errors are returned as `Result<AuthResponse>`, and explicit domain exceptions can be mapped
-to results. Other exceptions propagate to the sanitized API error handler. Transactions are
-not enabled as a MediatR behavior in this service. EF Core commits registration/session
-creation and each refresh rotation with one `SaveChangesAsync` transaction.
+The pipeline is `ExceptionToResult → SecurityAudit (audited requests only) → Validation → Handler`:
+expected duplicate/credential errors are returned as `Result<AuthResponse>`, and explicit
+domain exceptions can be mapped to results. Other exceptions propagate to the sanitized API
+error handler after the audit behavior records the failure. Transactions are not enabled as a
+MediatR behavior in this service. EF Core commits registration/session creation and each refresh
+rotation with one `SaveChangesAsync` transaction.
 
 The database is not shared with other services.
 
@@ -131,6 +132,26 @@ See the [Member 3 authentication diagrams](diagrams/member-3/README.md) for a UM
 sign-in/session sequence and a C4 component view. They distinguish the current
 backend from the Angular and sign-out work required for the semester.
 
+## Security audit pipeline
+
+Auth opts into the shared `SecurityAuditBehavior` through `AddApplication`. It audits
+`RegisterUserCommand`, `LoginUserCommand` and `RefreshTokenCommand`, recording the event type,
+target subject, client IP, user agent, outcome, failure code or exception type, and UTC time.
+Subjects may contain the submitted username or email; passwords, password hashes, access
+tokens and refresh tokens are not included. Expected failures returned as `Result` are audited
+as failures, and thrown exceptions are audited before they are rethrown.
+
+`DbSecurityAuditSink` persists records in Auth's PostgreSQL database. If audit persistence
+fails, the sink logs the failure and does not replace the authentication operation's result.
+The behavior records individual attempts; it does not currently aggregate failures or detect
+brute-force patterns.
+
+`GET /api/auth/security/audit-logs` returns the newest records, with a requested limit clamped
+to 1–100. The current action has no authorization or Development-only restriction and exposes
+subject identifiers, client IPs and user agents. Keep it on a trusted local/demo deployment;
+restrict access before exposing the API to untrusted clients. The `GET /api/auth/me` endpoint,
+by contrast, requires a valid bearer access token.
+
 ## Object mapping
 
 The API references `AutoMapper` 16.2.0. `Program.cs` calls `AddApiMapping`, defined in
@@ -142,8 +163,9 @@ includes dependency injection support; no separate DI package is needed.
 `RegisterRequest` to `RegisterUserCommand` and `LoginRequest` to `LoginUserCommand`.
 It also maps `RefreshRequest` to `RefreshTokenCommand`.
 Controllers inject `IMapper` and send the mapped commands through the existing MediatR
-validation pipeline. Mapping copies input values; validation and normalization remain in
-Application and Domain. Domain entities are created through their factory methods.
+security-audit and validation pipeline. Mapping copies input values; validation and
+normalization remain in Application and Domain. Domain entities are created through their
+factory methods.
 
 Add API contract mappings as `Profile` classes under the API's `Mapping` folder; profiles in
 that assembly are discovered automatically. If a future layer owns its own mappings, register
@@ -292,7 +314,7 @@ needed; they take priority over JSON settings.
 `SmartLost.AuthService.Api` owns the `authservice` PostgreSQL database by default.
 `ConnectionStrings:AuthDatabase` in the local settings file configures its connection.
 [`Persistence/Migrations`](../src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Migrations/) contains
-`InitialCreate`, `AddRefreshTokens`, `AddAuthOutbox` and the model snapshot. The initial migration creates `Users`, its primary key and
+`InitialCreate`, `AddRefreshTokens`, `AddAuthOutbox`, `AddSecurityAuditRecords` and the model snapshot. The initial migration creates `Users`, its primary key and
 unique indexes on `NormalizedUserName` and `NormalizedEmail`. EF tracks applied migrations
 in `__EFMigrationsHistory`.
 
@@ -302,8 +324,12 @@ Old hashes are retained to detect reuse. Foreign keys cascade from Users to sess
 history; these references are entirely within AuthService's database.
 
 `AddAuthOutbox` adds the profile-version concurrency column and the `OutboxMessages` table,
-including payload, retry/dead-letter and lease state. Apply it before running the updated
-API or worker; it is not applied by this code change. The worker accesses only Auth's database.
+including payload, retry/dead-letter and lease state. Apply it before running the updated API
+or worker. The worker accesses only Auth's database.
+
+`AddSecurityAuditRecords` creates the `SecurityAuditRecords` table and indexes event type,
+occurrence time and subject identifier. Apply it with the other Auth migrations before using
+the audit sink or inspection endpoint.
 
 [`UserAccountConfiguration`](../src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Configurations/UserAccountConfiguration.cs)
 implements `IEntityTypeConfiguration<UserAccount>` and defines the `Users` table, primary key,
@@ -385,6 +411,8 @@ Deployment remains inactive; no workflow currently applies migrations.
 | `POST` | `/api/auth/register` | Creates a new user and returns access/refresh tokens |
 | `POST` | `/api/auth/login` | Authenticates by email and password and creates a token session |
 | `POST` | `/api/auth/refresh` | Rotates a refresh token and returns a new access/refresh pair |
+| `GET` | `/api/auth/me` | Returns the authenticated user's claims; requires a bearer access token |
+| `GET` | `/api/auth/security/audit-logs` | Returns recent audit records; currently has no authorization requirement |
 
 Login accepts `{ "email": "user@example.com", "password": "your-password" }`; the previous
 `userNameOrEmail` field is no longer accepted as a login identifier. Email is required, must
@@ -402,6 +430,19 @@ the HTTP launch profile. Expand an endpoint, choose **Try it out**, enter the JS
 and choose **Execute** to inspect its response. Both UI and OpenAPI are disabled outside
 Development. Swagger UI is served by the API through `Swashbuckle.AspNetCore.SwaggerUI`.
 
+### Development seed data
+
+After applying the Auth migrations, start the API in Development with `SeedData:Enabled=true`
+to create the demo account if it does not already exist. For example, from the repository root:
+
+```sh
+dotnet run --project src/Services/Auth/SmartLost.AuthService.Api -- --SeedData:Enabled=true
+```
+
+The demo credentials are `demo@smartlost.local` / `DemoUser123!`; use the login endpoint to
+obtain an access token. `SeedData:Only=true` runs the same seeder and exits, and is also
+Development-only. Do not use the demo credentials outside a local demonstration environment.
+
 ## Access-token claims and current user
 
 Auth emits HS256 access JWTs containing `sub` (user GUID), `unique_name`, `email`,
@@ -416,9 +457,10 @@ are supported, so the current JWT validation configuration is preserved.
 
 The adapter does not validate JWTs or query users. Signature, issuer, audience and lifetime
 checks remain in `Program.cs`. Restricted endpoints must use authorization; current
-register/login/refresh routes remain public. No current Auth handler consumes this new
-abstraction yet. See [the BuildingBlocks identity guide](BUILDING_BLOCKS.md#current-user-identity)
-for properties, null behavior and the required-user-ID method.
+register/login/refresh routes remain public. The authorized `GET /api/auth/me` endpoint reads
+the current identity; no application command handler currently consumes this abstraction. See
+[the BuildingBlocks identity guide](BUILDING_BLOCKS.md#current-user-identity) for properties,
+null behavior and the required-user-ID method.
 
 ## Refresh tokens
 
@@ -447,12 +489,12 @@ Other login sessions are unaffected. Already-issued access JWTs remain valid unt
 session revocation does not revoke those JWTs. No logout endpoint or automatic session cleanup
 job is implemented. Expired sessions may be removed together with their cascading token history.
 
-### Apply the refresh-token migration yourself
+### Apply the Auth migrations
 
-`AddRefreshTokens` is checked in with the EF migrations and model snapshot. Apply it through
-the EF CLI; already-applied migrations are tracked in `__EFMigrationsHistory` and skipped.
-No separate SQL export needs to be committed. If SQL is needed for review, generate it with
-the [SQL generation command](#review-generated-sql).
+The Auth migrations are checked in with the model snapshot. Apply them through the EF CLI;
+already-applied migrations are tracked in `__EFMigrationsHistory` and skipped. No separate SQL
+export needs to be committed. If SQL is needed for review, generate it with the
+[SQL generation command](#review-generated-sql).
 
 Run from the repository root with a local `appsettings.json` whose database host is
 `localhost` (created from `appsettings.example.json`):
@@ -483,7 +525,8 @@ Interfaces with implementations and files containing concrete types still requir
 `SmartLost.AuthService.UnitTests` exercises service behavior and API response paths with an isolated
 in-memory database, collecting Coverlet coverage, including direct command validation and
 HTTP error contracts, invariant identity normalization, atomic identity updates and duplicate
-checks. Migration unit tests verify discovery, snapshot/model consistency, initial table/index
+checks. Security-audit tests cover the pipeline outcomes, persistence and demonstration endpoints.
+Migration unit tests verify discovery, snapshot/model consistency, initial table/index
 operations and PostgreSQL forward/idempotent/rollback SQL without connecting to a database,
 plus startup without migration in both Development and Production. Configuration tests
 verify JSON loading, CLI overrides and JWT validation at startup.
@@ -492,8 +535,8 @@ in Coverlet coverage; the existing coverage gates remain unchanged.
 `SmartLost.AuthService.IntegrationTests` uses Testcontainers 4.16.0 to start a disposable
 `postgres:16-alpine` instance. Its `Testing` environment configures EF Core's production
 Npgsql provider with the container connection string and test-only JWT settings. No local
-appsettings file or existing Compose database is used. The fixture applies the checked-in EF
-migrations to this test database, truncates all four application tables before each test and disposes the container
+The fixture applies the checked-in EF
+migrations to this test database, truncates all five application tables before each test and disposes the container
 after the suite. There are no persistent volumes or fixed host ports.
 
 The suite verifies migration application, register/login persistence and normalization,
