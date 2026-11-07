@@ -56,8 +56,9 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
         Assert.Equal("Npgsql.EntityFrameworkCore.PostgreSQL", context.Database.ProviderName);
         Assert.Equal("authservice_tests", context.Database.GetDbConnection().Database);
         string[] migrations = [.. await context.Database.GetAppliedMigrationsAsync()];
-        Assert.Equal(3, migrations.Length);
+        Assert.Equal(4, migrations.Length);
         Assert.Contains(migrations, migration => migration.EndsWith("_AddAuthOutbox", StringComparison.Ordinal));
+        Assert.Contains(migrations, migration => migration.EndsWith("_AddSecurityAuditRecords", StringComparison.Ordinal));
         Assert.Empty(await context.Database.GetPendingMigrationsAsync());
         Assert.Empty(await context.Users.ToListAsync());
     }
