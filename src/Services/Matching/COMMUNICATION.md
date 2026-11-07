@@ -91,3 +91,7 @@ eligibility checking and ranking details; these arrows summarize that design.
 - Added the separate NMF model and unit-test flow for SearchListing/ImageEmbedding.
   Runtime projects remain empty, so all proposed network/database arrows still describe
   unimplemented integrations. No executable processing job or receiver has been added.
+- Reviewed the shared BuildingBlocks security-audit behavior added for Auth. Matching does
+  not opt into `useSecurityAudit`, and its runtime layers remain empty; this change adds no
+  Matching endpoint, database operation, inference call, worker or external communication,
+  so the diagrams above remain unchanged.

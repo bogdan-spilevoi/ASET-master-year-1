@@ -95,3 +95,7 @@ are unimplemented. The model tests do not establish any of these integrations.
 - Initial diagrams checked against the empty runtime projects, Modeling project and
   model tests. Update affected flows with service changes; if communication is
   unchanged, record what changed and why these diagrams still apply here.
+- Reviewed the shared BuildingBlocks security-audit behavior added for Auth. Listings does
+  not opt into `useSecurityAudit`, and its runtime layers remain empty; this change adds no
+  Listings endpoint, database operation, message or external call, so the diagrams above
+  remain unchanged.
