@@ -3,6 +3,8 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using SmartLost.BuildingBlocks.Application.Behaviors;
+using SmartLost.BuildingBlocks.Application.Profiling;
 using SmartLost.BuildingBlocks.Core.Results;
 using SmartLost.ListingsService.Application.Dtos;
 using SmartLost.ListingsService.Application.Queries.GetCategories;
@@ -29,7 +31,13 @@ public sealed class CategoryCachingTests
         Assert.Equal(1, reads.Count);
         using (IServiceScope scope = factory.Services.CreateScope())
         {
+            Type[] expectedOrder = [typeof(ProfilingBehavior<,>), typeof(ExceptionToResultBehavior<,>),
+                typeof(AuthorizationBehavior<,>), typeof(ValidationBehavior<,>), typeof(CachingBehavior<,>)];
+            Assert.Equal(expectedOrder, scope.ServiceProvider
+                .GetServices<IPipelineBehavior<GetCategoriesQuery, Result<IReadOnlyList<CategoryDto>>>>()
+                .Select(behavior => behavior.GetType().GetGenericTypeDefinition()));
             Result<IReadOnlyList<CategoryDto>> cached = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new GetCategoriesQuery());
+            Assert.Null(scope.ServiceProvider.GetRequiredService<IProfilingContext>().Current);
             Assert.Throws<NotSupportedException>(() => ((IList<CategoryDto>)cached.Value).Clear());
             ListingsDbContext context = scope.ServiceProvider.GetRequiredService<ListingsDbContext>();
             context.Categories.Add(Category.Create("charger"));

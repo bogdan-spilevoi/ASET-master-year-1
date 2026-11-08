@@ -18,7 +18,7 @@ flowchart LR
     Seeder["MatchingDemoSeeder"]
     Mediator["MediatR ISender"]
     Profiling["BuildingBlocks ProfilingBehavior (outermost)"]
-    Pipeline["ExceptionToResult + Validation behaviors"]
+    Pipeline["ExceptionToResult + Authorization + Validation + Caching behaviors"]
     Handler["Use-case handler"]
     Selector["ProfiledCandidateSelector -> CandidateSelector"]
     Ranker["ProfiledRelevanceRanker -> RelevanceRanker"]
@@ -47,7 +47,11 @@ flowchart LR
     UOW -->|"7.0 SaveChanges with xmin concurrency"| DB
     UOW -->|"7.0.1 Competing update: DomainException -> HTTP 409"| Pipeline
     Handler -->|"7.1 Read photo revision"| MockPhotos
-    Handler -->|"7.2 Embedding / 8. analysis call"| AiDecorators
+    Handler -->|"7.2 Embedding call on pending task"| AiDecorators
+    Handler -->|"8.1 Analysis: recheck requested photo access every time"| MockPhotos
+    Handler -->|"8.2 After photo read succeeds, dispatch AnalyzePhotoContentQuery"| AnalysisCache["MediatR CachingBehavior / process-local IQueryCache"]
+    AnalysisCache -->|"8.3 Cache miss: analyze permitted photo bytes"| AiDecorators
+    AnalysisCache -->|"8.4 Success: reuse immutable labels for 300 seconds"| Handler
     AiDecorators -->|"7.3 Bounded call with AI timeout"| MockAi
     AiDecorators -->|"7.4 Record duration, timeout, cancellation or failure"| Profiler
     Handler -->|"7.5 Commit vector + Ready, or retry/exhausted Failed with sanitized code"| DB
@@ -79,7 +83,12 @@ Failure and retry paths that are implemented:
   request cancellation, discard late results and report TimedOut; uncooperative asynchronous
   adapters are no longer awaited, and real adapters must stop their own work on cancellation.
   No worker re-runs due tasks automatically; they are processed through the test endpoints.
-- **Photo analysis.** Missing photos return 404 and AI failures return 503.
+- **Photo analysis.** The uncached outer query rechecks photo access before every cache
+  lookup. Missing/no-longer-permitted photos return 404; AI failures return 503 and are
+  not cached. Only input-only inference is cached: photo identifiers/revision, bytes and
+  media type form the key, excluding correlation ID. Hits skip inference, while misses
+  retain the bounded AI call and error mapping. Successful nested label lists are frozen;
+  absolute expiry is 300 seconds. Current adapters are mocks, with no outgoing network call.
 
 ## Current model-test interactions
 
@@ -125,6 +134,17 @@ category synonym normalization are not implemented.
 - [Proposed matching components](../../../docs/diagrams/member-5/smartlost-matching-components.puml)
 
 ## Review notes
+
+- 2026-11-08: added the input-only photo-analysis cache flow (8.1-8.4). The outer query
+  still checks photo access on every request, including hits. Suggestions and identity
+  remain uncached; no route, persistence ownership, worker, migration or service call
+  changes. Tests verify permission rechecks, key isolation, expiry, failures and snapshots.
+
+- 2026-11-08: Enabled shared authorization and caching wrappers alongside profiling. Current
+  Development-only requests have neither attribute and still query current eligibility; no
+  suggestion results are cached. Database, mock-adapter and profiling arrows are unchanged.
+  Matching Domain already references the shared Listings contract; no synchronization endpoint,
+  worker or migration is added.
 
 - 2026-11-08: integrated Listings/API/cache with main's Matching runtime and authorization.
   SearchListing and consumers now use the shared Contracts.Listings ListingType, with the

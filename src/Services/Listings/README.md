@@ -22,6 +22,10 @@ run the API beside that same database, using the existing named volume.
 Workers, authenticated mutation use cases and blob/message adapters remain unimplemented.
 Runtime layers do not reference Modeling or NMF.
 
+The API registers shared profiling, authorization and caching behaviors. Current reads
+remain public; only GetCategoriesQuery is cacheable. Profiling observes every MediatR
+request, while listing/detail reads still query current data.
+
 The [numbered communication diagrams](COMMUNICATION.md) distinguish current generation,
 Domain/test interactions from proposed integrations. Update them with affected service
 code/configuration/test changes; CI checks document changes and reviewers check accuracy.

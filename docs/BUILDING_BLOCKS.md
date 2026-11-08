@@ -389,5 +389,10 @@ The independent `useProfiling`, `useAuthorization` and `useCaching` switches can
 combined. Their order is Profiling -> ExceptionToResult -> Authorization -> Validation
 -> Caching -> optional Transaction -> Handler. Authorization and validation therefore
 run before a cached result can be returned. Profiling remains outermost and records
-short-circuited operations too. Current service opt-ins are Auth authorization, Listings
-category caching and Matching profiling; extending them to other use cases is separate work.
+short-circuited operations too. Auth, Listings and Matching enable all three switches and
+register the process-local query-cache backend. Authorization and caching are still
+request-attribute opt-ins: Auth identity is protected, Listings categories are cached,
+and Matching caches input-only photo analysis after checking photo access on every outer
+request. Matching demo requests remain unmarked for authorization. No identity or
+suggestion result is cached.
+The shared registration defaults remain off; transactions remain disabled in these APIs.

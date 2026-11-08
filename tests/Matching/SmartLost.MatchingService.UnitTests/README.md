@@ -9,6 +9,9 @@ The suite covers the NMF model and the runtime Matching code. Runtime tests live
   tolerance), weighted relevance with missing evidence, thresholds and cached-vector ranking.
 - `MatchingHandlerTests`: suggestion statuses, embedding preparation success, obsolete
   and retry paths, and photo-analysis error mapping.
+- `PhotoAnalysisCachingTests`: real MediatR cache hits, photo-access rechecks, validation
+  before reads, photo/version/content/media-type isolation, absolute expiration,
+  correlation-ID reuse, retry after inference failures and immutable nested snapshots.
 - `MatchingProfilingTests`: stage and AI decorators, timeouts, cancellations, failures,
   slow-call warnings, correlation-ID sanitization and the MediatR pipeline order.
 - `MatchingInfrastructureTests`: the `InitialCreate` migration against the PostgreSQL model

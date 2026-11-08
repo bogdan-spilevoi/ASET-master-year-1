@@ -67,7 +67,7 @@ consistent with the modeled structure; it does not generate files.
 flowchart LR
     Client["HTTP client"]
     API["Categories / Listings controller"]
-    Validation["MediatR: ExceptionToResult + Validation"]
+    Validation["MediatR: Profiling + ExceptionToResult + Authorization + Validation"]
     Aspect["CachingBehavior: inspect CacheableQueryAttribute"]
     Cache["Singleton IQueryCache / MemoryQueryCache"]
     Handler["Query handler"]
@@ -275,6 +275,11 @@ snapshot delivery, inference calls and workers are not implemented in Listings.
 - [Proposed publication activity](../../../docs/diagrams/member-4/smartlost-publication-activity.puml)
 
 ## Review notes
+
+- 2026-11-08: Enabled shared profiling and the authorization wrapper alongside category caching.
+  Current public reads have no authorization attribute, so their routes and database/cache
+  arrows are unchanged. Profiling surrounds every MediatR operation; category cache hits still
+  follow authorization/validation checks.
 
 - 2026-11-08: integrated main's Matching runtime and Auth authorization without losing
   the Listings cache path. Shared registration now supports profiling, authorization and

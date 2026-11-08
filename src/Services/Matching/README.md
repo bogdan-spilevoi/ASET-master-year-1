@@ -4,6 +4,14 @@ The Matching service owns the derived search projection, cached image embeddings
 model versions and suggestion ranking. It will coordinate Qwen/DINOv3 requests to the local
 AI runtime through an authenticated HTTPS tunnel; it will not load model weights in Azure.
 
+Shared profiling, authorization and caching behaviors are registered for MediatR. Current
+demo requests have no authorization attributes: their routes remain Development-only
+and suggestion eligibility is reevaluated on every request. Only the input-only
+AnalyzePhotoContentQuery is cacheable; the outer AnalyzeListingPhotoQuery reads the
+permitted photo on every request before dispatching it. Profiling remains active.
+Matching Domain uses `ListingType` from the shared [Listings contract](../../Contracts/SmartLost.Contracts.Listings/README.md);
+there is no runtime Listings-to-Matching synchronization yet.
+
 ## Current state
 
 The [communication diagrams](COMMUNICATION.md) show the implemented flow and mark
@@ -78,6 +86,15 @@ Example summary from the Compose container:
 ```text
 Operation GetMatchSuggestionsQuery (live-ranked) finished as Succeeded in 37.3 ms. Stages: CandidateSelection=7.4ms/Succeeded/items=3; RelevanceRanking=25.5ms/Succeeded/items=3. Detail: none.
 ```
+
+## Photo-analysis query cache
+
+The existing `POST /api/matching/photo-analysis` flow checks the photo on every request,
+then dispatches an input-only cacheable query. Successful labels are immutable snapshots
+with a five-minute absolute TTL. The key covers photo identifiers/revision, bytes and
+media type; correlation IDs do not create separate entries. Missing/no-longer-permitted
+photos and inference failures are not cached. The current adapters remain mocks.
+See [cache policy and limitations](../../../docs/QUERY_CACHING.md#matching-photo-analysis).
 
 ## Projects and dependency direction
 

@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using SmartLost.MatchingService.Api.Diagnostics;
 using SmartLost.MatchingService.Application.Contracts;
+using SmartLost.MatchingService.Domain.Entities;
 using SmartLost.MatchingService.Domain.Suggestions;
 using SmartLost.MatchingService.Infrastructure.Demo;
 using SmartLost.MatchingService.Infrastructure.Persistence;
@@ -23,6 +24,25 @@ public sealed class MatchingApiTests
 {
     private const string Source = "10000000-0000-0000-0000-000000000001";
     private static readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
+
+    [Fact]
+    public async Task SuggestionResultsReevaluateCurrentEligibilityWithCachingBehaviorRegistered()
+    {
+        using MatchingApiFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        using HttpResponseMessage seeded = await client.PostAsync("/api/matching/demo/seed", null);
+        seeded.EnsureSuccessStatusCode();
+        Assert.Equal(SuggestionStatus.Ready, (await SuggestAsync(client, Source, 1)).Status);
+        using (IServiceScope scope = factory.Services.CreateScope())
+        {
+            MatchingDbContext context = scope.ServiceProvider.GetRequiredService<MatchingDbContext>();
+            SearchListing source = await context.SearchListings.SingleAsync(listing => listing.Id == Guid.Parse(Source));
+            context.Entry(source).Property(listing => listing.Eligible).CurrentValue = false;
+            await context.SaveChangesAsync();
+        }
+
+        Assert.Equal(SuggestionStatus.Unavailable, (await SuggestAsync(client, Source, 1)).Status);
+    }
 
     [Fact]
     public async Task DemoFlowRanksWithVisualEvidenceAfterEmbeddingsArePrepared()

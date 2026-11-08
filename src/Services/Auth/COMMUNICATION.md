@@ -11,7 +11,7 @@ whose implementation is absent. Auth owns every database table shown here.
 flowchart LR
     Client["HTTP client"]
     API["AuthController / AutoMapper"]
-    Pipeline["MediatR validation pipeline"]
+    Pipeline["MediatR: Profiling / ExceptionToResult / Authorization / Validation / Caching"]
     Handler["RegisterUserCommandHandler or LoginUserCommandHandler"]
     Password["PasswordService"]
     Repository["UserAccountRepository"]
@@ -137,6 +137,11 @@ No cloud schedule or receiver is configured by the repository examples.
 - [Worker operation and receiver contract](SmartLost.AuthService.Worker/README.md)
 
 ## Review notes
+
+- 2026-11-08: Enabled shared profiling and the attribute-driven cache wrapper alongside
+  authorization. No Auth request carries a cache attribute, so identity/token responses remain
+  per-request. Registration, JWT, database and worker/Outbox arrows are unchanged; profiling
+  adds operation metadata logging around MediatR without request payloads.
 
 - 2026-11-08: integrated main's authorization/profiling with Listings caching in the shared
   registration. Auth still enables only authorization; registration/login/refresh remain
