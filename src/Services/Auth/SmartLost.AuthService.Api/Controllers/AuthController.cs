@@ -1,11 +1,13 @@
 using AutoMapper;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartLost.AuthService.Api.Contracts;
 using SmartLost.AuthService.Application.Commands.Login;
 using SmartLost.AuthService.Application.Commands.Refresh;
 using SmartLost.AuthService.Application.Commands.Register;
 using SmartLost.AuthService.Application.Contracts;
+using SmartLost.AuthService.Application.Queries.GetCurrentUser;
 using SmartLost.BuildingBlocks.AspNetCore.Results;
 using SmartLost.BuildingBlocks.Core.Results;
 
@@ -48,4 +50,24 @@ public sealed class AuthController(ISender sender, IMapper mapper) : ControllerB
         Result<AuthResponse> result = await sender.Send(command, cancellationToken);
         return this.ToActionResult(result);
     }
+
+    [Authorize]
+    [HttpGet("me")]
+    [ProducesResponseType<CurrentUserResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Me(CancellationToken cancellationToken)
+    {
+        Result<CurrentUserDetails> result = await sender.Send(new GetCurrentUserQuery(), cancellationToken);
+        if (result.IsFailure)
+        {
+            return this.ToActionResult(result);
+        }
+
+        return Ok(new CurrentUserResponse(
+            result.Value.UserId,
+            result.Value.UserName,
+            result.Value.Email,
+            true));
+    }
+
 }

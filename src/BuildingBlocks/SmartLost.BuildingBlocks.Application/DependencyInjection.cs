@@ -10,8 +10,12 @@ namespace SmartLost.BuildingBlocks.Application;
 public static class DependencyInjection
 {
     public static IServiceCollection AddBuildingBlocksApplication(
-        this IServiceCollection services, Assembly serviceAssembly, bool useTransactions = false,
-        bool useProfiling = false, ProfilingOptions? profilingOptions = null)
+        this IServiceCollection services,
+        Assembly serviceAssembly,
+        bool useTransactions = false,
+        bool useAuthorization = false,
+        bool useProfiling = false,
+        ProfilingOptions? profilingOptions = null)
     {
         if (useProfiling)
         {
@@ -32,6 +36,11 @@ public static class DependencyInjection
             }
 
             configuration.AddOpenBehavior(typeof(ExceptionToResultBehavior<,>));
+            if (useAuthorization)
+            {
+                configuration.AddOpenBehavior(typeof(AuthorizationBehavior<,>));
+            }
+
             configuration.AddOpenBehavior(typeof(ValidationBehavior<,>));
             if (useTransactions)
             {

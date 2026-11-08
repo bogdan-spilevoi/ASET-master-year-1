@@ -385,6 +385,7 @@ Deployment remains inactive; no workflow currently applies migrations.
 | `POST` | `/api/auth/register` | Creates a new user and returns access/refresh tokens |
 | `POST` | `/api/auth/login` | Authenticates by email and password and creates a token session |
 | `POST` | `/api/auth/refresh` | Rotates a refresh token and returns a new access/refresh pair |
+| `GET` | `/api/auth/me` | Returns the current bearer-token identity |
 
 Login accepts `{ "email": "user@example.com", "password": "your-password" }`; the previous
 `userNameOrEmail` field is no longer accepted as a login identifier. Email is required, must
@@ -403,6 +404,12 @@ and choose **Execute** to inspect its response. Both UI and OpenAPI are disabled
 Development. Swagger UI is served by the API through `Swashbuckle.AspNetCore.SwaggerUI`.
 
 ## Access-token claims and current user
+
+`GET /api/auth/me` requires the ASP.NET Core bearer-token `[Authorize]` attribute and sends
+the Application-layer `[Authorize]` `GetCurrentUserQuery`. The query is protected by the shared
+`AuthorizationBehavior`, which reads `ICurrentUser`; register, login and refresh commands have
+no attribute and remain public. Future protected commands or queries can use
+`[Authorize("claimType", "claimValue")]` for an exact claim requirement.
 
 Auth emits HS256 access JWTs containing `sub` (user GUID), `unique_name`, `email`,
 `jti`, `iss`, `aud`, `nbf` and `exp`. No role/permission or `iat` claim is currently

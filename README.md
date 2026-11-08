@@ -236,14 +236,15 @@ will be logical references, without foreign keys between service databases.
 | Project | Responsibility |
 | --- | --- |
 | `SmartLost.BuildingBlocks.Core` | Type-aware `Entity<TId>`, `AggregateRoot<TId>`, domain-event contracts, domain `Guard`, immutable `Result`/`Result<T>`, errors, explicit domain exceptions, `PageSlice<T>`/`PagedResult<T>` and pagination defaults; no framework dependencies |
-| `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction/profiling behaviors, shared profiling contexts, transaction/Outbox contracts and `ICurrentUser` |
+| `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction/authorization/profiling behaviors, shared profiling contexts, transaction/Outbox contracts and `ICurrentUser` |
 | `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped HTTP current-user adapter and API registration |
 | `SmartLost.BuildingBlocks.Infrastructure` | Opt-in EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its table and delivery adapter |
 
 See [dependencies, domain primitives, Outbox integration and transaction opt-in](docs/BUILDING_BLOCKS.md).
 `AddBuildingBlocksApi()` also registers scoped `ICurrentUser` access to authenticated
-user/token claims. Auth already calls this registration; its existing endpoints remain
-register/login/refresh. See [current-user usage and claim mapping](docs/BUILDING_BLOCKS.md#current-user-identity).
+user/token claims. Auth already calls this registration; register/login/refresh remain public,
+while `/api/auth/me` requires a bearer access token and dispatches an attribute-protected query.
+See [current-user usage and claim mapping](docs/BUILDING_BLOCKS.md#current-user-identity).
 Auth now uses the shared Outbox library: its EF context saves profile messages atomically
 with business changes, and the separate worker performs bounded HTTP delivery. Receiver
 routes and a service key must be configured before running the worker. Unit tests cover
@@ -480,6 +481,7 @@ See [Matching tables and migration commands](src/Services/Matching/README.md#dat
 | `POST` | `/api/auth/register` | Creates a new user and returns access/refresh tokens |
 | `POST` | `/api/auth/login` | Authenticates by email and password and creates a token session |
 | `POST` | `/api/auth/refresh` | Rotates a refresh token and returns a new access/refresh pair |
+| `GET` | `/api/auth/me` | Returns the bearer token's current identity |
 
 Login accepts `{ "email": "user@example.com", "password": "your-password" }`.
 Email matching trims whitespace and ignores casing.
@@ -606,6 +608,10 @@ private fields, Allman braces, four spaces and file-scoped namespaces. Detailed 
 and review conventions are in [coding standards](docs/CODING_STANDARDS.md).
 MediatR commands return `Result<T>` for expected business failures. FluentValidation checks
 commands before handlers execute, including direct mediator calls; validators run sequentially.
+`[Authorize]` on an Application request enables the shared opt-in authorization behavior:
+it requires an authenticated `ICurrentUser` and can require an exact claim through
+`[Authorize("claimType", "claimValue")]`. Unattributed requests remain public; HTTP endpoints
+still use ASP.NET Core `[Authorize]` for endpoint admission.
 Paginated queries can implement `IPaginatedRequest` and derive their validator from
 `BasePaginatedValidator<T>`: `PageIndex` starts at zero and `PageSize` must be 1–100.
 Repository pagination returns `PageSlice<T>` with the total filtered count before paging;

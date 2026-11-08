@@ -11,6 +11,8 @@ RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/publish .
-RUN useradd -m -u 1001 appuser
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -u 1001 appuser
 USER appuser
 ENTRYPOINT ["dotnet", "SmartLost.AuthService.Worker.dll"]

@@ -84,6 +84,9 @@ are unimplemented. The model tests do not establish any of these integrations.
 
 ## Review notes
 
+- 2026-11-08: reviewed the shared attribute-based AuthorizationBehavior added for Auth.
+  Listings does not enable that opt-in behavior and has no changed endpoint, persistence,
+  message, worker or external-call implementation; all numbered arrows remain unchanged.
 - 2026-10-26: added Listing.ChangeSequence and sequence-bearing model tests/examples.
   Current arrows remain in-process NMF operations. Planned snapshot delivery now names
   the existing Outbox design and its future Listings worker; no receiver, worker,

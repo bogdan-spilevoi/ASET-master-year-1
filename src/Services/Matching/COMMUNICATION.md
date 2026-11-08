@@ -126,6 +126,9 @@ category synonym normalization are not implemented.
 
 ## Review notes
 
+- 2026-11-08: reviewed the shared attribute-based AuthorizationBehavior added for Auth.
+  Matching does not enable that opt-in behavior, so its profiling, persistence, mock-adapter
+  and external-interaction arrows remain unchanged.
 - 2026-11-08: extracted the outer profiling behavior and generic context/contracts into
   BuildingBlocks, while Matching retains stage/AI decorators. The diagram now labels
   the shared behavior and Infrastructure concurrency mapping. Added deadline/late-result
