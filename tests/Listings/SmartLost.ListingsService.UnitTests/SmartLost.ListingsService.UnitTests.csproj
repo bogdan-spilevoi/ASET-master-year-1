@@ -3,7 +3,13 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../../src/Services/Listings/SmartLost.ListingsService.Api/SmartLost.ListingsService.Api.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
+    <ProjectReference Include="../../../src/Services/Listings/SmartLost.ListingsService.Infrastructure/SmartLost.ListingsService.Infrastructure.csproj" />
+    <ProjectReference Include="../../../src/Services/Listings/SmartLost.ListingsService.Domain/SmartLost.ListingsService.Domain.csproj" />
     <ProjectReference Include="../../../src/Services/Listings/SmartLost.ListingsService.Modeling/SmartLost.ListingsService.Modeling.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="coverlet.collector" Version="10.1.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -14,5 +20,8 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../../src/Services/Listings/SmartLost.ListingsService.Modeling/Metamodels/listings.ecore" Link="Models/listings.ecore" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

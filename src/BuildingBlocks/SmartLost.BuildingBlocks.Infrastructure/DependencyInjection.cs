@@ -1,13 +1,23 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using SmartLost.BuildingBlocks.Application.Caching;
 using SmartLost.BuildingBlocks.Application.Outbox;
+using SmartLost.BuildingBlocks.Infrastructure.Caching;
 using SmartLost.BuildingBlocks.Infrastructure.Outbox;
 
 namespace SmartLost.BuildingBlocks.Infrastructure;
 
 public static class DependencyInjection
 {
+    public static IServiceCollection AddBuildingBlocksQueryCache(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<IQueryCache, MemoryQueryCache>();
+        return services;
+    }
+
     public static IServiceCollection AddBuildingBlocksOutbox<TContext>(this IServiceCollection services) where TContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(services);

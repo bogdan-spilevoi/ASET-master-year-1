@@ -1,80 +1,105 @@
-# Listings service scaffold
+# Listings service
 
-The planned Listings service owns lost/found listings, confirmed categories, photo metadata,
-match decisions, recoveries and the credibility ledger. Credibility remains a module inside
+Listings owns the lost/found domain model, confirmed categories, photo metadata,
+match decisions, recoveries and the credibility ledger. Credibility is a module within
 Listings for the semester MVP.
 
 ## Current state
 
-See the [communication diagrams](COMMUNICATION.md) for current in-process model
-interactions and clearly separated proposed service integrations. Update that document
-with service code, configuration or test changes; if communication is unchanged,
-record a specific explanation in its review notes. CI checks document changes;
-reviewers check diagram accuracy.
+The [Domain model](SmartLost.ListingsService.Domain/README.md) has conventional .NET
+entities with shared aggregate/entity bases, guarded partial methods, private setters,
+protected collections and local domain events. Each entity is maintained manually in
+Domain/Entities with its properties, constructor and behavior in the same file. The separate [NMF Modeling library](SmartLost.ListingsService.Modeling/README.md)
+retains generated ModelElements, metamodel metadata and XMI samples.
 
-This module contains four empty runtime-layer .NET 10 projects, a separate
-[NMF Modeling project](SmartLost.ListingsService.Modeling/README.md) and [Listings.slnx](Listings.slnx).
-The runtime layers have no C# source files, endpoints, dependency registrations, database contexts,
-migrations, runtime settings, workers, Dockerfiles or Compose services.
-The API uses the Web SDK with `OutputType=Library` so the scaffold builds without a
-`Program.cs`. Remove that property when implementing the executable API entry point.
-The NMF structural model defines Listing, Photo, Category, ListingCategory,
-MatchDecision, Recovery and CredibilityEntry, with generated C#, an embedded NMeta
-metamodel and publication/recovery sample XMI instances.
-Listing also models a long ChangeSequence for ordered Matching snapshots, separately
-from content Revision. Outbox delivery remains a planned runtime integration.
-The [modeling guide](SmartLost.ListingsService.Modeling/README.md) explains regeneration,
-the model and pending business rules; these types are not runtime domain entities.
+[Infrastructure](SmartLost.ListingsService.Infrastructure/README.md) now implements
+ListingsDbContext, entity configurations, a design-time factory, scoped DI registration
+and the InitialCreate migration. [compose.database.yml](compose.database.yml) provides
+an optional local PostgreSQL database. The executable [API](SmartLost.ListingsService.Api/README.md)
+now exposes public category/listing/detail reads through [Application CQRS](SmartLost.ListingsService.Application/README.md).
+Its [Dockerfile](SmartLost.ListingsService.Api/Dockerfile) and [Compose API override](compose.api.yml)
+run the API beside that same database, using the existing named volume.
+Workers, authenticated mutation use cases and blob/message adapters remain unimplemented.
+Runtime layers do not reference Modeling or NMF.
+
+The [numbered communication diagrams](COMMUNICATION.md) distinguish current generation,
+Domain/test interactions from proposed integrations. Update them with affected service
+code/configuration/test changes; CI checks document changes and reviewers check accuracy.
 
 ## Projects and dependency direction
 
-| Project | Planned responsibility | Project references |
+| Project | Responsibility | References |
 | --- | --- | --- |
-| [SmartLost.ListingsService.Api](SmartLost.ListingsService.Api/SmartLost.ListingsService.Api.csproj) | Future HTTP endpoints, authentication/authorization and composition root. | Own Application and Infrastructure; BuildingBlocks.AspNetCore. |
-| [SmartLost.ListingsService.Application](SmartLost.ListingsService.Application/SmartLost.ListingsService.Application.csproj) | Future publication, photo, recovery and credibility use cases and ports. | Own Domain; BuildingBlocks.Application. |
-| [SmartLost.ListingsService.Domain](SmartLost.ListingsService.Domain/SmartLost.ListingsService.Domain.csproj) | Future listing, photo, recovery and credibility models and invariants. | BuildingBlocks.Core. |
-| [SmartLost.ListingsService.Infrastructure](SmartLost.ListingsService.Infrastructure/SmartLost.ListingsService.Infrastructure.csproj) | Future Listings-owned PostgreSQL persistence, private Blob Storage and delivery adapters. | Own Application and Domain; BuildingBlocks.Infrastructure. |
-| [SmartLost.ListingsService.Modeling](SmartLost.ListingsService.Modeling/README.md) | Ecore/NMeta structural model and example XMI for listings, photos, categories, decisions, recoveries and credibility records. | NMF-Basics; no runtime-layer references. |
+| [Api](SmartLost.ListingsService.Api/README.md) | Public GET controllers, validation/result HTTP adapters, OpenAPI and composition. | Application, Infrastructure, BuildingBlocks.AspNetCore. |
+| [Application](SmartLost.ListingsService.Application/README.md) | MediatR query/handler/validator slices, read-store port and response DTOs. | Domain, BuildingBlocks.Application. |
+| [Domain](SmartLost.ListingsService.Domain/README.md) | Manual entity declarations and business behavior. | BuildingBlocks.Core, Contracts.Listings. |
+| [Infrastructure](SmartLost.ListingsService.Infrastructure/README.md) | Service-owned EF persistence, migration tooling and DI; storage/delivery adapters pending. | Application, Domain, BuildingBlocks.Infrastructure. |
+| [Modeling](SmartLost.ListingsService.Modeling/README.md) | Ecore/NMeta/XMI representation, independent of runtime entity maintenance. | NMF-Basics; no runtime project references. |
 
-The focused solution also lists the four shared BuildingBlocks projects directly.
-The root [Aset.slnx](../../../Aset.slnx) lists these same service projects. Solutions
-do not reference other solutions. Neither this service nor BuildingBlocks references
-another microservice's implementation.
-The runtime layers do not reference Modeling; NMF-generated types will not automatically
-replace domain entities.
+[Listings.slnx](Listings.slnx) and root [Aset.slnx](../../../Aset.slnx) list the same
+project files, alongside shared dependencies and Listings tests; solutions do not
+reference solutions. No Listings implementation references another microservice.
+The shared [Listings contract](../../Contracts/SmartLost.Contracts.Listings/README.md)
+supplies `ListingType`; runtime DTOs, queries and entities use the same enum. Its numeric
+values and existing JSON representation are unchanged; no database migration is required.
 
-## Data and integration ownership
+## Ownership and remaining integration
 
-Only Listings will access its database and private photo storage. References to Auth users
-and Matching results are logical identifiers, without cross-service database foreign keys.
-Communication with Matching and Auth Outbox receivers remains unimplemented.
+Only Listings accesses its database; private photo storage remains unimplemented. Auth user IDs and Matching
+identifiers are logical references, without cross-service physical foreign keys.
+Domain enforces local lifecycle, ownership and reviewed-revision rules, but application
+transactions, global reservations, consumed Found eligibility, durable idempotency,
+automatic invalidation and Outbox integration remain unimplemented. Local domain events
+are not currently staged or sent to other services.
 
 ## Development
 
-From the repository root, with the SDK pinned by [global.json](../../../global.json):
+From the repository root, using the pinned SDK:
 
 ```sh
 dotnet restore src/Services/Listings/Listings.slnx --locked-mode
 dotnet build src/Services/Listings/Listings.slnx --no-restore --configuration Release --warnaserror
+dotnet test tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj --no-build --no-restore --configuration Release
 ```
 
-These commands build the runtime scaffolds, Modeling library and shared dependencies;
-there is no Listings API to run yet.
-See [NMF regeneration](SmartLost.ListingsService.Modeling/README.md#regeneration)
-for the exact pinned generator command.
-The [Listings unit tests](../../../tests/Listings/SmartLost.ListingsService.UnitTests/README.md)
-live under `tests/Listings/` and appear in both solutions. They exercise the NMF model,
-including XMI round trips, decision/recovery/award links, nullable review audit data,
-metadata, notifications, containment and generated collection adapters. They do not
-execute a recovery transaction or award real points, and require no Docker or database. CI inventories all projects and
-validates package locks, build, formatting and the existing coverage requirements.
+Run the [API on localhost:5081](SmartLost.ListingsService.Api/README.md#local-setup); optional
+Development-only fixtures can be inserted separately with `sh src/Services/Listings/seed.sh`
+from the repository root, or during startup with `--SeedData:Enabled=true`.
+The standalone script exits after seeding; the API's HTTP launch profile requests opening
+Swagger at `/swagger`. Startup never migrates
+the database. Edit runtime entities directly in Domain;
+[NMF regeneration](SmartLost.ListingsService.Modeling/README.md#regeneration) applies only to Modeling.
+The [unit suite](../../../tests/Listings/SmartLost.ListingsService.UnitTests/README.md)
+checks model/XMI behavior, Domain invariants, the real Infrastructure mapping and
+HTTP/CQRS flows on isolated SQLite/offline Npgsql. It needs no Docker. The new
+[integration suite](../../../tests/Listings/SmartLost.ListingsService.IntegrationTests/README.md)
+applies the checked-in migration, verifies persistence and rolls back/reapplies on disposable
+PostgreSQL 16 and 17; an additional PostgreSQL 16 case exercises real HTTP read flows. Docker is required only for integration tests.
+See [local database and exact EF commands](SmartLost.ListingsService.Infrastructure/README.md)
+and the [verification report](../../../docs/LISTINGS_EF_COMPATIBILITY.md).
+Migration application is explicit; no API/Compose startup or DI registration migrates a database.
+
+For the containerized API after migration, run from the repository root:
+
+```sh
+docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml up -d --build
+```
+
+Swagger remains at `http://localhost:5081/swagger`; the container connects to
+`listings-db:5432`, while local tools still connect through `localhost:5433`.
+See [container setup, seed and lifecycle commands](SmartLost.ListingsService.Api/README.md#docker-api-and-database).
 
 ## Design references
 
 - [Team 2 publication BPMN](../../../docs/bpmn/team2-publication/README.md)
-- [MDD iteration report and verification evidence](../../../docs/MDD_ITERATIONS.md)
-- [Repository development guide](../../../README.md)
+- [MDD iterations and evidence](../../../docs/MDD_ITERATIONS.md)
 - [BuildingBlocks](../../../docs/BUILDING_BLOCKS.md)
-- [Planned application architecture](../../../docs/SMARTLOST.md)
+- [Application architecture](../../../docs/SMARTLOST.md)
 - [Listings component diagrams](../../../docs/diagrams/member-4/README.md)
 - [Azure and local AI plan](../../../docs/AZURE_STUDENT_ARCHITECTURE.md)
+
+## Category query caching
+
+GetCategoriesQuery uses the shared attribute-driven MediatR cache with a 300-second
+absolute TTL and process-local memory backend. List/detail reads still execute their
+Open-only SQL queries. See [flow, policy and AOP explanation](../../../docs/QUERY_CACHING.md).

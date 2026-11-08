@@ -13,7 +13,7 @@ in its review notes. CI checks document changes; reviewers check diagram accurac
 
 | Layer | Implemented |
 | --- | --- |
-| Domain | `Entities/`: `SearchListing`, `ImageEmbedding` (finite L2-normalized vectors, cosine similarity only for compatible versions), `EmbeddingPreparationTask` (lease, retry, Failed/Obsolete transitions). `ValueObjects/`: `PhotoReference`, `EmbeddingVersion`. `Enums/`: `ListingType`, `EmbeddingPreparationState`. `Suggestions/`: `CandidatePolicy`, `RelevanceScorer`, `RankingPolicy`, `MatchSuggestion`. `Errors/`: `MatchingErrors` |
+| Domain | `Entities/`: `SearchListing`, `ImageEmbedding` (finite L2-normalized vectors, cosine similarity only for compatible versions), `EmbeddingPreparationTask` (lease, retry, Failed/Obsolete transitions). `ValueObjects/`: `PhotoReference`, `EmbeddingVersion`. `Enums/`: `EmbeddingPreparationState`; shared `ListingType` comes from Contracts.Listings. `Suggestions/`: `CandidatePolicy`, `RelevanceScorer`, `RankingPolicy`, `MatchSuggestion`. `Errors/`: `MatchingErrors` |
 | Application | Same layout as Auth. `Commands/PrepareImageEmbedding/` and `Queries/GetMatchSuggestions/`, `Queries/AnalyzeListingPhoto/` each hold their request, handler and validator. `Contracts/` holds responses and AI data; `Interfaces/` holds repository, photo, AI, selector and ranker ports; `Services/` holds `CandidateSelector`, `RelevanceRanker` and `MatchingOptions`; `Exceptions/` holds `AiInferenceException`; `Profiling/` holds `MatchingProfiler`, AI options, stage names and the decorators; the common behavior lives in BuildingBlocks |
 | Infrastructure | `MatchingDbContext` (EF Core/Npgsql) with the `InitialCreate` migration, three repositories and `MatchingUnitOfWork`. **Mock** Listings photo reader and mock DINOv3/Qwen adapters (`Mock/`), plus the development `MatchingDemoSeeder` (`Demo/`) |
 | Api | ASP.NET Core entry point, development-only test endpoints, OpenAPI/Swagger in Development, Dockerfile |
@@ -85,7 +85,7 @@ Operation GetMatchSuggestionsQuery (live-ranked) finished as Succeeded in 37.3 m
 | --- | --- | --- |
 | [SmartLost.MatchingService.Api](SmartLost.MatchingService.Api/SmartLost.MatchingService.Api.csproj) | Entry point, development test endpoints and composition root. | Own Application and Infrastructure; BuildingBlocks.AspNetCore. |
 | [SmartLost.MatchingService.Application](SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj) | Matching use cases, ports, options and profiling. | Own Domain; BuildingBlocks.Application. |
-| [SmartLost.MatchingService.Domain](SmartLost.MatchingService.Domain/SmartLost.MatchingService.Domain.csproj) | Search projection, embeddings, preparation tasks, eligibility and relevance rules. | BuildingBlocks.Core. |
+| [SmartLost.MatchingService.Domain](SmartLost.MatchingService.Domain/SmartLost.MatchingService.Domain.csproj) | Search projection, embeddings, preparation tasks, eligibility and relevance rules. | BuildingBlocks.Core; Contracts.Listings. |
 | [SmartLost.MatchingService.Infrastructure](SmartLost.MatchingService.Infrastructure/SmartLost.MatchingService.Infrastructure.csproj) | Matching-owned PostgreSQL persistence, mock photo/AI adapters and demo seeding. | Own Application and Domain; BuildingBlocks.Infrastructure. |
 | [SmartLost.MatchingService.Modeling](SmartLost.MatchingService.Modeling/README.md) | NMF structural models (design evidence). | NMF-Basics; no service runtime references. |
 
@@ -117,7 +117,7 @@ cp src/Services/Matching/SmartLost.MatchingService.Api/appsettings.example.json 
 cp src/Services/Matching/SmartLost.MatchingService.Api/appsettings.Docker.example.json src/Services/Matching/SmartLost.MatchingService.Api/appsettings.Docker.json
 ```
 
-The first file is for local `dotnet run`/EF commands (`Host=localhost;Port=5433`); the second
+The first file is for local `dotnet run`/EF commands (`Host=localhost;Port=5434`); the second
 is mounted into the Compose container (`Host=matching-db`). The database password is the
 documented development-only placeholder that also appears in `docker-compose.yml`.
 
@@ -131,7 +131,7 @@ docker compose up -d --build matching-service
 ```
 
 The API is at `http://localhost:8081` (Swagger: `http://localhost:8081/swagger`). PostgreSQL is
-exposed on `localhost:5433`. With `dotnet run --project src/Services/Matching/SmartLost.MatchingService.Api`
+exposed on `localhost:5434`. With `dotnet run --project src/Services/Matching/SmartLost.MatchingService.Api`
 the API uses `http://localhost:5049`. API startup never creates or migrates the schema.
 
 Inspect migrations without a database:
@@ -218,3 +218,14 @@ relative documentation links were checked. These are local checks, not a hosted 
 - [Planned application architecture](../../../docs/SMARTLOST.md)
 - [Matching component diagrams](../../../docs/diagrams/member-5/README.md)
 - [Azure and local AI plan](../../../docs/AZURE_STUDENT_ARCHITECTURE.md)
+
+## Shared contract
+
+Both Matching and Listings use `SmartLost.Contracts.Listings.ListingType` from the
+[contract library](../../Contracts/SmartLost.Contracts.Listings/README.md), included in
+Matching.slnx. The local runtime enum has been removed; the generated NMF enum remains
+separate and its names/values are checked against the contract. Lost/Found numeric
+values are unchanged, so no database migration is required.
+
+The host database port is 5434, leaving 5433 for Listings and 5432 for Auth. Container
+connections continue using `matching-db:5432`; existing local settings must use 5434.

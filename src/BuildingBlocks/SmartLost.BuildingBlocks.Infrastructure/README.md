@@ -1,6 +1,6 @@
 # SmartLost.BuildingBlocks.Infrastructure
 
-Reusable .NET 10 EF Core Relational Outbox support. Depends on BuildingBlocks.Application;
+Reusable .NET 10 EF Core Relational Outbox support and opt-in process-local query caching. Depends on BuildingBlocks.Application;
 no service-specific context, database connection, provider or business model is included.
 
 - `OutboxMessageConfiguration`: service-owned `OutboxMessages` table mapping.
@@ -22,3 +22,16 @@ The project is included in `Aset.slnx` and `BuildingBlocks.slnx`. BuildingBlocks
 tests cover staging, delivery, retries, dead letters and cancellation/leases using a
 SQLite fixture with a test-only timestamp converter. Auth integration tests exercise
 competing claims and transactional rollback on PostgreSQL. Existing CI gates remain active.
+
+
+## Query caching
+
+AddBuildingBlocksQueryCache registers singleton IQueryCache / MemoryQueryCache and an
+optional TimeProvider default. The dedicated IMemoryCache has a 1024-entry capacity,
+absolute TTL and 32 bounded semaphore stripes for miss coalescing. It stores immutable
+successful snapshots supplied by the Application behavior; failures/cancellation are
+not stored. Listings uses it only for its public categories query.
+Expired lookups do not remove entries by key: a delayed reader cannot evict a concurrent
+refresh. Misses recheck under the stripe lock, and native MemoryCache expiration handles eviction.
+
+See [query cache integration and AOP flow](../../../docs/QUERY_CACHING.md).

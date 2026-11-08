@@ -26,7 +26,7 @@ fails or is skipped; it is skipped when the whole run is cancelled so cancellati
 The target-selection job also checks that each service has a Mermaid
 `src/Services/<Service>/COMMUNICATION.md`. Changes to non-Markdown files under a
 service or its `tests/<Service>/` directory require changing that document in the
-same candidate. Shared `src/BuildingBlocks/` non-Markdown changes or root
+same candidate. Shared `src/BuildingBlocks/` or `src/Contracts/` non-Markdown changes or root
 `docker-compose*.yml`/`.yaml` changes require reviewing all service documents.
 Pure documentation changes do not trigger this review requirement. Entirely removed
 services do not need a remaining diagram. Renames are treated as deletion plus addition.
@@ -76,18 +76,30 @@ external coverage service or access token is required.
 Coverage paths are resolved against the checkout and Cobertura source roots. Both report paths
 and production project directories use `/` separators before comparison, including on Windows.
 
-Every production assembly with C# compile items must appear in the reports, and every changed source file containing
+Production projects under `src/Services`, `src/BuildingBlocks` and `src/Contracts` are
+inventoried, locked, built and analyzed. Every executable production assembly must appear in the reports, and every changed source file containing
 added lines must appear in coverage, except declaration-only contracts with no executable code:
-pure interfaces, enums and static classes containing only const fields.
+pure interfaces, enums, empty records without primary constructors or declared members,
+and static classes containing only const fields.
 The changed-line gate recognizes these with the C# parser bundled with PowerShell,
 regardless of folder or filename. Enum values and const fields are compile-time constants;
 mixed implementation files and interfaces with executable bodies or initializers still
 require coverage. Static readonly fields and static constructors still require coverage.
+The empty-record rule includes attribute-only marker queries such as Listings
+`GetCategoriesQuery`: attributes are metadata, while its handler/cache behavior has the
+executable code. It applies only when Coverlet omits the file; positional records and
+records with any declared member still require coverage. Invalid C# syntax is never
+accepted as a declaration-only exception. Seventeen inline regression fixtures exercise
+the classifier in each build/test job, including mixed files and record implementations.
 Coverlet omits these declaration-only files from executable
 line counts. The assembly check evaluates MSBuild's
 `Compile` items; genuinely empty scaffold projects have no executable coverage to collect.
-As soon as a scaffold has a C# compile item, the assembly requirement applies automatically.
-Missing reports, absent source-bearing assemblies, or empty executable coverage fail.
+A source-bearing assembly absent from Coverlet is accepted only when every non-generated
+Compile item passes the declaration-only parser. Four additional inline regression cases
+cover enum-only/multiple-contract assemblies, mixed executable sources and an empty list.
+Adding executable code restores the assembly requirement automatically; there is no
+project-name or directory exemption for contracts.
+Missing reports, absent executable assemblies, or empty executable coverage fail.
 Only instrumented executable C# lines count; comments and blank lines do not. Test assemblies
 and generated `bin`/`obj` files are excluded.
 

@@ -67,7 +67,7 @@ services:
       # Local development value; match the ignored Matching appsettings.Docker.json.
       POSTGRES_PASSWORD: change-me-dev-matching-db-password
     ports:
-      - "5433:5432"
+      - "5434:5432"
     volumes:
       - matching-db-data:/var/lib/postgresql/data
     healthcheck:

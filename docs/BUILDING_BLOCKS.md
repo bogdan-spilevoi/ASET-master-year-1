@@ -186,6 +186,21 @@ Unmarked queries/commands bypass the transaction. These are local service transa
 the abstractions do not coordinate transactions across microservices. AuthService does not
 enable this behavior or implement a unit-of-work adapter.
 
+## Opt-in query caching
+
+`AddBuildingBlocksApplication(..., useCaching: true)` inserts CachingBehavior after
+Validation and before the optional transaction behavior. A service must also register
+`AddBuildingBlocksQueryCache()` from Infrastructure. Defaults stay uncached; Auth has
+not opted in. Requests without CacheableQueryAttribute bypass cache handling.
+
+The attribute declares a prefix and positive TTL. Keys include request/response types
+and a hash of serialized query properties. Only successful, non-cancelled immutable
+snapshots are retained. The initial active query is GetCategoriesQuery in Listings,
+with a read-only category DTO collection and 300-second absolute lifetime. The backend
+uses process-local MemoryCache, bounded entry count and striped miss coordination.
+See [complete policy, tests and AOP explanation](QUERY_CACHING.md). No mutation
+invalidation or distributed cache is implemented in this phase.
+
 ## Pagination
 
 The pagination types use `SmartLost.BuildingBlocks.Core.Pagination`; the request contract
@@ -367,3 +382,12 @@ counted twice. The strictly-above-80% overall and changed-code gates remain unch
 
 See the [root README](../README.md) for all build/test/container commands and
 [AuthService](AUTHSERVICE.md) for the consuming service.
+
+## Combined pipeline registration
+
+The independent `useProfiling`, `useAuthorization` and `useCaching` switches can be
+combined. Their order is Profiling -> ExceptionToResult -> Authorization -> Validation
+-> Caching -> optional Transaction -> Handler. Authorization and validation therefore
+run before a cached result can be returned. Profiling remains outermost and records
+short-circuited operations too. Current service opt-ins are Auth authorization, Listings
+category caching and Matching profiling; extending them to other use cases is separate work.

@@ -1,6 +1,6 @@
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Application.Services;
 using SmartLost.MatchingService.Domain.Entities;
-using SmartLost.MatchingService.Domain.Enums;
 using SmartLost.MatchingService.Domain.Suggestions;
 using SmartLost.MatchingService.Domain.ValueObjects;
 using Xunit;

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SmartLost.BuildingBlocks.Application.Profiling;
 using SmartLost.BuildingBlocks.Core.Exceptions;
 using SmartLost.BuildingBlocks.Core.Results;
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Application.Commands.PrepareImageEmbedding;
 using SmartLost.MatchingService.Application.Profiling;
 using SmartLost.MatchingService.Application.Services;

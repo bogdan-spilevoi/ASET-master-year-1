@@ -126,6 +126,13 @@ category synonym normalization are not implemented.
 
 ## Review notes
 
+- 2026-11-08: integrated Listings/API/cache with main's Matching runtime and authorization.
+  SearchListing and consumers now use the shared Contracts.Listings ListingType, with the
+  same Lost/Found values and EF mapping; no migration is required. Matching still enables
+  only profiling. Its host PostgreSQL port is 5434 to coexist with Listings on 5433;
+  container connections remain matching-db:5432. Current numbered use-case/mock/DB arrows
+  and planned real service/AI arrows remain accurate; no new network integration is added.
+
 - 2026-11-08: reviewed the shared attribute-based AuthorizationBehavior added for Auth.
   Matching does not enable that opt-in behavior, so its profiling, persistence, mock-adapter
   and external-interaction arrows remain unchanged.

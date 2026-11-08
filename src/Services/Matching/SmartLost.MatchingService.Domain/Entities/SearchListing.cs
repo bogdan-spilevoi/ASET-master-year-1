@@ -1,7 +1,7 @@
 using SmartLost.BuildingBlocks.Core.Entities;
 using SmartLost.BuildingBlocks.Core.Results;
 using SmartLost.BuildingBlocks.Core.Validation;
-using SmartLost.MatchingService.Domain.Enums;
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Domain.Errors;
 using SmartLost.MatchingService.Domain.ValueObjects;
 

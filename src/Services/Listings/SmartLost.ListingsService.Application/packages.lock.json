@@ -94,10 +94,14 @@
       "smartlost.buildingblocks.core": {
         "type": "Project"
       },
+      "smartlost.contracts.listings": {
+        "type": "Project"
+      },
       "smartlost.listingsservice.domain": {
         "type": "Project",
         "dependencies": {
-          "SmartLost.BuildingBlocks.Core": "[1.0.0, )"
+          "SmartLost.BuildingBlocks.Core": "[1.0.0, )",
+          "SmartLost.Contracts.Listings": "[1.0.0, )"
         }
       }
     }

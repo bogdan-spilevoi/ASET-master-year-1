@@ -1,4 +1,5 @@
 using SmartLost.BuildingBlocks.Core.Exceptions;
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Domain.Entities;
 using SmartLost.MatchingService.Domain.Enums;
 using SmartLost.MatchingService.Domain.Errors;
@@ -15,6 +16,8 @@ public sealed class MatchingDomainTests
     [Fact]
     public void SearchListingNormalizesKeysColourAndLocation()
     {
+        Assert.Equal(typeof(ListingType), typeof(SearchListing).GetProperty(nameof(SearchListing.Type))!.PropertyType);
+        Assert.Null(typeof(SearchListing).Assembly.GetType("SmartLost.MatchingService.Domain.Enums.ListingType"));
         var photo = new PhotoReference(Guid.NewGuid(), 2);
         var listing = SearchListing.Create(Guid.NewGuid(), 3, 7, ListingType.Found, Guid.NewGuid(), photo,
             [" Backpack ", "backpack", "Bags"], " Black ", ["Zipper", "zipper "], MatchingData.Day, " Library ", true);

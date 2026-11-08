@@ -30,6 +30,10 @@ additionally checks actual xmin claim races through HTTP and durable terminal st
 
 ## NMF model tests
 
+The metamodel test compares its generated `ListingType` names and numeric values with
+the shared `SmartLost.Contracts.Listings` enum. This guards structural-model drift;
+the integrated runtime model uses the shared contract independently of NMF.
+
 The SearchListing model includes nullable CurrentPhotoId/CurrentPhotoRevision. Tests
 check optional metadata/defaults, scalar notifications, reflective clearing, and XMI
 round trips after photo removal, replacement or revision. Historical embeddings remain
@@ -56,3 +60,6 @@ dotnet test tests/Matching/SmartLost.MatchingService.UnitTests/SmartLost.Matchin
 
 Coverlet includes generated NMF implementation; the existing strictly-above-80% gates
 remain unchanged. Temporary XMI files are deleted by the tests.
+
+Both NMF enum values and runtime SearchListing.Type are checked against the shared
+Contracts.Listings ListingType; the old runtime Domain enum is absent after integration.

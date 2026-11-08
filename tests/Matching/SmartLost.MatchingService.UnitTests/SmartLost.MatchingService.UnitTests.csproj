@@ -3,6 +3,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../../src/Contracts/SmartLost.Contracts.Listings/SmartLost.Contracts.Listings.csproj" />
     <ProjectReference Include="../../../src/Services/Matching/SmartLost.MatchingService.Modeling/SmartLost.MatchingService.Modeling.csproj" />
     <ProjectReference Include="../../../src/Services/Matching/SmartLost.MatchingService.Api/SmartLost.MatchingService.Api.csproj" />
     <ProjectReference Include="../../../src/Services/Matching/SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj" />

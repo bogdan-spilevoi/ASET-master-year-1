@@ -22,7 +22,7 @@ public sealed class MatchingDbContextFactory : IDesignTimeDbContextFactory<Match
             .AddCommandLine(args)
             .Build();
         string connectionString = configuration.GetConnectionString(ConnectionStringName)
-            ?? "Host=localhost;Port=5433;Database=matchingservice;Username=matchingservice";
+            ?? "Host=localhost;Port=5434;Database=matchingservice;Username=matchingservice";
         var options = new DbContextOptionsBuilder<MatchingDbContext>();
         options.UseNpgsql(connectionString);
         return new MatchingDbContext(options.Options);

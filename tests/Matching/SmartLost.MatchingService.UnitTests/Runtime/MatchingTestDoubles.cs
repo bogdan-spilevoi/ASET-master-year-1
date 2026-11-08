@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
 using SmartLost.BuildingBlocks.Application.Transactions;
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Application.Contracts;
 using SmartLost.MatchingService.Application.Interfaces;
 using SmartLost.MatchingService.Domain.Entities;
-using SmartLost.MatchingService.Domain.Enums;
 using SmartLost.MatchingService.Domain.ValueObjects;
 
 namespace SmartLost.MatchingService.UnitTests.Runtime;

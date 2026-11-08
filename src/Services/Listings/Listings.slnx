@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Contracts/">
+    <Project Path="../../Contracts/SmartLost.Contracts.Listings/SmartLost.Contracts.Listings.csproj" />
+  </Folder>
   <Folder Name="/Listings/">
     <Project Path="SmartLost.ListingsService.Api/SmartLost.ListingsService.Api.csproj" />
     <Project Path="SmartLost.ListingsService.Application/SmartLost.ListingsService.Application.csproj" />
@@ -14,5 +17,6 @@
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="../../../tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj" />
+    <Project Path="../../../tests/Listings/SmartLost.ListingsService.IntegrationTests/SmartLost.ListingsService.IntegrationTests.csproj" />
   </Folder>
 </Solution>

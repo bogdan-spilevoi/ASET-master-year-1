@@ -1,7 +1,7 @@
 # Shared Application building blocks
 
 This library owns reusable MediatR exception, validation, optional transaction,
-authorization and profiling behaviors, plus framework-independent application contracts.
+authorization, caching and profiling behaviors, plus framework-independent application contracts.
 It depends on Core, MediatR, FluentValidation and DI/logging abstractions; it never
 references a service, EF Core or ASP.NET Core.
 
@@ -13,7 +13,7 @@ singleton `IProfilingContext`. `useAuthorization` independently enables the requ
 behavior. With all options enabled the order is:
 
 ```text
-Profiling -> ExceptionToResult -> Authorization -> Validation -> optional Transaction -> Handler
+Profiling -> ExceptionToResult -> Authorization -> Validation -> optional Caching -> optional Transaction -> Handler
 ```
 
 The default is off. `ProfilingOptions` controls the slow-operation threshold.
@@ -36,3 +36,14 @@ and the [shared-library guide](../../../docs/BUILDING_BLOCKS.md).
 `AuthorizationBehavior` returns 401/403 result errors before validation or handlers run.
 Unattributed MediatR requests remain public. HTTP endpoints still need ASP.NET Core
 `[Authorize]` or a policy where endpoint admission must be protected.
+
+## Query caching and combined registration
+
+`useCaching: true` inserts `CachingBehavior` after authorization and validation; the host
+registers `IQueryCache` through BuildingBlocks.Infrastructure. Listings caches only its
+public GetCategoriesQuery. Matching enables profiling, while Auth enables authorization.
+These are independent options and can be combined without changing service-specific handlers.
+A combined DI regression test verifies the order, 401 before cached results, validation
+before hits, single population and profiling scope cleanup. Public cache opt-in still
+requires immutable snapshots and identity-complete keys for identity-dependent queries.
+See [query caching and AOP](../../../docs/QUERY_CACHING.md).

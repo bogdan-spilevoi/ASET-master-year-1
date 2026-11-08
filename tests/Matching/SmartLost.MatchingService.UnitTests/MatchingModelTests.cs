@@ -15,6 +15,9 @@ public sealed partial class MatchingModelTests
     [Fact]
     public void MetamodelUsesIndependentEntitiesAndAnOrderedNonUniqueVector()
     {
+        Assert.Equal(Enum.GetNames<SmartLost.Contracts.Listings.ListingType>(), Enum.GetNames<ListingType>());
+        Assert.Equal(Enum.GetValues<SmartLost.Contracts.Listings.ListingType>().Select(value => (int)value),
+            Enum.GetValues<ListingType>().Select(value => (int)value));
         SearchListing listing = new();
         ImageEmbedding embedding = new();
         Assert.Equal(ListingType.Lost, listing.Type);

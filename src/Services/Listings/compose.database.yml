@@ -1,0 +1,20 @@
+services:
+  listings-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: listingsservice
+      POSTGRES_USER: listingsservice
+      POSTGRES_PASSWORD: ${LISTINGS_POSTGRES_PASSWORD:?Set LISTINGS_POSTGRES_PASSWORD in the local .env file}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - listings-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  listings-db-data:

@@ -1,4 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Content Include="../SmartLost.ListingsService.Api/appsettings*.json"
+             Exclude="../SmartLost.ListingsService.Api/appsettings*.example.json" Link="%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../SmartLost.ListingsService.Application/SmartLost.ListingsService.Application.csproj" />
     <ProjectReference Include="../SmartLost.ListingsService.Domain/SmartLost.ListingsService.Domain.csproj" />

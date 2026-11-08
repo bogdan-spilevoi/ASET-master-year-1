@@ -138,6 +138,26 @@ No cloud schedule or receiver is configured by the repository examples.
 
 ## Review notes
 
+- 2026-11-08: integrated main's authorization/profiling with Listings caching in the shared
+  registration. Auth still enables only authorization; registration/login/refresh remain
+  public and /me retains both HTTP and Application protection. Its API, persistence and
+  Outbox arrows are unchanged. Existing patched Auth images are retained.
+
+- 2026-11-08: reviewed the shared Listings contracts project and CI inventory/coverage
+  handling. Auth does not reference it; API, database, worker and Outbox arrows remain
+  unchanged. A contract-only library introduces no runtime communication.
+
+- 2026-11-08: reviewed the shared cache expiration fix: stale lookups no longer remove
+  a concurrent refresh by key. Auth does not enable query caching, so its numbered API,
+  persistence and Outbox arrows and failure/retry paths remain unchanged.
+
+- 2026-11-06: API/worker Dockerfiles now patch and version-check the inherited Ubuntu
+  APT packages for USN-8996-1 using HTTPS sources before non-root execution. This is a
+  build-time OS package update; numbered HTTP, persistence, Outbox and receiver arrows,
+  runtime settings and failure/retry behavior are unchanged.
+
+- 2026-11-04: reviewed shared query-cache additions. Auth still calls AddBuildingBlocksApplication without useCaching and does not register IQueryCache. Its credential/session commands and numbered runtime/database/Outbox arrows are unchanged.
+
 - Initial diagrams checked against the API, handlers, session service, context and
   outbox implementation. Update affected flows with service changes; if communication
   is unchanged, record what changed and why these diagrams still apply here.

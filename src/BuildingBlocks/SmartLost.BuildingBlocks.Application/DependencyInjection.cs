@@ -15,7 +15,8 @@ public static class DependencyInjection
         bool useTransactions = false,
         bool useAuthorization = false,
         bool useProfiling = false,
-        ProfilingOptions? profilingOptions = null)
+        ProfilingOptions? profilingOptions = null,
+        bool useCaching = false)
     {
         if (useProfiling)
         {
@@ -42,6 +43,11 @@ public static class DependencyInjection
             }
 
             configuration.AddOpenBehavior(typeof(ValidationBehavior<,>));
+            if (useCaching)
+            {
+                configuration.AddOpenBehavior(typeof(CachingBehavior<,>));
+            }
+
             if (useTransactions)
             {
                 configuration.AddOpenBehavior(typeof(TransactionBehavior<,>));

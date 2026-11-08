@@ -1,5 +1,5 @@
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Domain.Entities;
-using SmartLost.MatchingService.Domain.Enums;
 
 namespace SmartLost.MatchingService.Domain.Suggestions;
 

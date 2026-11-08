@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Contracts/">
+    <Project Path="src/Contracts/SmartLost.Contracts.Listings/SmartLost.Contracts.Listings.csproj" />
+  </Folder>
   <Folder Name="/BuildingBlocks/">
     <Project Path="src/BuildingBlocks/SmartLost.BuildingBlocks.Core/SmartLost.BuildingBlocks.Core.csproj" />
     <Project Path="src/BuildingBlocks/SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
@@ -38,6 +41,7 @@
   </Folder>
   <Folder Name="/Tests/Listings/">
     <Project Path="tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj" />
+    <Project Path="tests/Listings/SmartLost.ListingsService.IntegrationTests/SmartLost.ListingsService.IntegrationTests.csproj" />
   </Folder>
   <Folder Name="/Tests/Matching/">
     <Project Path="tests/Matching/SmartLost.MatchingService.UnitTests/SmartLost.MatchingService.UnitTests.csproj" />

@@ -6,6 +6,7 @@ using SmartLost.BuildingBlocks.Application.Behaviors;
 using SmartLost.BuildingBlocks.Application.Profiling;
 using SmartLost.BuildingBlocks.Application.Transactions;
 using SmartLost.BuildingBlocks.Core.Results;
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Application;
 using SmartLost.MatchingService.Application.Contracts;
 using SmartLost.MatchingService.Application.Exceptions;
@@ -16,7 +17,6 @@ using SmartLost.MatchingService.Application.Queries.AnalyzeListingPhoto;
 using SmartLost.MatchingService.Application.Queries.GetMatchSuggestions;
 using SmartLost.MatchingService.Application.Services;
 using SmartLost.MatchingService.Domain.Entities;
-using SmartLost.MatchingService.Domain.Enums;
 using SmartLost.MatchingService.Domain.Suggestions;
 using Xunit;
 

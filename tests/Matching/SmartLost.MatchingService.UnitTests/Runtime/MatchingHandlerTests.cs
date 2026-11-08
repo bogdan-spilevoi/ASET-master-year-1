@@ -1,4 +1,5 @@
 using SmartLost.BuildingBlocks.Core.Results;
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Application.Commands.PrepareImageEmbedding;
 using SmartLost.MatchingService.Application.Contracts;
 using SmartLost.MatchingService.Application.Exceptions;
