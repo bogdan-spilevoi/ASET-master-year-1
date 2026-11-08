@@ -18,7 +18,7 @@ root solution to validate consumers together with the shared libraries.
 | Library | Contents | Dependencies |
 | --- | --- | --- |
 | [Core](../src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | `Entity<TId>`, `AggregateRoot<TId>`, `IDomainEvent`, `IHasDomainEvents`, `Guard`, `Result`, `Result<T>`, `IResult`, `Error`, `ErrorKind`, `DomainException`, `PageSlice<T>`, `PagedResult<T>`, `PagedDataGuard` | .NET only |
-| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/) | Validation/exception/optional transaction/security-audit/authorization behaviors, audit, authorization and Outbox contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
+| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/README.md) | Validation/exception/optional transaction/security-audit/authorization/profiling behaviors, isolated profiling contexts and measurements, audit, authorization and Outbox contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
 | [AspNetCore](../src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/) | `ToActionResult`, `ProblemDetails`, unexpected-exception handler, `HttpCurrentUser`, HTTP audit context and API registration | Application/Core, ASP.NET Core framework |
 | [Infrastructure](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/) | EF Outbox model/configuration, writer, leased batch processor, logging security-audit sink and registration | Application, EF Core Relational 10.0.12 |
 
@@ -159,6 +159,9 @@ and finite worker host; Azure scale-to-zero consumers still require an external 
 
 `AddBuildingBlocksApplication(serviceAssembly)` discovers handlers and validators in the
 service's Application assembly and registers `ExceptionToResult → Validation → Handler`.
+Profiling is opt-in: pass `useProfiling: true` to add `ProfilingBehavior<TRequest,TResponse>`
+as the outermost behavior, with a validated `ProfilingOptions` instance and shared
+`IProfilingContext`/`TimeProvider` registrations.
 Security auditing is opt-in: pass `useSecurityAudit: true` to add
 `SecurityAuditBehavior<TRequest,TResponse>` between exception mapping and validation. Auth
 wraps this through `AddApplication()` and enables the behavior for its audited commands.

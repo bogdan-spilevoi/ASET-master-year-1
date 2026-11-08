@@ -175,3 +175,12 @@ No cloud schedule or receiver is configured by the repository examples.
   (authenticated user identity) and GET /api/auth/security/audit-logs (recent audit records).
   AuthDevelopmentSeeder added for demo data. Registration/login/refresh flows updated to
   show audit interception; new communication flows added for audit-logs and /me endpoints.
+- 2026-11-05: root `docker-compose.yml` gained the separate `matching-db` (host port 5433,
+  volume `matching-db-data`) and `matching-service` (host port 8081) services. Auth services,
+  ports, settings, database and flows are unchanged; Auth has no connection to Matching.
+- 2026-11-05: the API and worker Dockerfiles now run `apt-get upgrade` in the runtime stage,
+  so the image includes Ubuntu security fixes newer than `aspnet:10.0` (CVE-2026-109518 in
+  `apt` failed the CI Trivy image gate). This is a container build change only; Auth code,
+  settings, ports and all flows are unchanged.
+
+- 2026-11-08: reviewed shared opt-in profiling extraction into BuildingBlocks. Auth does not enable profiling, so JWT, validation, persistence, Outbox delivery and all numbered communication arrows are unchanged.

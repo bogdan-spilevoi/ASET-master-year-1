@@ -1,7 +1,30 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj" />
     <ProjectReference Include="../SmartLost.MatchingService.Domain/SmartLost.MatchingService.Domain.csproj" />
     <ProjectReference Include="../../../BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/SmartLost.BuildingBlocks.Infrastructure.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Local API settings are available to design-time EF commands without being published. -->
+    <Content Include="../SmartLost.MatchingService.Api/appsettings*.json"
+             Exclude="../SmartLost.MatchingService.Api/appsettings*.example.json;../SmartLost.MatchingService.Api/appsettings.Docker.json"
+             Link="%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="Never" />
   </ItemGroup>
 </Project>
