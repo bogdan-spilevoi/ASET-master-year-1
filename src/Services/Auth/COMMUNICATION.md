@@ -131,7 +131,7 @@ No cloud schedule or receiver is configured by the repository examples.
 
 - [Controller](SmartLost.AuthService.Api/Controllers/AuthController.cs) and [API composition](SmartLost.AuthService.Api/Program.cs)
 - [Register](SmartLost.AuthService.Application/Commands/Register/RegisterUserCommandHandler.cs), [login](SmartLost.AuthService.Application/Commands/Login/LoginUserCommandHandler.cs) and [refresh](SmartLost.AuthService.Application/Commands/Refresh/RefreshTokenCommandHandler.cs) handlers
-- [Current-user query](SmartLost.AuthService.Application/Queries/GetCurrentUser/GetCurrentUserQuery.cs) and [shared authorization behavior](../../BuildingBlocks/SmartLost.BuildingBlocks.Application/Behaviors/AuthorizationBehavior.cs)
+- [Current-user query and handler](SmartLost.AuthService.Application/Queries/GetCurrentUser/GetCurrentUserQueryHandler.cs) and [shared authorization behavior](../../BuildingBlocks/SmartLost.BuildingBlocks.Application/Behaviors/AuthorizationBehavior.cs)
 - [Session service](SmartLost.AuthService.Infrastructure/Authentication/AuthenticationSessionService.cs) and [AuthDbContext](SmartLost.AuthService.Infrastructure/Persistence/AuthDbContext.cs)
 - [Event mapper](SmartLost.AuthService.Infrastructure/Outbox/AuthOutboxEventMapper.cs), [HTTP publisher](SmartLost.AuthService.Infrastructure/Outbox/AuthOutboxHttpPublisher.cs) and [shared processor](../../BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/Outbox/OutboxProcessor.cs)
 - [Worker operation and receiver contract](SmartLost.AuthService.Worker/README.md)
