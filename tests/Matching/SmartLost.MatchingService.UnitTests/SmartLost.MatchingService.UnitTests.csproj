@@ -3,6 +3,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../../src/Contracts/SmartLost.Contracts.Listings/SmartLost.Contracts.Listings.csproj" />
     <ProjectReference Include="../../../src/Services/Matching/SmartLost.MatchingService.Modeling/SmartLost.MatchingService.Modeling.csproj" />
     <PackageReference Include="coverlet.collector" Version="10.1.0">
       <PrivateAssets>all</PrivateAssets>

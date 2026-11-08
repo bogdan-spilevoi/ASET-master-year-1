@@ -1,8 +1,8 @@
 using System.Reflection;
 using System.Xml.Linq;
 using SmartLost.BuildingBlocks.Core.Entities;
+using SmartLost.Contracts.Listings;
 using SmartLost.ListingsService.Domain.Entities;
-using SmartLost.ListingsService.Domain.Enums;
 using Xunit;
 
 namespace SmartLost.ListingsService.UnitTests;
@@ -14,6 +14,8 @@ public sealed class DomainStructureTests
     {
         var model = XDocument.Load(Path.Combine(AppContext.BaseDirectory, "Models", "listings.ecore"));
         Assembly assembly = typeof(Listing).Assembly;
+        Assert.Equal("SmartLost.Contracts.Listings", typeof(ListingType).Assembly.GetName().Name);
+        Assert.Null(assembly.GetType("SmartLost.ListingsService.Domain.Enums.ListingType"));
         const string RootNamespace = "SmartLost.ListingsService.Domain";
         XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
         foreach (XElement classifier in model.Root!.Elements("eClassifiers"))
@@ -25,7 +27,7 @@ public sealed class DomainStructureTests
             }
 
             string name = classifier.Attribute("name")!.Value;
-            Type type = assembly.GetType(RootNamespace + (kind == "ecore:EClass" ? ".Entities." : ".Enums.") + name, throwOnError: true)!;
+            Type type = name == "ListingType" ? typeof(ListingType) : assembly.GetType(RootNamespace + (kind == "ecore:EClass" ? ".Entities." : ".Enums.") + name, throwOnError: true)!;
             if (kind == "ecore:EEnum")
             {
                 Assert.Equal(classifier.Elements("eLiterals").Select(literal => literal.Attribute("name")!.Value), Enum.GetNames(type));
@@ -59,6 +61,7 @@ public sealed class DomainStructureTests
                 Type clr = target switch
                 {
                     "Guid" => typeof(Guid),
+                    "ListingType" => typeof(ListingType),
                     "EString" => typeof(string),
                     "EInt" => typeof(int),
                     "ELong" => typeof(long),

@@ -2,8 +2,8 @@ using MediatR;
 using SmartLost.BuildingBlocks.Application.Validation;
 using SmartLost.BuildingBlocks.Core.Pagination;
 using SmartLost.BuildingBlocks.Core.Results;
+using SmartLost.Contracts.Listings;
 using SmartLost.ListingsService.Application.Dtos;
-using SmartLost.ListingsService.Domain.Enums;
 
 namespace SmartLost.ListingsService.Application.Queries.GetListings;
 

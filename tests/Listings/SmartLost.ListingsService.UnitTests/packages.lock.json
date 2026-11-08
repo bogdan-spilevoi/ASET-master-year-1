@@ -688,6 +688,9 @@
           "SmartLost.BuildingBlocks.Application": "[1.0.0, )"
         }
       },
+      "smartlost.contracts.listings": {
+        "type": "Project"
+      },
       "smartlost.listingsservice.api": {
         "type": "Project",
         "dependencies": {
@@ -708,7 +711,8 @@
       "smartlost.listingsservice.domain": {
         "type": "Project",
         "dependencies": {
-          "SmartLost.BuildingBlocks.Core": "[1.0.0, )"
+          "SmartLost.BuildingBlocks.Core": "[1.0.0, )",
+          "SmartLost.Contracts.Listings": "[1.0.0, )"
         }
       },
       "smartlost.listingsservice.infrastructure": {

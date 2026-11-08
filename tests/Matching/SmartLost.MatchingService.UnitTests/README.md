@@ -1,5 +1,9 @@
 # Matching model unit tests
 
+The metamodel test compares its generated `ListingType` names and numeric values with
+the shared `SmartLost.Contracts.Listings` enum. This guards structural-model drift;
+the Matching runtime implementation from main is not integrated in this branch yet.
+
 The SearchListing model includes nullable CurrentPhotoId/CurrentPhotoRevision. Tests
 check optional metadata/defaults, scalar notifications, reflective clearing, and XMI
 round trips after photo removal, replacement or revision. Historical embeddings remain

@@ -1,6 +1,6 @@
 using SmartLost.BuildingBlocks.Core.Pagination;
+using SmartLost.Contracts.Listings;
 using SmartLost.ListingsService.Application.Dtos;
-using SmartLost.ListingsService.Domain.Enums;
 
 namespace SmartLost.ListingsService.Application.Interfaces;
 

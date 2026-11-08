@@ -29,13 +29,16 @@ Infrastructure model/migration without a running Listings API.
 Application depends on Domain and its repository/security abstractions; Infrastructure
 implements those abstractions. API composes the service. Domain uses framework-free Core
 building blocks, Application uses MediatR/validation building blocks, and API uses the
-ASP.NET result adapter. Shared libraries never depend on a microservice or own its data.
+ASP.NET result adapter. Listings Domain also uses the framework-free shared Listings contract.
+Shared libraries never depend on a microservice or own its data.
 Repository build configuration applies to microservice projects in the [solution](Aset.slnx).
 The solution groups match the physical directories, so Rider's solution view and
 VS Code's file explorer show the same service boundaries:
 
 ```text
 src/
+  Contracts/
+    SmartLost.Contracts.Listings/  # Shared Lost/Found enum; no implementation dependencies
   Services/
     Auth/
       Auth.slnx        # Auth runtime projects, NMF Modeling, shared dependencies and Auth tests
@@ -63,8 +66,8 @@ Future services belong under `src/Services/<Service>/`, with tests under
 | --- | --- |
 | [Aset.slnx](Aset.slnx) | All backend projects and tests; the main CI entry point |
 | [Auth.slnx](src/Services/Auth/Auth.slnx) | Five Auth runtime projects, NMF Modeling, four BuildingBlocks libraries and the two Auth test projects |
-| [Listings.slnx](src/Services/Listings/Listings.slnx) | Listings read API/CQRS, Domain/Infrastructure, NMF Modeling, four BuildingBlocks libraries and Listings unit/integration suites |
-| [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching runtime scaffolds, NMF Modeling, four BuildingBlocks libraries and the Matching unit suite |
+| [Listings.slnx](src/Services/Listings/Listings.slnx) | Listings read API/CQRS, Domain/Infrastructure, NMF Modeling, four BuildingBlocks libraries, Listings contracts and Listings unit/integration suites |
+| [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching runtime scaffolds, NMF Modeling, four BuildingBlocks libraries, Listings contracts and the Matching unit suite |
 | [BuildingBlocks.slnx](src/BuildingBlocks/BuildingBlocks.slnx) | Four shared libraries and their existing unit test project |
 
 Solutions list the same `.csproj` files directly; they do not nest other solutions
@@ -104,7 +107,7 @@ planned integrations are explicitly marked. Auth includes its outbox worker flow
 Listings and Matching document current model-test interactions; their service integrations remain planned.
 Keep these documents current with service changes, or add a specific review note when
 communication is unchanged. CI requires the corresponding document change for service
-code/configuration/test changes; shared BuildingBlocks implementation or root Compose
+code/configuration/test changes; shared BuildingBlocks/contracts implementation or root Compose
 changes require reviewing all service diagrams. Reviewers verify semantic accuracy.
 
 The six member pairs below contain the user-provided PNG exports and short English
@@ -234,10 +237,16 @@ will be logical references, without foreign keys between service databases.
 
 | Project | Responsibility |
 | --- | --- |
+| [`SmartLost.Contracts.Listings`](src/Contracts/SmartLost.Contracts.Listings/README.md) | Stable `ListingType` contract (`Lost = 0`, `Found = 1`); consumed by Listings runtime and referenced by the Matching Domain scaffold |
 | `SmartLost.BuildingBlocks.Core` | Type-aware `Entity<TId>`, `AggregateRoot<TId>`, domain-event contracts, domain `Guard`, immutable `Result`/`Result<T>`, errors, explicit domain exceptions, `PageSlice<T>`/`PagedResult<T>` and pagination defaults; no framework dependencies |
 | `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction/cache behaviors, query cache metadata/contract, transaction/Outbox contracts and `ICurrentUser` |
 | `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped HTTP current-user adapter and API registration |
 | `SmartLost.BuildingBlocks.Infrastructure` | Opt-in process-local query cache; EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its table and delivery adapter |
+
+The root, Listings and Matching solutions include the contracts project. Matching runtime
+from main is not merged into this branch; its local enum will be replaced when integrating
+that implementation. Generated NMF enums remain separate, with tests checking their names
+and numeric values against the contract. No service calls or database migration are added.
 
 See [dependencies, domain primitives, Outbox integration and transaction opt-in](docs/BUILDING_BLOCKS.md).
 `AddBuildingBlocksApi()` also registers scoped `ICurrentUser` access to authenticated
@@ -664,7 +673,9 @@ dotnet test tests/Listings/SmartLost.ListingsService.IntegrationTests/SmartLost.
 Coverlet configuration and the inline coverage/test gates are documented in the
 [CI guide](.github/README.md#local-net-commands).
 Empty scaffold projects participate in inventory, locked restore, build and formatting.
-The coverage assembly check requires reports once a project has C# compile items; the
+The coverage assembly check requires reports for executable production code. Projects containing
+only parser-verified declaration-only contracts (such as the shared enum) have no executable
+lines to collect; adding executable code restores the assembly requirement automatically. The
 strictly-above-80% overall and changed-code gates remain in place.
 Coverage file paths and project directories use the same separators on Linux, Windows and macOS.
 The Listings and Matching unit suites cover their generated NMF implementations.

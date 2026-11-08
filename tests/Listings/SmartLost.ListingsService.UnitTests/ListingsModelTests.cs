@@ -14,6 +14,9 @@ public sealed partial class ListingsModelTests
     [Fact]
     public void DefaultsAndMetamodelPreserveThePublicationStructure()
     {
+        Assert.Equal(Enum.GetNames<SmartLost.Contracts.Listings.ListingType>(), Enum.GetNames<ListingType>());
+        Assert.Equal(Enum.GetValues<SmartLost.Contracts.Listings.ListingType>().Select(value => (int)value),
+            Enum.GetValues<ListingType>().Select(value => (int)value));
         Listing listing = new();
         Assert.Equal(ListingType.Lost, listing.Type);
         Assert.Equal(ListingState.Draft, listing.State);

@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
 using SmartLost.BuildingBlocks.AspNetCore;
+using SmartLost.Contracts.Listings;
 using SmartLost.ListingsService.Application;
-using SmartLost.ListingsService.Domain.Enums;
 using SmartLost.ListingsService.Infrastructure;
 using SmartLost.ListingsService.Infrastructure.Seeding;
 

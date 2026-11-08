@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SmartLost.BuildingBlocks.Core.Pagination;
 using SmartLost.BuildingBlocks.Core.Results;
+using SmartLost.Contracts.Listings;
 using SmartLost.ListingsService.Application.Dtos;
 using SmartLost.ListingsService.Application.Interfaces;
 using SmartLost.ListingsService.Application.Queries.GetListings;

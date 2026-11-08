@@ -136,6 +136,9 @@
           "xunit.extensibility.core": "[2.9.3]"
         }
       },
+      "smartlost.contracts.listings": {
+        "type": "Project"
+      },
       "smartlost.matchingservice.modeling": {
         "type": "Project",
         "dependencies": {

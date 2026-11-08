@@ -1,5 +1,5 @@
 using SmartLost.BuildingBlocks.Core.Pagination;
-using SmartLost.ListingsService.Domain.Enums;
+using SmartLost.Contracts.Listings;
 
 namespace SmartLost.ListingsService.Api.Contracts;
 

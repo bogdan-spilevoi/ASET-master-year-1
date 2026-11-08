@@ -1,7 +1,8 @@
 # Listings Domain
 
 The runtime business model is compiled here, independently of NMF and EF Core.
-Application references this project; Domain references only BuildingBlocks.Core.
+Application references this project; Domain references BuildingBlocks.Core and the
+framework-free [Listings contracts](../../../Contracts/SmartLost.Contracts.Listings/README.md).
 NMF remains the separate modeling/XMI representation of the same Ecore structure.
 
 ## Structure and boundaries
@@ -18,7 +19,8 @@ NMF remains the separate modeling/XMI representation of the same Ecore structure
 
 [Entities](Entities/) contains one manually maintained partial declaration per entity:
 private constructor, properties, inheritance, factories and business methods together.
-[Enums](Enums/) contains the manually maintained lifecycle/type enums. There is no
+[Enums](Enums/) contains the manually maintained lifecycle enums. `ListingType` comes
+from `SmartLost.Contracts.Listings`, with stable `Lost = 0` and `Found = 1` values. There is no
 Domain generator or generated-source directory. Modeling's Ecore/NMF representation
 is maintained separately; structural tests check consistency of the modelled fields,
 enums and defaults without generating Domain code.

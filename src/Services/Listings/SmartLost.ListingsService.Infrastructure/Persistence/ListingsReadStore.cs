@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SmartLost.BuildingBlocks.Core.Pagination;
+using SmartLost.Contracts.Listings;
 using SmartLost.ListingsService.Application.Dtos;
 using SmartLost.ListingsService.Application.Interfaces;
 using SmartLost.ListingsService.Domain.Entities;

@@ -276,6 +276,12 @@ snapshot delivery, inference calls and workers are not implemented in Listings.
 
 ## Review notes
 
+- 2026-11-08: runtime entities, DTOs, filters and JSON enum conversion now use
+  `SmartLost.Contracts.Listings.ListingType` instead of a local Domain enum. Stable
+  Lost/Found values, database mapping and HTTP representation are unchanged. Existing
+  HTTP/CQRS/cache/EF arrows still apply; no outgoing service interaction is added.
+  NMF tests compare their independent enum to the shared contract.
+
 - 2026-11-08: shared cache expiration lookups no longer remove by key after reading an
   old entry. Concurrent expired category requests recheck under the existing stripe
   and reuse a refresh already completed by another caller. The current cache flow,

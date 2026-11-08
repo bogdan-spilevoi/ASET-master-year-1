@@ -114,6 +114,10 @@ No cloud schedule or receiver is configured by the repository examples.
 
 ## Review notes
 
+- 2026-11-08: reviewed the shared Listings contracts project and CI inventory/coverage
+  handling. Auth does not reference it; API, database, worker and Outbox arrows remain
+  unchanged. A contract-only library introduces no runtime communication.
+
 - 2026-11-08: reviewed the shared cache expiration fix: stale lookups no longer remove
   a concurrent refresh by key. Auth does not enable query caching, so its numbered API,
   persistence and Outbox arrows and failure/retry paths remain unchanged.

@@ -74,7 +74,7 @@ jobs:
             }
           }
           $production = @($projects | Where-Object {
-            $_ -cmatch '^src/(Services/[^/]+|BuildingBlocks)/SmartLost\.[^/]+/[^/]+\.csproj$'
+            $_ -cmatch '^src/(Services/[^/]+|BuildingBlocks|Contracts)/SmartLost\.[^/]+/[^/]+\.csproj$'
           })
           $unit = @($projects | Where-Object { $_ -cmatch '^tests/[^/]+/[^/]+/[^/]+\.UnitTests\.csproj$' })
           $integration = @($projects | Where-Object { $_ -cmatch '^tests/[^/]+/[^/]+/[^/]+\.IntegrationTests\.csproj$' })
@@ -163,15 +163,6 @@ jobs:
               }
             }
           }
-          foreach ($project in (ConvertFrom-Json $env:PRODUCTION_PROJECTS)) {
-            $metadata = dotnet msbuild $project -getProperty:AssemblyName -getItem:Compile | ConvertFrom-Json
-            $assembly = $metadata.Properties.AssemblyName
-            if (@($metadata.Items.Compile).Count -eq 0) {
-              Write-Host "$assembly has no C# compile items (empty scaffold); no executable coverage to collect."
-              continue
-            }
-            if (!$modules.Contains($assembly)) { throw "Production assembly missing from coverage: $assembly" }
-          }
           if ($hits.Count -eq 0) { throw 'Production code exists but coverage contains no executable lines.' }
           function Assert-Coverage([string] $label, [bool[]] $values) {
             if ($values.Count -eq 0) { "$label`: N/A (no executable lines)"; return }
@@ -232,6 +223,11 @@ jobs:
             })
             return $implementation.Count -eq 0
           }
+          function Test-DeclarationOnlySources([string[]] $sources) {
+            return $sources.Count -gt 0 -and @($sources | Where-Object {
+              !(Test-DeclarationOnlyContract $_)
+            }).Count -eq 0
+          }
           # Exercise the actual classifier before permitting any missing-file exception.
           $contractCases = @(
             @{ Name = 'interface'; Source = 'public interface IQuery { void Read(); }'; Expected = $true }
@@ -258,6 +254,36 @@ jobs:
             }
           }
           "Declaration-only classifier checks passed: $($contractCases.Count)"
+          $assemblyCases = @(
+            @{ Name = 'enum-only assembly'; Sources = @('public enum Kind { Lost = 0, Found = 1 }'); Expected = $true }
+            @{ Name = 'multiple contracts'; Sources = @('public enum Kind { Lost }', 'public interface IRead { void Read(); }'); Expected = $true }
+            @{ Name = 'mixed executable assembly'; Sources = @('public enum Kind { Lost }', 'public class Worker { public int Run() => 1; }'); Expected = $false }
+            @{ Name = 'empty source list'; Sources = @(); Expected = $false }
+          )
+          foreach ($case in $assemblyCases) {
+            if ((Test-DeclarationOnlySources $case.Sources) -ne $case.Expected) {
+              throw "Declaration-only assembly classifier regression: $($case.Name)"
+            }
+          }
+          "Declaration-only assembly classifier checks passed: $($assemblyCases.Count)"
+          foreach ($project in (ConvertFrom-Json $env:PRODUCTION_PROJECTS)) {
+            $metadata = dotnet msbuild $project -getProperty:AssemblyName -getItem:Compile | ConvertFrom-Json
+            $assembly = $metadata.Properties.AssemblyName
+            if (@($metadata.Items.Compile).Count -eq 0) {
+              Write-Host "$assembly has no C# compile items (empty scaffold); no executable coverage to collect."
+              continue
+            }
+            if (!$modules.Contains($assembly)) {
+              $sources = @($metadata.Items.Compile | Where-Object {
+                $_.FullPath -notmatch '[/\\](obj|bin)[/\\]'
+              } | ForEach-Object { [IO.File]::ReadAllText($_.FullPath) })
+              if (Test-DeclarationOnlySources $sources) {
+                Write-Host "$assembly contains only declaration-only contracts; no executable coverage to collect."
+                continue
+              }
+              throw "Production assembly missing from coverage: $assembly"
+            }
+          }
           $changedHits = [Collections.Generic.List[bool]]::new()
           $coveredFiles = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
           foreach ($key in $hits.Keys) { [void] $coveredFiles.Add($key.Substring(0, $key.LastIndexOf(':'))) }

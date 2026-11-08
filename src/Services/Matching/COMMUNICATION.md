@@ -79,6 +79,12 @@ eligibility checking and ranking details; these arrows summarize that design.
 
 ## Review notes
 
+- 2026-11-08: Domain's scaffold now references the shared Listings contracts project,
+  and NMF tests check generated ListingType values against its enum. The runtime code
+  on main is not merged here; its local enum must be replaced during that integration.
+  Current model-test arrows and planned service arrows are unchanged; this library
+  adds no endpoint, worker, database access or actual Listings-to-Matching message.
+
 - 2026-11-08: reviewed the shared cache expiration fix, which prevents stale readers
   from removing a concurrent refresh. Matching still has no runtime query-cache
   registration; current NMF test interactions and planned service arrows are unchanged.

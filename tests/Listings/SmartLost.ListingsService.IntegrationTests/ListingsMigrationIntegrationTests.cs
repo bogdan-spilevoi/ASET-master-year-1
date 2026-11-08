@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using SmartLost.Contracts.Listings;
 using SmartLost.ListingsService.Domain.Entities;
 using SmartLost.ListingsService.Domain.Enums;
 using SmartLost.ListingsService.Infrastructure.Persistence;

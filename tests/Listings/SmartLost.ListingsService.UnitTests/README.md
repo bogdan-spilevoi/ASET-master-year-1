@@ -1,5 +1,9 @@
 # Listings tests
 
+Runtime tests use `SmartLost.Contracts.Listings.ListingType`. Model tests compare the
+generated NMF enum names/values against this contract; Domain structure tests verify
+that Listing's type resolves to the contract assembly rather than a local duplicate.
+
 This suite has three independent responsibilities:
 
 - `ListingsModelTests*.cs`: NMF structure, metadata, defaults, opposites, containment,

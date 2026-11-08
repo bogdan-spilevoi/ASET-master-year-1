@@ -80,7 +80,7 @@ jobs:
           review_all=false
           for path in "${changed[@]:-}"; do
             case "$path" in
-              src/BuildingBlocks/*)
+              src/BuildingBlocks/*|src/Contracts/*)
                 [[ "$path" == *.md ]] || review_all=true
                 ;;
               docker-compose*.yml|docker-compose*.yaml) review_all=true ;;

@@ -32,13 +32,16 @@ code/configuration/test changes; CI checks document changes and reviewers check 
 | --- | --- | --- |
 | [Api](SmartLost.ListingsService.Api/README.md) | Public GET controllers, validation/result HTTP adapters, OpenAPI and composition. | Application, Infrastructure, BuildingBlocks.AspNetCore. |
 | [Application](SmartLost.ListingsService.Application/README.md) | MediatR query/handler/validator slices, read-store port and response DTOs. | Domain, BuildingBlocks.Application. |
-| [Domain](SmartLost.ListingsService.Domain/README.md) | Manual entity declarations and business behavior. | BuildingBlocks.Core only. |
+| [Domain](SmartLost.ListingsService.Domain/README.md) | Manual entity declarations and business behavior. | BuildingBlocks.Core, Contracts.Listings. |
 | [Infrastructure](SmartLost.ListingsService.Infrastructure/README.md) | Service-owned EF persistence, migration tooling and DI; storage/delivery adapters pending. | Application, Domain, BuildingBlocks.Infrastructure. |
 | [Modeling](SmartLost.ListingsService.Modeling/README.md) | Ecore/NMeta/XMI representation, independent of runtime entity maintenance. | NMF-Basics; no runtime project references. |
 
 [Listings.slnx](Listings.slnx) and root [Aset.slnx](../../../Aset.slnx) list the same
 project files, alongside shared dependencies and Listings tests; solutions do not
 reference solutions. No Listings implementation references another microservice.
+The shared [Listings contract](../../Contracts/SmartLost.Contracts.Listings/README.md)
+supplies `ListingType`; runtime DTOs, queries and entities use the same enum. Its numeric
+values and existing JSON representation are unchanged; no database migration is required.
 
 ## Ownership and remaining integration
 

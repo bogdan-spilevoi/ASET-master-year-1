@@ -1,5 +1,6 @@
 using SmartLost.BuildingBlocks.Core.Exceptions;
 using SmartLost.BuildingBlocks.Core.Results;
+using SmartLost.Contracts.Listings;
 using SmartLost.ListingsService.Domain.Entities;
 using SmartLost.ListingsService.Domain.Enums;
 using SmartLost.ListingsService.Domain.Errors;

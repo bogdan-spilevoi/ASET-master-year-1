@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Contracts/">
+    <Project Path="../../Contracts/SmartLost.Contracts.Listings/SmartLost.Contracts.Listings.csproj" />
+  </Folder>
   <Folder Name="/Matching/">
     <Project Path="SmartLost.MatchingService.Api/SmartLost.MatchingService.Api.csproj" />
     <Project Path="SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj" />

@@ -32,7 +32,7 @@ Runtime layers do not reference Modeling; generated types are not integrated dom
 | --- | --- | --- |
 | [SmartLost.MatchingService.Api](SmartLost.MatchingService.Api/SmartLost.MatchingService.Api.csproj) | Future internal HTTP endpoints, service authorization and composition root. | Own Application and Infrastructure; BuildingBlocks.AspNetCore. |
 | [SmartLost.MatchingService.Application](SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj) | Future projection updates, analysis, ranking use cases and inference ports. | Own Domain; BuildingBlocks.Application. |
-| [SmartLost.MatchingService.Domain](SmartLost.MatchingService.Domain/SmartLost.MatchingService.Domain.csproj) | Future search projection, embedding and suggestion models and invariants. | BuildingBlocks.Core. |
+| [SmartLost.MatchingService.Domain](SmartLost.MatchingService.Domain/SmartLost.MatchingService.Domain.csproj) | Future search projection, embedding and suggestion models and invariants. | BuildingBlocks.Core; Contracts.Listings. |
 | [SmartLost.MatchingService.Infrastructure](SmartLost.MatchingService.Infrastructure/SmartLost.MatchingService.Infrastructure.csproj) | Future Matching-owned PostgreSQL persistence, local AI HTTP client and delivery adapters. | Own Application and Domain; BuildingBlocks.Infrastructure. |
 | [SmartLost.MatchingService.Modeling](SmartLost.MatchingService.Modeling/README.md) | Matching-owned projection, versioned embedding and preparation-task structural models; generated NMF classes and metadata. | NMF-Basics; no service runtime references. |
 
@@ -40,6 +40,10 @@ The focused solution also lists the four shared BuildingBlocks projects directly
 The root [Aset.slnx](../../../Aset.slnx) lists these same service projects. Solutions
 do not reference other solutions. Neither this service nor BuildingBlocks references
 another microservice's implementation.
+The solution also includes [Contracts.Listings](../../Contracts/SmartLost.Contracts.Listings/README.md).
+Domain is prepared to use its `ListingType`. This branch still has no Matching runtime
+entities; when merging the runtime implementation from main, replace its local Domain
+`ListingType` and imports with `SmartLost.Contracts.Listings`. Generated NMF types stay separate.
 
 ## Data and integration ownership
 
