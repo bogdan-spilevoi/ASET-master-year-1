@@ -2,9 +2,12 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using MediatR;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using SmartLost.AuthService.Api.Contracts;
+using SmartLost.AuthService.Api.Controllers;
 using SmartLost.AuthService.Application.Contracts;
 using SmartLost.AuthService.Application.Queries.GetCurrentUser;
 using SmartLost.BuildingBlocks.Core.Results;
@@ -63,5 +66,54 @@ public sealed class AuthorizationEndpointTests
         Assert.Equal(auth.UserName, currentUser.UserName);
         Assert.Equal(auth.Email, currentUser.Email);
         Assert.True(currentUser.IsAuthenticated);
+    }
+
+    [Fact]
+    public async Task MeEndpointReturnsFailureActionResultWhenQueryFails()
+    {
+        ISender mockSender = new FailingSender();
+        var controller = new AuthController(mockSender, null!)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+
+        IActionResult result = await controller.Me(CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result);
+    }
+
+    private sealed class FailingSender : ISender
+    {
+        public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
+        {
+            if (typeof(TResponse) == typeof(Result<CurrentUserDetails>))
+            {
+                var failure = Result<CurrentUserDetails>.Failure(
+                    new Error("test.error", "Failure description.", ErrorKind.Unauthorized));
+                return Task.FromResult((TResponse)(object)failure);
+            }
+
+            throw new NotImplementedException();
+        }
+
+        public Task<object?> Send(object request, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IAsyncEnumerable<TResponse> CreateStream<TResponse>(IStreamRequest<TResponse> request, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IAsyncEnumerable<object?> CreateStream(object request, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task Send<TRequest>(TRequest request, CancellationToken cancellationToken = default) where TRequest : IRequest
+        {
+            throw new NotImplementedException();
+        }
     }
 }

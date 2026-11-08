@@ -53,6 +53,26 @@ public sealed class AuthorizationBehaviorTests
         Assert.Equal("public", publicResult.Value);
     }
 
+    [Theory]
+    [InlineData(null, "val")]
+    [InlineData("", "val")]
+    [InlineData("   ", "val")]
+    [InlineData("type", null)]
+    [InlineData("type", "")]
+    [InlineData("type", "   ")]
+    public void AuthorizeAttributeWithInvalidArgumentsThrowsArgumentException(string? claimType, string? claimValue)
+    {
+        Assert.Throws<ArgumentException>(() => new AuthorizeAttribute(claimType!, claimValue!));
+    }
+
+    [Fact]
+    public void AuthorizeAttributeDefaultConstructorInitializesNullClaims()
+    {
+        var attribute = new AuthorizeAttribute();
+        Assert.Null(attribute.ClaimType);
+        Assert.Null(attribute.ClaimValue);
+    }
+
     [Authorize]
     private sealed record ProtectedCommand : IRequest<Result<string>>;
 
