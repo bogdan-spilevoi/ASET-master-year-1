@@ -18,9 +18,9 @@ root solution to validate consumers together with the shared libraries.
 | Library | Contents | Dependencies |
 | --- | --- | --- |
 | [Core](../src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | `Entity<TId>`, `AggregateRoot<TId>`, `IDomainEvent`, `IHasDomainEvents`, `Guard`, `Result`, `Result<T>`, `IResult`, `Error`, `ErrorKind`, `DomainException`, `PageSlice<T>`, `PagedResult<T>`, `PagedDataGuard` | .NET only |
-| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/README.md) | Validation/exception/optional transaction/security-audit/authorization/profiling behaviors, isolated profiling contexts and measurements, audit, authorization and Outbox contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
-| [AspNetCore](../src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/) | `ToActionResult`, `ProblemDetails`, unexpected-exception handler, `HttpCurrentUser`, HTTP audit context and API registration | Application/Core, ASP.NET Core framework |
-| [Infrastructure](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/) | EF Outbox model/configuration, writer, leased batch processor, logging security-audit sink and registration | Application, EF Core Relational 10.0.12 |
+| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/README.md) | Validation/exception/optional transaction, authorization and profiling behaviors, isolated profiling contexts and measurements, transaction and Outbox contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
+| [AspNetCore](../src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/) | `ToActionResult`, `ProblemDetails`, unexpected-exception handler, `HttpCurrentUser`, API registration | Application/Core, ASP.NET Core framework |
+| [Infrastructure](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/) | EF Outbox model/configuration, writer, leased batch processor and registration | Application, EF Core Relational 10.0.12 |
 
 Service Domain projects reference Core; service Application projects reference Application;
 service API projects reference AspNetCore. Service Infrastructure implements persistence contracts and may opt into shared
@@ -159,14 +159,13 @@ and finite worker host; Azure scale-to-zero consumers still require an external 
 
 `AddBuildingBlocksApplication(serviceAssembly)` discovers handlers and validators in the
 service's Application assembly and registers `ExceptionToResult → Validation → Handler`.
-Profiling is opt-in: pass `useProfiling: true` to add `ProfilingBehavior<TRequest,TResponse>`
-as the outermost behavior, with a validated `ProfilingOptions` instance and shared
-`IProfilingContext`/`TimeProvider` registrations.
-Security auditing is opt-in: pass `useSecurityAudit: true` to add
-`SecurityAuditBehavior<TRequest,TResponse>` between exception mapping and validation. Auth
-wraps this through `AddApplication()` and enables the behavior for its audited commands.
-Authorization is also opt-in: pass `useAuthorization: true` to add
-`AuthorizationBehavior<TRequest,TResponse>` after auditing and before validation.
+AuthService wraps this through its `AddApplication()` extension.
+
+Authorization is opt-in: pass `useAuthorization: true` to add
+`AuthorizationBehavior<TRequest,TResponse>` after exception mapping and before validation.
+Mark a command or query with `[Authorize]` to require an authenticated `ICurrentUser`, or with
+`[Authorize("claimType", "claimValue")]` to require an exact claim. The behavior returns
+401 for anonymous callers and 403 for a missing required claim; unattributed requests bypass it.
 
 - Validation calls `ValidateAsync` sequentially because validators may share scoped
   dependencies. Invalid commands return deduplicated field errors without invoking handlers.
@@ -175,32 +174,6 @@ Authorization is also opt-in: pass `useAuthorization: true` to add
   normally be returned directly by handlers.
 - Behaviors apply to responses implementing `IResult<TSelf>`; other MediatR response types
   do not participate in this result pipeline.
-
-### Security audit behavior
-
-`ISecurityAuditedRequest` marks requests for auditing and supplies an event type plus a
-`TargetSubject`. The behavior records result failures and thrown exceptions through
-`ISecurityAuditSink`; it does not inspect request properties or automatically redact values.
-Implementations must therefore keep passwords, hashes and tokens out of `TargetSubject`.
-The event can include the subject, client IP, user agent, outcome, failure code and UTC time.
-
-`AddBuildingBlocksApi()` registers the scoped `HttpSecurityAuditContext` that reads client
-metadata from the current HTTP request. Non-HTTP hosts can use the default context and
-`AddBuildingBlocksSecurityAudit()` registration. That registration supplies a logging sink;
-services can replace it with a service-owned sink, as Auth does with its database-backed
-`DbSecurityAuditSink`. BuildingBlocks defines no audit table or migration.
-
-### Authorization behavior
-
-`IAuthorizableRequest` protects a MediatR command or query. It requires an authenticated
-`ICurrentUser`; its `AuthorizationRequirements` are evaluated before validation and the
-handler. Each `AuthorizationRequirement.Claim(type, value)` requires an exact claim value;
-omit `value` to require any nonblank value for the type. Failed authentication returns the
-`authorization.unauthenticated` 401 result; a missing declared claim returns the
-`authorization.forbidden` 403 result. Requests that do not implement the interface remain
-public, so Auth's register, login and refresh commands deliberately bypass this behavior.
-Endpoint `[Authorize]` remains necessary to reject unauthenticated HTTP requests before
-endpoint execution and should be used independently where an endpoint exposes protected data.
 
 Transactions are optional. A service must supply scoped `IUnitOfWork` / `ITransaction`
 implementations, mark selected requests with `ITransactionalCommand`, and register with
@@ -275,7 +248,7 @@ method or endpoint.
 ## HTTP mapping
 
 `AddBuildingBlocksApi()` registers problem details, the unexpected-exception handler,
-`IHttpContextAccessor`, scoped `ICurrentUser` / `HttpCurrentUser` and the HTTP audit context.
+`IHttpContextAccessor` and scoped `ICurrentUser` / `HttpCurrentUser`.
 Call `app.UseExceptionHandler()` in the API pipeline, as AuthService does.
 
 `controller.ToActionResult(result)` returns 200 with a generic success value, or 204 for
@@ -306,10 +279,9 @@ reads the first authenticated `ClaimsIdentity` in `HttpContext.User`. It never d
 an Authorization header or validates a JWT itself. The host must configure authentication,
 call `UseAuthentication()` before authorization/endpoints and protect restricted endpoints
 with `[Authorize]` or a policy. Auth already has authentication middleware and calls
-`AddBuildingBlocksApi()`, so the adapter is registered there. Register/login/refresh remain
-public. Auth's `/api/auth/me` and audit-log inspection endpoints require authentication. The
-audit-log route has no role/claim policy yet and should remain restricted to trusted use until
-one is added.
+`AddBuildingBlocksApi()`, so the adapter is registered there. Its register/login/refresh routes
+remain public; `/api/auth/me` requires a bearer token and sends the `[Authorize]`
+`GetCurrentUserQuery` through the Application behavior.
 
 | Member | Source / behavior |
 | --- | --- |

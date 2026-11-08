@@ -126,10 +126,6 @@ category synonym normalization are not implemented.
 
 ## Review notes
 
-- 2026-11-08: Reviewed after the shared BuildingBlocks AuthorizationBehavior addition. Matching
-  does not enable that opt-in behavior. It adds no Matching authorization decision or
-  external interaction, so the implemented profiling, persistence and mock-adapter arrows
-  remain unchanged.
 - 2026-11-08: extracted the outer profiling behavior and generic context/contracts into
   BuildingBlocks, while Matching retains stage/AI decorators. The diagram now labels
   the shared behavior and Infrastructure concurrency mapping. Added deadline/late-result
@@ -154,6 +150,3 @@ category synonym normalization are not implemented.
   and model tests.
 - 2026-10-26: added nullable CurrentPhotoId/CurrentPhotoRevision to SearchListing.
 - Added the separate NMF model and unit-test flow for SearchListing/ImageEmbedding.
-- Reviewed the shared BuildingBlocks security-audit behavior added for Auth. Matching does
-  not opt into `useSecurityAudit`; it does not change Matching's endpoint, database,
-  inference, worker or external communication arrows.

@@ -13,7 +13,8 @@ public sealed class AuthorizationBehavior<TRequest, TResponse>(ICurrentUser curr
 {
     public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
     {
-        if (request is not IAuthorizableRequest authorizableRequest)
+        AuthorizeAttribute[] attributes = [.. request.GetType().GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>()];
+        if (attributes.Length == 0)
         {
             return await next(cancellationToken);
         }
@@ -25,12 +26,10 @@ public sealed class AuthorizationBehavior<TRequest, TResponse>(ICurrentUser curr
             ]);
         }
 
-        foreach (AuthorizationRequirement requirement in authorizableRequest.AuthorizationRequirements)
+        foreach (AuthorizeAttribute attribute in attributes.Where(attribute => attribute.ClaimType is not null))
         {
-            IReadOnlyList<string> claims = currentUser.GetClaims(requirement.ClaimType);
-            bool isSatisfied = requirement.ClaimValue is null
-                ? claims.Any(value => !string.IsNullOrWhiteSpace(value))
-                : claims.Contains(requirement.ClaimValue, StringComparer.Ordinal);
+            IReadOnlyList<string> claims = currentUser.GetClaims(attribute.ClaimType!);
+            bool isSatisfied = claims.Contains(attribute.ClaimValue!, StringComparer.Ordinal);
 
             if (!isSatisfied)
             {

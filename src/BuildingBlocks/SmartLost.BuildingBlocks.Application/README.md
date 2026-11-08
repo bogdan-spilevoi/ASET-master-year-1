@@ -1,8 +1,7 @@
 # Shared Application building blocks
 
 This library owns reusable MediatR exception, validation, optional transaction,
-security-audit, authorization and profiling behaviors, plus framework-independent
-application contracts.
+authorization and profiling behaviors, plus framework-independent application contracts.
 It depends on Core, MediatR, FluentValidation and DI/logging abstractions; it never
 references a service, EF Core or ASP.NET Core.
 
@@ -10,11 +9,11 @@ references a service, EF Core or ASP.NET Core.
 
 `AddBuildingBlocksApplication(assembly, useProfiling: true, profilingOptions: options)`
 registers the outermost `ProfilingBehavior`, a TimeProvider, options and a default
-singleton `IProfilingContext`. `useSecurityAudit` and `useAuthorization` independently
-enable their respective opt-in behaviors. With all options enabled the order is:
+singleton `IProfilingContext`. `useAuthorization` independently enables the request-attribute
+behavior. With all options enabled the order is:
 
 ```text
-Profiling -> ExceptionToResult -> SecurityAudit -> Authorization -> Validation -> optional Transaction -> Handler
+Profiling -> ExceptionToResult -> Authorization -> Validation -> optional Transaction -> Handler
 ```
 
 The default is off. `ProfilingOptions` controls the slow-operation threshold.
@@ -30,11 +29,10 @@ Service-specific stage names, AI adapters, timeout policy and log presentation s
 the service. See [Matching](../../Services/Matching/README.md#profiling-and-debugging)
 and the [shared-library guide](../../../docs/BUILDING_BLOCKS.md).
 
-## Security audit and authorization
+## Authorization
 
-`ISecurityAuditedRequest` declares the safe event type and target subject for audit records;
-the host supplies an `ISecurityAuditSink` and optional request context. `IAuthorizableRequest`
-requires an authenticated `ICurrentUser` and declares exact claim requirements through
-`AuthorizationRequirement`. Unauthorized and forbidden requests return 401/403 result errors
-before validation or handlers run. Unmarked MediatR requests remain public. HTTP endpoints
-still need `[Authorize]` or a policy where endpoint admission must be protected.
+`[Authorize]` marks a MediatR request as requiring an authenticated `ICurrentUser`.
+`[Authorize("claimType", "claimValue")]` additionally requires one exact claim. The
+`AuthorizationBehavior` returns 401/403 result errors before validation or handlers run.
+Unattributed MediatR requests remain public. HTTP endpoints still need ASP.NET Core
+`[Authorize]` or a policy where endpoint admission must be protected.

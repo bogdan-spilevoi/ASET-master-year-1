@@ -15,7 +15,7 @@ public sealed class AuthorizationBehaviorTests
     {
         var behavior = new AuthorizationBehavior<ProtectedCommand, Result<string>>(new TestCurrentUser(false));
         bool handlerCalled = false;
-        Result<string> result = await behavior.Handle(new ProtectedCommand([]), _ =>
+        Result<string> result = await behavior.Handle(new ProtectedCommand(), _ =>
         {
             handlerCalled = true;
             return Task.FromResult(Result<string>.Success("unexpected"));
@@ -31,7 +31,7 @@ public sealed class AuthorizationBehaviorTests
     public async Task AuthenticatedCallerWithoutRequiredClaimIsForbidden()
     {
         var behavior = new AuthorizationBehavior<ProtectedQuery, Result<string>>(new TestCurrentUser(true));
-        Result<string> result = await behavior.Handle(new ProtectedQuery([AuthorizationRequirement.Claim("permission", "audit.read")]),
+        Result<string> result = await behavior.Handle(new ProtectedQuery(),
             _ => Task.FromResult(Result<string>.Success("unexpected")), CancellationToken.None);
 
         Error error = Assert.Single(result.Errors);
@@ -42,8 +42,8 @@ public sealed class AuthorizationBehaviorTests
     [Fact]
     public async Task MatchingClaimAllowsCommandsAndPublicRequestsBypassTheBehavior()
     {
-        var behavior = new AuthorizationBehavior<ProtectedCommand, Result<string>>(new TestCurrentUser(true, ["audit.read"]));
-        Result<string> authorized = await behavior.Handle(new ProtectedCommand([AuthorizationRequirement.Claim("permission", "audit.read")]),
+        var behavior = new AuthorizationBehavior<ClaimProtectedCommand, Result<string>>(new TestCurrentUser(true, ["audit.read"]));
+        Result<string> authorized = await behavior.Handle(new ClaimProtectedCommand(),
             _ => Task.FromResult(Result<string>.Success("allowed")), CancellationToken.None);
         Assert.Equal("allowed", authorized.Value);
 
@@ -53,8 +53,14 @@ public sealed class AuthorizationBehaviorTests
         Assert.Equal("public", publicResult.Value);
     }
 
-    private sealed record ProtectedCommand(IReadOnlyList<AuthorizationRequirement> AuthorizationRequirements) : IRequest<Result<string>>, IAuthorizableRequest;
-    private sealed record ProtectedQuery(IReadOnlyList<AuthorizationRequirement> AuthorizationRequirements) : IRequest<Result<string>>, IAuthorizableRequest;
+    [Authorize]
+    private sealed record ProtectedCommand : IRequest<Result<string>>;
+
+    [Authorize("permission", "audit.read")]
+    private sealed record ProtectedQuery : IRequest<Result<string>>;
+
+    [Authorize("permission", "audit.read")]
+    private sealed record ClaimProtectedCommand : IRequest<Result<string>>;
     private sealed record PublicCommand : IRequest<Result<string>>;
 
     private sealed class TestCurrentUser(bool isAuthenticated, IReadOnlyList<string>? permissions = null) : ICurrentUser

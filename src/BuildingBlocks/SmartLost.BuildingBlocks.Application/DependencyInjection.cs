@@ -13,7 +13,6 @@ public static class DependencyInjection
         this IServiceCollection services,
         Assembly serviceAssembly,
         bool useTransactions = false,
-        bool useSecurityAudit = false,
         bool useAuthorization = false,
         bool useProfiling = false,
         ProfilingOptions? profilingOptions = null)
@@ -37,11 +36,6 @@ public static class DependencyInjection
             }
 
             configuration.AddOpenBehavior(typeof(ExceptionToResultBehavior<,>));
-            if (useSecurityAudit)
-            {
-                configuration.AddOpenBehavior(typeof(SecurityAuditBehavior<,>));
-            }
-
             if (useAuthorization)
             {
                 configuration.AddOpenBehavior(typeof(AuthorizationBehavior<,>));

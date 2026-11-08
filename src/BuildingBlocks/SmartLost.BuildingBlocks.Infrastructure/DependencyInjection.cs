@@ -2,22 +2,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SmartLost.BuildingBlocks.Application.Outbox;
-using SmartLost.BuildingBlocks.Application.Security;
 using SmartLost.BuildingBlocks.Infrastructure.Outbox;
-using SmartLost.BuildingBlocks.Infrastructure.Security;
 
 namespace SmartLost.BuildingBlocks.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddBuildingBlocksSecurityAudit(this IServiceCollection services)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        services.TryAddSingleton<ISecurityAuditContext, DefaultSecurityAuditContext>();
-        services.TryAddSingleton<ISecurityAuditSink, LoggingSecurityAuditSink>();
-        return services;
-    }
-
     public static IServiceCollection AddBuildingBlocksOutbox<TContext>(this IServiceCollection services) where TContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(services);

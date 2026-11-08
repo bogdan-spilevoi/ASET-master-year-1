@@ -220,7 +220,7 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | Module | Responsibility | Documentation |
 | --- | --- | --- |
 | [`.github/`](.github/) | GitHub Actions workflows, PR/main validation, Coverlet gates, security and container checks | [CI guide](.github/README.md) |
-| [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions, security audit and an Auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
+| [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Finite Auth Outbox job delivering versioned public-profile snapshots to configured HTTP receivers | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
 | [`src/Services/Listings/`](src/Services/Listings/) | Runtime scaffold and separate NMF models for listings with change sequences, photos, categories, match decisions, recoveries and credibility entries; runtime functionality pending | [Module README](src/Services/Listings/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md) |
 | [`src/Services/Matching/`](src/Services/Matching/) | Suggestion ranking, embedding preparation and photo-analysis use cases with `ProfilingBehavior` and AI-call profiling decorators, a Matching-only PostgreSQL database, mock photo/AI adapters and development-only test endpoints; real Listings/AI integration and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
@@ -236,16 +236,15 @@ will be logical references, without foreign keys between service databases.
 | Project | Responsibility |
 | --- | --- |
 | `SmartLost.BuildingBlocks.Core` | Type-aware `Entity<TId>`, `AggregateRoot<TId>`, domain-event contracts, domain `Guard`, immutable `Result`/`Result<T>`, errors, explicit domain exceptions, `PageSlice<T>`/`PagedResult<T>` and pagination defaults; no framework dependencies |
-| `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, opt-in transaction/security-audit/authorization/profiling behaviors, shared profiling contexts, transaction/Outbox contracts and `ICurrentUser` |
-| `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped current-user and HTTP audit-context adapters, and API registration |
-| `SmartLost.BuildingBlocks.Infrastructure` | Opt-in logging security-audit sink and EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its audit/outbox persistence |
+| `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction/authorization/profiling behaviors, shared profiling contexts, transaction/Outbox contracts and `ICurrentUser` |
+| `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped HTTP current-user adapter and API registration |
+| `SmartLost.BuildingBlocks.Infrastructure` | Opt-in EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its table and delivery adapter |
 
 See [dependencies, domain primitives, Outbox integration and transaction opt-in](docs/BUILDING_BLOCKS.md).
 `AddBuildingBlocksApi()` also registers scoped `ICurrentUser` access to authenticated
-user/token claims and HTTP security-audit context. Auth opts into the shared security-audit
-and authorization behaviors; register/login/refresh remain public MediatR requests, while
-protected requests can declare authenticated-user and exact-claim requirements. See [current-user usage and claim mapping](docs/BUILDING_BLOCKS.md#current-user-identity)
-and the [Auth security audit guide](docs/AUTHSERVICE.md#security-audit-pipeline).
+user/token claims. Auth already calls this registration; register/login/refresh remain public,
+while `/api/auth/me` requires a bearer access token and dispatches an attribute-protected query.
+See [current-user usage and claim mapping](docs/BUILDING_BLOCKS.md#current-user-identity).
 Auth now uses the shared Outbox library: its EF context saves profile messages atomically
 with business changes, and the separate worker performs bounded HTTP delivery. Receiver
 routes and a service key must be configured before running the worker. Unit tests cover
@@ -428,8 +427,7 @@ Volume removal remains destructive.
 dedicated connection string named `AuthDatabase`. Its [Infrastructure migrations](src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Migrations/)
 contain `InitialCreate`, which creates `Users` and the unique normalized-identity indexes,
 `AddRefreshTokens`, which creates per-login sessions and hashed refresh-token history,
-`AddAuthOutbox`, which adds `OutboxMessages` and the user identity-version column, and
-`AddSecurityAuditRecords`, which creates the security-audit table and its indexes.
+and `AddAuthOutbox`, which adds `OutboxMessages` and the user identity-version column.
 Apply the latest migration before starting either updated Auth process.
 The `Users` mapping lives in [UserAccountConfiguration](src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Configurations/UserAccountConfiguration.cs);
 `AuthDbContext` applies service entity configurations and the shared Outbox mapping.
@@ -453,7 +451,7 @@ commands use the Infrastructure factory without running API startup. Migration
 application is an explicit operation; no deployment workflow is active.
 
 The checked-in EF migrations are the source of truth. See
-[manual application commands](docs/AUTHSERVICE.md#apply-the-auth-migrations).
+[manual application commands](docs/AUTHSERVICE.md#apply-the-refresh-token-migration-yourself).
 Generate SQL on demand for review; SQL exports do not need to be committed.
 
 `SmartLost.MatchingService.Api` owns the separate `matchingservice` PostgreSQL database
@@ -483,8 +481,7 @@ See [Matching tables and migration commands](src/Services/Matching/README.md#dat
 | `POST` | `/api/auth/register` | Creates a new user and returns access/refresh tokens |
 | `POST` | `/api/auth/login` | Authenticates by email and password and creates a token session |
 | `POST` | `/api/auth/refresh` | Rotates a refresh token and returns a new access/refresh pair |
-| `GET` | `/api/auth/me` | Returns the authenticated user's identity; requires a bearer access token |
-| `GET` | `/api/auth/security/audit-logs` | Lists recent audit events; requires a bearer access token |
+| `GET` | `/api/auth/me` | Returns the bearer token's current identity |
 
 Login accepts `{ "email": "user@example.com", "password": "your-password" }`.
 Email matching trims whitespace and ignores casing.
@@ -504,9 +501,6 @@ Expiry values use PostgreSQL's microsecond precision consistently in responses a
 See [refresh token behavior and migration scripts](docs/AUTHSERVICE.md#refresh-tokens).
 Refresh-token tests use isolated SQLite databases for rotation, expiry, replay and competing
 updates; they do not apply migrations to the local PostgreSQL database.
-The audit-log endpoint includes usernames/emails, client IPs and user agents and requires a
-bearer access token. It has no role/claim policy yet, so restrict access further before exposing
-it beyond a trusted environment.
 Application failures use `application/problem+json` with an error code, trace identifier and
 field errors when applicable (400 validation, 409 duplicate account, 401 invalid credentials).
 Malformed request bodies use ASP.NET validation problems. Unexpected exceptions return a
@@ -612,11 +606,12 @@ methods and invariants. See [mapping setup](docs/AUTHSERVICE.md#object-mapping).
 Use PascalCase types/methods, `I`-prefixed interfaces, camelCase locals/parameters, `_camelCase`
 private fields, Allman braces, four spaces and file-scoped namespaces. Detailed enforced rules
 and review conventions are in [coding standards](docs/CODING_STANDARDS.md).
-MediatR commands return `Result<T>` for expected business failures. `IAuthorizableRequest`
-declares authenticated-user and exact-claim requirements for MediatR commands/queries; its
-opt-in pipeline behavior returns 401/403 before validation/handling, while unmarked requests
-remain public. FluentValidation checks
+MediatR commands return `Result<T>` for expected business failures. FluentValidation checks
 commands before handlers execute, including direct mediator calls; validators run sequentially.
+`[Authorize]` on an Application request enables the shared opt-in authorization behavior:
+it requires an authenticated `ICurrentUser` and can require an exact claim through
+`[Authorize("claimType", "claimValue")]`. Unattributed requests remain public; HTTP endpoints
+still use ASP.NET Core `[Authorize]` for endpoint admission.
 Paginated queries can implement `IPaginatedRequest` and derive their validator from
 `BasePaginatedValidator<T>`: `PageIndex` starts at zero and `PageSize` must be 1–100.
 Repository pagination returns `PageSlice<T>` with the total filtered count before paging;

@@ -209,8 +209,6 @@ jobs:
                 $_.Parent -is [Microsoft.CodeAnalysis.CSharp.Syntax.VariableDeclaratorSyntax] -and
                 $_.Parent.Parent.Parent -is [Microsoft.CodeAnalysis.CSharp.Syntax.FieldDeclarationSyntax] -and
                 $_.Parent.Parent.Parent.Parent -in $constantContainers
-              $parameterDefault = $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.EqualsValueClauseSyntax] -and
-                $_.Parent -is [Microsoft.CodeAnalysis.CSharp.Syntax.ParameterSyntax]
               ($_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseTypeDeclarationSyntax] -and
                $_ -isnot [Microsoft.CodeAnalysis.CSharp.Syntax.InterfaceDeclarationSyntax] -and
                $_ -isnot [Microsoft.CodeAnalysis.CSharp.Syntax.EnumDeclarationSyntax] -and
@@ -221,8 +219,7 @@ jobs:
               $_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.ArrowExpressionClauseSyntax] -or
               ($_ -is [Microsoft.CodeAnalysis.CSharp.Syntax.EqualsValueClauseSyntax] -and
                $_.Parent -isnot [Microsoft.CodeAnalysis.CSharp.Syntax.EnumMemberDeclarationSyntax] -and
-                !$constantInitializer -and
-                !$parameterDefault)
+               !$constantInitializer)
             })
             return $implementation.Count -eq 0
           }

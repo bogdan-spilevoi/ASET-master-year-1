@@ -9,7 +9,6 @@ public static class DependencyInjection
     {
         return services.AddBuildingBlocksApplication(
             typeof(DependencyInjection).Assembly,
-            useSecurityAudit: true,
             useAuthorization: true);
     }
 }
