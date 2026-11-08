@@ -68,10 +68,10 @@ public sealed class MemoryQueryCache(TimeProvider clock) : IQueryCache, IDisposa
                 value = entry.Value;
                 return true;
             }
-
-            _entries.Remove(key);
         }
 
+        // A stale reader must not remove a newer entry published for the same key.
+        // Native expiration handles eviction; misses recheck under the stripe lock.
         value = null;
         return false;
     }

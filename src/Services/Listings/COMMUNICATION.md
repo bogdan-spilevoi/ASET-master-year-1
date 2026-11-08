@@ -276,6 +276,12 @@ snapshot delivery, inference calls and workers are not implemented in Listings.
 
 ## Review notes
 
+- 2026-11-08: shared cache expiration lookups no longer remove by key after reading an
+  old entry. Concurrent expired category requests recheck under the existing stripe
+  and reuse a refresh already completed by another caller. The current cache flow,
+  routes, database ownership and failure/cancellation arrows remain unchanged; no new
+  service calls or retries were added.
+
 - 2026-11-06: the API runtime Dockerfile now patches/version-checks inherited Ubuntu
   APT packages for USN-8996-1 using HTTPS sources and pins the final ASP.NET runtime to
   patched version 10.0.14. The existing build arrow includes

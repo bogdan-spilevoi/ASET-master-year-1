@@ -31,5 +31,7 @@ optional TimeProvider default. The dedicated IMemoryCache has a 1024-entry capac
 absolute TTL and 32 bounded semaphore stripes for miss coalescing. It stores immutable
 successful snapshots supplied by the Application behavior; failures/cancellation are
 not stored. Listings uses it only for its public categories query.
+Expired lookups do not remove entries by key: a delayed reader cannot evict a concurrent
+refresh. Misses recheck under the stripe lock, and native MemoryCache expiration handles eviction.
 
 See [query cache integration and AOP flow](../../../docs/QUERY_CACHING.md).

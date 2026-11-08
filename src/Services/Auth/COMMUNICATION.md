@@ -114,6 +114,10 @@ No cloud schedule or receiver is configured by the repository examples.
 
 ## Review notes
 
+- 2026-11-08: reviewed the shared cache expiration fix: stale lookups no longer remove
+  a concurrent refresh by key. Auth does not enable query caching, so its numbered API,
+  persistence and Outbox arrows and failure/retry paths remain unchanged.
+
 - 2026-11-06: API/worker Dockerfiles now patch and version-check the inherited Ubuntu
   APT packages for USN-8996-1 using HTTPS sources before non-root execution. This is a
   build-time OS package update; numbered HTTP, persistence, Outbox and receiver arrows,

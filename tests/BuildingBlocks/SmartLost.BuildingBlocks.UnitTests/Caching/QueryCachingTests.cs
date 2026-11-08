@@ -105,6 +105,44 @@ public sealed class QueryCachingTests
     }
 
     [Fact]
+    public async Task ReaderHoldingExpiredEntryReusesConcurrentRefreshWithoutRemovingIt()
+    {
+        ManualClock time = new();
+        using PausingClock clock = new(time);
+        using MemoryQueryCache cache = new(clock);
+        int calls = 0;
+        Task<string> Factory(CancellationToken _)
+        {
+            return Task.FromResult(Interlocked.Increment(ref calls).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        Task<string> Read()
+        {
+            return cache.GetOrCreateAsync("expiry-race", TimeSpan.FromMinutes(5), Factory, _ => true, CancellationToken.None);
+        }
+
+        Assert.Equal("1", await Read());
+        time.Advance(TimeSpan.FromMinutes(6));
+        clock.PauseNextRead();
+        Task<string> delayedReader = Task.Run(Read);
+        string refreshed;
+        try
+        {
+            await clock.ReadPaused.WaitAsync(TimeSpan.FromSeconds(10));
+            refreshed = await Read();
+        }
+        finally
+        {
+            clock.Resume();
+        }
+
+        Assert.Equal("2", await delayedReader.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal("2", refreshed);
+        Assert.Equal("2", await Read());
+        Assert.Equal(2, calls);
+    }
+
+    [Fact]
     public async Task CancellingAWaiterDoesNotCancelAnotherRequestsPopulation()
     {
         using MemoryQueryCache cache = new(TimeProvider.System);
@@ -206,6 +244,44 @@ public sealed class QueryCachingTests
         {
             state.Calls++;
             return Task.FromResult(Result<string>.Success(request.Name));
+        }
+    }
+
+    private sealed class PausingClock(TimeProvider inner) : TimeProvider, IDisposable
+    {
+        private readonly TaskCompletionSource _paused = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly ManualResetEventSlim _resume = new();
+        private int _pauseNext;
+
+        internal Task ReadPaused => _paused.Task;
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            if (Interlocked.Exchange(ref _pauseNext, 0) == 1)
+            {
+                _paused.TrySetResult();
+                if (!_resume.Wait(TimeSpan.FromSeconds(10)))
+                {
+                    throw new TimeoutException("The paused cache reader was not resumed.");
+                }
+            }
+
+            return inner.GetUtcNow();
+        }
+
+        internal void PauseNextRead()
+        {
+            Interlocked.Exchange(ref _pauseNext, 1);
+        }
+
+        internal void Resume()
+        {
+            _resume.Set();
+        }
+
+        public void Dispose()
+        {
+            _resume.Dispose();
         }
     }
 

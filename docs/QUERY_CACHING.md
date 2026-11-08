@@ -81,7 +81,9 @@ Exceptions and cancellation propagate; failure Results are returned without stor
   Cache hits do not acquire a stripe.
 - Expiration is absolute, measured from successful population, never extended by hits.
   Native MemoryCache expiration also releases expired entries; TimeProvider makes the
-  deadline check testable without real-time sleeps.
+  deadline check testable without real-time sleeps. An expired lookup does not remove
+  the key: its captured entry may have already been replaced by a concurrent refresh.
+  Rechecking under the stripe lock reuses that fresh value instead of reloading it again.
 - Types and query properties participate in keys, so different parameters/types do not
   accidentally share an entry. Raw parameter text is hashed and is not logged.
 - Cache values are object references. Mark only public read-only queries with immutable
@@ -121,7 +123,9 @@ are unchanged. Empty successful arrays are cached too. Errors are never cached.
 [BuildingBlocks tests](../tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/Caching/QueryCachingTests.cs)
 cover hit/miss, absolute TTL, request/response/parameter key isolation, uncached requests,
 failure/exception retry, cancellation, single population for concurrent callers, singleton
-registration and validation before hits.
+registration and validation before hits. A deterministic expiration regression pauses
+a reader holding an old entry, refreshes the key through another request, then resumes
+the first reader and verifies both reuse the new value with only one refresh.
 [HTTP/EF tests](../tests/Listings/SmartLost.ListingsService.UnitTests/CategoryCachingTests.cs)
 count actual category SELECTs: two HTTP requests produce one read; a direct catalog change
 remains hidden until the controlled clock reaches the TTL; the next request reloads it.
@@ -134,6 +138,13 @@ and **19 integration tests**. Merged Coverlet unit reports measured **94.72% ove
 A separate HTTP smoke check against the existing local PostgreSQL database, with seeding
 disabled, recorded one cache miss, one hit and one category SELECT for two requests.
 These are local results; no hosted GitHub Actions or Azure run was performed here.
+
+Local expiration-race verification on 2026-11-08: the new regression failed before the
+fix (an extra refresh) and passed afterward. All **240 unit tests**, the Release build
+with warnings as errors and format verification at info severity passed. Fresh Coverlet
+reports measured **94.73% overall** (6798/7176) and **100% changed executable lines**
+(1449/1449), comparing the PR base to the working tree. Integration tests and hosted
+GitHub Actions were not rerun for this cache-only fix.
 
 For the laboratory: CachingBehavior is the reusable **aspect**, the request handler
 invocation through MediatR is the **join point**, and CacheableQueryAttribute selects the
