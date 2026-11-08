@@ -1,0 +1,76 @@
+# Development test flow for SmartLost.MatchingService.Api (mock photo and AI adapters).
+# Compose: http://localhost:8081   Local dotnet run: http://localhost:5049
+@host = http://localhost:8081
+@source = 10000000-0000-0000-0000-000000000001
+
+### 1. Reset all Matching rows and seed the demo scenario
+POST {{host}}/api/matching/demo/seed
+
+### 2. Suggestions before embeddings exist: metadata-only relevance, VisualSimilarity is null
+POST {{host}}/api/matching/suggestions
+Content-Type: application/json
+X-Correlation-ID: demo-before-embeddings
+
+{ "listingId": "{{source}}", "expectedSourceRevision": 1 }
+
+### 3. Prepare embeddings (mock DINOv3) for the source and the two photo candidates
+POST {{host}}/api/matching/demo/listings/{{source}}/embedding/process
+X-Correlation-ID: demo-embed-source
+
+###
+POST {{host}}/api/matching/demo/listings/20000000-0000-0000-0000-000000000001/embedding/process
+X-Correlation-ID: demo-embed-candidate-1
+
+###
+POST {{host}}/api/matching/demo/listings/20000000-0000-0000-0000-000000000002/embedding/process
+X-Correlation-ID: demo-embed-candidate-2
+
+### 4. Suggestions with visual evidence: candidate 1 ~1.0, candidate 2 ~0.5
+POST {{host}}/api/matching/suggestions
+Content-Type: application/json
+X-Correlation-ID: demo-with-embeddings
+
+{ "listingId": "{{source}}", "expectedSourceRevision": 1 }
+
+### 5. Profiling: slow AI call (warning event 1304), timeout (1303 TimedOut) and failure (1303 Failed)
+POST {{host}}/api/matching/demo/listings/30000000-0000-0000-0000-000000000001/embedding/process
+X-Correlation-ID: demo-slow-ai
+
+###
+POST {{host}}/api/matching/demo/listings/30000000-0000-0000-0000-000000000002/embedding/process
+X-Correlation-ID: demo-timeout-ai
+
+###
+POST {{host}}/api/matching/demo/listings/30000000-0000-0000-0000-000000000003/embedding/process
+X-Correlation-ID: demo-error-ai
+
+### 6. Statuses: Pending (expected revision ahead), Conflict (expected revision behind), Unavailable (ineligible source)
+POST {{host}}/api/matching/suggestions
+Content-Type: application/json
+
+{ "listingId": "{{source}}", "expectedSourceRevision": 2 }
+
+###
+POST {{host}}/api/matching/suggestions
+Content-Type: application/json
+
+{ "listingId": "30000000-0000-0000-0000-000000000001", "expectedSourceRevision": 1 }
+
+### 7. Validation failure is profiled as Failed with matching.listing_id_required
+POST {{host}}/api/matching/suggestions
+Content-Type: application/json
+
+{ "listingId": "00000000-0000-0000-0000-000000000000", "expectedSourceRevision": 0 }
+
+### 8. Mock Qwen photo analysis of the source photo (photo IDs: listing ID with the second group set to f0f0)
+POST {{host}}/api/matching/photo-analysis
+Content-Type: application/json
+X-Correlation-ID: demo-analysis
+
+{ "listingId": "{{source}}", "photoId": "10000000-f0f0-0000-0000-000000000001", "photoRevision": 1 }
+
+### 9. Last 10 Matching log entries, newest first (count: 1-100)
+GET {{host}}/api/matching/demo/logs
+
+###
+GET {{host}}/api/matching/demo/logs?count=3
