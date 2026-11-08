@@ -17,7 +17,7 @@ flowchart LR
     Api["MatchingController / MatchingDemoController (Development only)"]
     Seeder["MatchingDemoSeeder"]
     Mediator["MediatR ISender"]
-    Profiling["ProfilingBehavior (outermost)"]
+    Profiling["BuildingBlocks ProfilingBehavior (outermost)"]
     Pipeline["ExceptionToResult + Validation behaviors"]
     Handler["Use-case handler"]
     Selector["ProfiledCandidateSelector -> CandidateSelector"]
@@ -25,7 +25,7 @@ flowchart LR
     AiDecorators["ProfiledImageEmbeddingGenerator / ProfiledPhotoAnalyzer"]
     MockAi["Mock DINOv3 / Qwen adapters"]
     MockPhotos["MockListingPhotoReader (static demo photos)"]
-    Profiler["MatchingProfiler (AsyncLocal operation profile)"]
+    Profiler["MatchingProfiler / shared IProfilingContext"]
     Logs[("ILogger events 1301-1304 (container stdout)")]
     DB[("matchingservice PostgreSQL: SearchListings, ImageEmbeddings, EmbeddingPreparationTasks")]
 
@@ -43,15 +43,17 @@ flowchart LR
     Ranker -->|"6.2.1 Read cached vectors only"| DB
     Selector -->|"6.3 Record duration and counts"| Profiler
     Ranker -->|"6.3 Record duration and counts"| Profiler
-    Handler -->|"7. Embedding: load task/projection; commit claim"| DB
+    Handler -->|"7. Embedding: load task/projection; commit claim"| UOW["MatchingUnitOfWork"]
+    UOW -->|"7.0 SaveChanges with xmin concurrency"| DB
+    UOW -->|"7.0.1 Competing update: DomainException -> HTTP 409"| Pipeline
     Handler -->|"7.1 Read photo revision"| MockPhotos
     Handler -->|"7.2 Embedding / 8. analysis call"| AiDecorators
     AiDecorators -->|"7.3 Bounded call with AI timeout"| MockAi
     AiDecorators -->|"7.4 Record duration, timeout, cancellation or failure"| Profiler
-    Handler -->|"7.5 Commit vector + Ready, or retry/Failed with sanitized code"| DB
+    Handler -->|"7.5 Commit vector + Ready, or retry/exhausted Failed with sanitized code"| DB
     Profiler -->|"9. Warn on AI problems and slow AI calls"| Logs
     Profiling -->|"10. Log outcome, total duration and stages; warn above threshold"| Logs
-    Logs -->|"10.1 Copy last 100 Matching entries (Development)"| LogBuffer["RecentLogBuffer"]
+    Logs -->|"10.1 Copy last 100 Matching/shared profiling entries (Development)"| LogBuffer["RecentLogBuffer"]
     Client -->|"12. GET demo/logs?count=10"| Api
     Api -->|"12.1 Read newest entries"| LogBuffer
     Api -->|"11. JSON result or problem details (AI failures: 503)"| Client
@@ -71,7 +73,11 @@ Failure and retry paths that are implemented:
   - a version mismatch
   - an invalid vector
 
-  If the caller cancels, the lease is left to expire so a later claim can retry the task.
+  If the caller cancels, the lease is left to expire. A later claim retries only while the
+  attempt budget remains; an expired final lease becomes Failed without another inference.
+  Competing xmin updates become the 409 matching.concurrent_update conflict. AI deadlines
+  request cancellation, discard late results and report TimedOut; uncooperative asynchronous
+  adapters are no longer awaited, and real adapters must stop their own work on cancellation.
   No worker re-runs due tasks automatically; they are processed through the test endpoints.
 - **Photo analysis.** Missing photos return 404 and AI failures return 503.
 
@@ -111,7 +117,7 @@ category synonym normalization are not implemented.
 
 - [Current state, endpoints and tables](README.md)
 - [Test requests](SmartLost.MatchingService.Api/MatchingService.Api.http)
-- [Profiling behavior](SmartLost.MatchingService.Application/Profiling/ProfilingBehavior.cs)
+- [Profiling behavior](../../BuildingBlocks/SmartLost.BuildingBlocks.Application/Behaviors/ProfilingBehavior.cs)
   and [profiler](SmartLost.MatchingService.Application/Profiling/MatchingProfiler.cs)
 - [Persistence](SmartLost.MatchingService.Infrastructure/Persistence/MatchingDbContext.cs)
   and [migration](SmartLost.MatchingService.Infrastructure/Persistence/Migrations/)
@@ -119,6 +125,12 @@ category synonym normalization are not implemented.
 - [Proposed matching components](../../../docs/diagrams/member-5/smartlost-matching-components.puml)
 
 ## Review notes
+
+- 2026-11-08: extracted the outer profiling behavior and generic context/contracts into
+  BuildingBlocks, while Matching retains stage/AI decorators. The diagram now labels
+  the shared behavior and Infrastructure concurrency mapping. Added deadline/late-result
+  handling, attempt-limit recovery and disposable PostgreSQL HTTP regression tests.
+  No new service calls, endpoints or schema migration are introduced.
 
 - 2026-11-05: the Dockerfile runtime stage runs `apt-get upgrade` so the image includes Ubuntu
   security fixes newer than `aspnet:10.0` and passes the CI Trivy image gate. Communication is unchanged.

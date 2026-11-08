@@ -44,7 +44,7 @@ src/
       Listings.slnx    # Runtime scaffolds, NMF Modeling, shared dependencies and model tests
       SmartLost.ListingsService.*/
     Matching/
-      Matching.slnx    # Runtime layers, NMF Modeling, shared dependencies and unit tests
+      Matching.slnx    # Runtime layers, NMF Modeling, shared dependencies and unit/integration tests
       SmartLost.MatchingService.*/
   BuildingBlocks/
     BuildingBlocks.slnx
@@ -53,7 +53,7 @@ tests/
   Auth/                # Auth unit and integration test projects
   BuildingBlocks/      # Shared-library unit test project
   Listings/            # Listings NMF model unit test project
-  Matching/            # Matching model and runtime unit test project
+  Matching/            # Matching model/runtime unit tests and PostgreSQL integration tests
 ```
 
 Future services belong under `src/Services/<Service>/`, with tests under
@@ -64,7 +64,7 @@ Future services belong under `src/Services/<Service>/`, with tests under
 | [Aset.slnx](Aset.slnx) | All backend projects and tests; the main CI entry point |
 | [Auth.slnx](src/Services/Auth/Auth.slnx) | Five Auth runtime projects, NMF Modeling, four BuildingBlocks libraries and the two Auth test projects |
 | [Listings.slnx](src/Services/Listings/Listings.slnx) | Four Listings runtime-layer scaffolds, NMF Modeling, four BuildingBlocks libraries and the Listings unit suite |
-| [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching runtime-layer projects, NMF Modeling, four BuildingBlocks libraries and the Matching unit suite |
+| [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching runtime-layer projects, NMF Modeling, four BuildingBlocks libraries and the Matching unit/integration suites |
 | [BuildingBlocks.slnx](src/BuildingBlocks/BuildingBlocks.slnx) | Four shared libraries and their existing unit test project |
 
 Solutions list the same `.csproj` files directly; they do not nest other solutions
@@ -236,7 +236,7 @@ will be logical references, without foreign keys between service databases.
 | Project | Responsibility |
 | --- | --- |
 | `SmartLost.BuildingBlocks.Core` | Type-aware `Entity<TId>`, `AggregateRoot<TId>`, domain-event contracts, domain `Guard`, immutable `Result`/`Result<T>`, errors, explicit domain exceptions, `PageSlice<T>`/`PagedResult<T>` and pagination defaults; no framework dependencies |
-| `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction behavior, transaction/Outbox contracts and `ICurrentUser` |
+| `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction/profiling behaviors, shared profiling contexts, transaction/Outbox contracts and `ICurrentUser` |
 | `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped HTTP current-user adapter and API registration |
 | `SmartLost.BuildingBlocks.Infrastructure` | Opt-in EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its table and delivery adapter |
 
@@ -570,7 +570,10 @@ dotnet test tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/SmartLost.Bu
 dotnet test tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.ListingsService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
 dotnet test tests/Matching/SmartLost.MatchingService.UnitTests/SmartLost.MatchingService.UnitTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/unit/SmartLost.MatchingService.UnitTests --collect:"XPlat Code Coverage" --settings coverage.runsettings
 dotnet test tests/Auth/SmartLost.AuthService.IntegrationTests/SmartLost.AuthService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.AuthService.IntegrationTests
+dotnet test tests/Matching/SmartLost.MatchingService.IntegrationTests/SmartLost.MatchingService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.MatchingService.IntegrationTests
 ```
+
+Matching now opts into the shared BuildingBlocks profiling behavior (`useProfiling: true`); Auth remains unchanged and profiling defaults off. Stage/AI decorators and AI policies stay in Matching. The [PostgreSQL integration suite](tests/Matching/SmartLost.MatchingService.IntegrationTests/README.md) verifies HTTP 409 for competing xmin claims and durable failure after an exhausted lease. AI deadlines reject late results; real adapters must still cooperate with cancellation to stop underlying work. No database schema changes are required.
 
 Coverlet configuration and the inline coverage/test gates are documented in the
 [CI guide](.github/README.md#local-net-commands).

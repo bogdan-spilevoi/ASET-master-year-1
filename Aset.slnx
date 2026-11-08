@@ -41,5 +41,6 @@
   </Folder>
   <Folder Name="/Tests/Matching/">
     <Project Path="tests/Matching/SmartLost.MatchingService.UnitTests/SmartLost.MatchingService.UnitTests.csproj" />
+    <Project Path="tests/Matching/SmartLost.MatchingService.IntegrationTests/SmartLost.MatchingService.IntegrationTests.csproj" />
   </Folder>
 </Solution>

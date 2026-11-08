@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace SmartLost.MatchingService.Application.Profiling;
+namespace SmartLost.BuildingBlocks.Application.Profiling;
 
 /// <summary>Measurements collected for one Matching request.</summary>
 public sealed class OperationProfile

@@ -1,10 +1,11 @@
 using Microsoft.Extensions.Logging;
+using SmartLost.BuildingBlocks.Application.Profiling;
 
 namespace SmartLost.MatchingService.Application.Profiling;
 
 /// <summary>Measures stages and AI calls of the current Matching operation and enforces the AI call timeout.</summary>
 public sealed class MatchingProfiler(
-    MatchingProfilingOptions options, TimeProvider timeProvider, ILogger<MatchingProfiler> logger)
+    MatchingProfilingOptions options, TimeProvider timeProvider, ILogger<MatchingProfiler> logger) : IProfilingContext
 {
     private const string NoOperation = "(none)";
     private const string NoCorrelation = "-";
@@ -19,17 +20,14 @@ public sealed class MatchingProfiler(
             LogLevel.Warning, new EventId(1304, "MatchingSlowAiCall"),
             "AI call {Call} in {Operation} ({CorrelationId}) took {ElapsedMs:F1} ms, above the {ThresholdMs} ms threshold.");
 
-    private readonly AsyncLocal<OperationProfile?> _current = new();
+    private readonly ProfilingContext _context = new();
 
-    public OperationProfile? Current => _current.Value;
+    public OperationProfile? Current => _context.Current;
 
     /// <summary>Starts a profile that flows to awaited calls; disposing the scope restores the previous profile.</summary>
     public IDisposable Begin(OperationProfile profile)
     {
-        ArgumentNullException.ThrowIfNull(profile);
-        OperationProfile? previous = _current.Value;
-        _current.Value = profile;
-        return new Scope(this, previous);
+        return _context.Begin(profile);
     }
 
     public Task<T> MeasureStageAsync<T>(
@@ -56,7 +54,17 @@ public sealed class MatchingProfiler(
         long started = timeProvider.GetTimestamp();
         try
         {
-            T result = await action(linked.Token);
+            linked.Token.ThrowIfCancellationRequested();
+            Task<T> operation = action(linked.Token);
+            // AI adapters have a response deadline even when cancellation is ignored.
+            // Stages may use a scoped DbContext, so await those to completion.
+            T result = timeout is not null ? await operation.WaitAsync(linked.Token) : await operation;
+            linked.Token.ThrowIfCancellationRequested();
+            if (timeout is TimeSpan deadline && timeProvider.GetElapsedTime(started) >= deadline)
+            {
+                throw new TimeoutException($"{name} exceeded the configured {deadline} timeout.");
+            }
+
             Record(name, kind, started, ProfilingOutcome.Succeeded, countItems?.Invoke(result), exception: null);
             return result;
         }
@@ -87,7 +95,7 @@ public sealed class MatchingProfiler(
     {
         TimeSpan elapsed = timeProvider.GetElapsedTime(started);
         string? exceptionType = exception?.GetType().Name;
-        OperationProfile? profile = _current.Value;
+        OperationProfile? profile = Current;
         profile?.Add(new StageMeasurement(name, kind, elapsed, outcome, itemCount, exceptionType));
         if (kind != StageKind.AiCall)
         {
@@ -107,11 +115,4 @@ public sealed class MatchingProfiler(
         }
     }
 
-    private sealed class Scope(MatchingProfiler profiler, OperationProfile? previous) : IDisposable
-    {
-        public void Dispose()
-        {
-            profiler._current.Value = previous;
-        }
-    }
 }

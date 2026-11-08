@@ -103,16 +103,35 @@ public sealed class EmbeddingPreparationTask : AggregateRoot<Guid>
         };
     }
 
-    public void Claim(Guid leaseId, DateTime nowUtc, TimeSpan leaseDuration)
+    public void Claim(Guid leaseId, DateTime nowUtc, TimeSpan leaseDuration, int maximumAttempts)
     {
         Guard.Against(leaseId == Guid.Empty, MatchingErrors.LeaseIdRequired);
         Guard.Against(leaseDuration <= TimeSpan.Zero, MatchingErrors.InvalidDuration);
+        Guard.Against(maximumAttempts < 1, MatchingErrors.InvalidMaximumAttempts);
         Guard.Against(!IsDue(nowUtc), MatchingErrors.TaskNotDue);
+        Guard.Against(AttemptCount >= maximumAttempts, MatchingErrors.AttemptsExhausted);
         State = EmbeddingPreparationState.Processing;
         AttemptCount++;
         LeaseId = leaseId;
         LeaseExpiresAtUtc = nowUtc + leaseDuration;
         NextAttemptAtUtc = null;
+    }
+
+    /// <summary>Finishes abandoned work when its lease expires after the last permitted attempt.</summary>
+    public bool FailIfAttemptsExhausted(DateTime nowUtc, int maximumAttempts)
+    {
+        EnsureUtc(nowUtc);
+        Guard.Against(maximumAttempts < 1, MatchingErrors.InvalidMaximumAttempts);
+        if (!IsDue(nowUtc) || AttemptCount < maximumAttempts)
+        {
+            return false;
+        }
+
+        State = EmbeddingPreparationState.Failed;
+        LastError = MatchingErrors.AttemptsExhausted.Code;
+        NextAttemptAtUtc = null;
+        ReleaseLease();
+        return true;
     }
 
     public void Complete(Guid leaseId, DateTime nowUtc)

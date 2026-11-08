@@ -1,16 +1,17 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using SmartLost.BuildingBlocks.Application.Profiling;
 using SmartLost.BuildingBlocks.Core.Results;
 
-namespace SmartLost.MatchingService.Application.Profiling;
+namespace SmartLost.BuildingBlocks.Application.Behaviors;
 
 /// <summary>
-/// Outermost Matching pipeline decorator: starts the operation profile, runs the request and logs
+/// Opt-in outermost pipeline decorator: starts the operation profile, runs the request and logs
 /// the total duration, result and stage breakdown recorded by the profiling decorators.
 /// </summary>
 public sealed class ProfilingBehavior<TRequest, TResponse>(
-    MatchingProfiler profiler,
-    MatchingProfilingOptions options,
+    IProfilingContext profiler,
+    ProfilingOptions options,
     TimeProvider timeProvider,
     ILogger<ProfilingBehavior<TRequest, TResponse>> logger) : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
@@ -18,13 +19,13 @@ public sealed class ProfilingBehavior<TRequest, TResponse>(
 {
     private static readonly Action<ILogger, string, string, ProfilingOutcome, double, string, string, Exception?> _logCompleted =
         LoggerMessage.Define<string, string, ProfilingOutcome, double, string, string>(
-            LogLevel.Information, new EventId(1301, "MatchingOperationProfiled"),
-            "Matching operation {Operation} ({CorrelationId}) finished as {Outcome} in {ElapsedMs:F1} ms. Stages: {Stages}. Detail: {Detail}.");
+            LogLevel.Information, new EventId(1301, "OperationProfiled"),
+            "Operation {Operation} ({CorrelationId}) finished as {Outcome} in {ElapsedMs:F1} ms. Stages: {Stages}. Detail: {Detail}.");
 
     private static readonly Action<ILogger, string, string, double, double, ProfilingOutcome, string, Exception?> _logSlow =
         LoggerMessage.Define<string, string, double, double, ProfilingOutcome, string>(
-            LogLevel.Warning, new EventId(1302, "MatchingSlowOperation"),
-            "Matching operation {Operation} ({CorrelationId}) took {ElapsedMs:F1} ms, above the {ThresholdMs} ms threshold, " +
+            LogLevel.Warning, new EventId(1302, "SlowOperation"),
+            "Operation {Operation} ({CorrelationId}) took {ElapsedMs:F1} ms, above the {ThresholdMs} ms threshold, " +
             "and finished as {Outcome}. Stages: {Stages}.");
 
     public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)

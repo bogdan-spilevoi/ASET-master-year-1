@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace SmartLost.MatchingService.Application.Profiling;
+namespace SmartLost.BuildingBlocks.Application.Profiling;
 
 public static class CorrelationIds
 {

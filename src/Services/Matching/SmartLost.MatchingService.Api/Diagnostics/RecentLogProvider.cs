@@ -7,11 +7,13 @@ namespace SmartLost.MatchingService.Api.Diagnostics;
 public sealed class RecentLogProvider(RecentLogBuffer buffer, TimeProvider timeProvider) : ILoggerProvider
 {
     public const string CategoryPrefix = "SmartLost.MatchingService";
+    public const string SharedProfilingCategoryPrefix = "SmartLost.BuildingBlocks.Application.Behaviors.ProfilingBehavior";
 
     public ILogger CreateLogger(string categoryName)
     {
         ArgumentNullException.ThrowIfNull(categoryName);
-        return categoryName.StartsWith(CategoryPrefix, StringComparison.Ordinal)
+        return categoryName.StartsWith(CategoryPrefix, StringComparison.Ordinal) ||
+            categoryName.StartsWith(SharedProfilingCategoryPrefix, StringComparison.Ordinal)
             ? new BufferLogger(buffer, timeProvider, categoryName)
             : Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
     }

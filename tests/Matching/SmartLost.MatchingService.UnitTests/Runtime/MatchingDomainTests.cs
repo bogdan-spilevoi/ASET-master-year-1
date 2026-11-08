@@ -119,7 +119,7 @@ public sealed class MatchingDomainTests
         Assert.True(task.IsDue(_now));
         var lease = Guid.NewGuid();
 
-        task.Claim(lease, _now, TimeSpan.FromMinutes(5));
+        task.Claim(lease, _now, TimeSpan.FromMinutes(5), 5);
         Assert.Equal(EmbeddingPreparationState.Processing, task.State);
         Assert.Equal(1, task.AttemptCount);
         Assert.Equal(lease, task.LeaseId);
@@ -140,7 +140,7 @@ public sealed class MatchingDomainTests
     {
         EmbeddingPreparationTask task = NewTask();
         var first = Guid.NewGuid();
-        task.Claim(first, _now, TimeSpan.FromMinutes(5));
+        task.Claim(first, _now, TimeSpan.FromMinutes(5), 5);
         task.Fail(first, "matching.inference_timed_out", _now.AddMinutes(1), TimeSpan.FromMinutes(2), 2);
 
         Assert.Equal(EmbeddingPreparationState.Pending, task.State);
@@ -148,10 +148,10 @@ public sealed class MatchingDomainTests
         Assert.Equal(_now.AddMinutes(3), task.NextAttemptAtUtc);
         Assert.False(task.IsDue(_now.AddMinutes(2)));
         Assert.Equal(MatchingErrors.TaskNotDue,
-            Assert.Throws<DomainException>(() => task.Claim(Guid.NewGuid(), _now.AddMinutes(2), TimeSpan.FromMinutes(5))).Error);
+            Assert.Throws<DomainException>(() => task.Claim(Guid.NewGuid(), _now.AddMinutes(2), TimeSpan.FromMinutes(5), 5)).Error);
 
         var second = Guid.NewGuid();
-        task.Claim(second, _now.AddMinutes(3), TimeSpan.FromMinutes(5));
+        task.Claim(second, _now.AddMinutes(3), TimeSpan.FromMinutes(5), 5);
         task.Fail(second, "matching.inference_unavailable", _now.AddMinutes(4), TimeSpan.FromMinutes(2), 2);
         Assert.Equal(EmbeddingPreparationState.Failed, task.State);
         Assert.Equal(2, task.AttemptCount);
@@ -163,11 +163,11 @@ public sealed class MatchingDomainTests
     {
         EmbeddingPreparationTask task = NewTask();
         var stale = Guid.NewGuid();
-        task.Claim(stale, _now, TimeSpan.FromMinutes(1));
+        task.Claim(stale, _now, TimeSpan.FromMinutes(1), 5);
         Assert.True(task.IsDue(_now.AddMinutes(2)));
         Assert.Throws<DomainException>(() => task.Complete(stale, _now.AddMinutes(2)));
 
-        task.Claim(Guid.NewGuid(), _now.AddMinutes(2), TimeSpan.FromMinutes(1));
+        task.Claim(Guid.NewGuid(), _now.AddMinutes(2), TimeSpan.FromMinutes(1), 5);
         Assert.Equal(2, task.AttemptCount);
         task.MarkObsolete();
         Assert.Equal(EmbeddingPreparationState.Obsolete, task.State);
@@ -185,10 +185,10 @@ public sealed class MatchingDomainTests
             EmbeddingPreparationTask.Create(Guid.NewGuid(), photo, _version, DateTime.SpecifyKind(_now, DateTimeKind.Local))).Error);
 
         EmbeddingPreparationTask task = NewTask();
-        Assert.Throws<DomainException>(() => task.Claim(Guid.Empty, _now, TimeSpan.FromMinutes(1)));
-        Assert.Throws<DomainException>(() => task.Claim(Guid.NewGuid(), _now, TimeSpan.Zero));
+        Assert.Throws<DomainException>(() => task.Claim(Guid.Empty, _now, TimeSpan.FromMinutes(1), 5));
+        Assert.Throws<DomainException>(() => task.Claim(Guid.NewGuid(), _now, TimeSpan.Zero, 5));
         var lease = Guid.NewGuid();
-        task.Claim(lease, _now, TimeSpan.FromMinutes(1));
+        task.Claim(lease, _now, TimeSpan.FromMinutes(1), 5);
         Assert.Throws<DomainException>(() => task.Fail(lease, " ", _now, TimeSpan.FromMinutes(1), 1));
         Assert.Throws<DomainException>(() => task.Fail(lease, "code", _now, TimeSpan.Zero, 1));
         Assert.Throws<DomainException>(() => task.Fail(lease, "code", _now, TimeSpan.FromMinutes(1), 0));

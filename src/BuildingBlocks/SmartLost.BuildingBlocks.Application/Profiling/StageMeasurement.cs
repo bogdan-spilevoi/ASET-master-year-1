@@ -1,4 +1,4 @@
-namespace SmartLost.MatchingService.Application.Profiling;
+namespace SmartLost.BuildingBlocks.Application.Profiling;
 
 /// <summary>One measured stage; ExceptionType contains only the exception type name, never its message.</summary>
 public sealed record StageMeasurement(

@@ -1,4 +1,4 @@
-namespace SmartLost.MatchingService.Application.Profiling;
+namespace SmartLost.BuildingBlocks.Application.Profiling;
 
 public enum ProfilingOutcome
 {

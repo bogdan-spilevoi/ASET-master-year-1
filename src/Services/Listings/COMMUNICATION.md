@@ -98,3 +98,5 @@ are unimplemented. The model tests do not establish any of these integrations.
 - 2026-11-05: root `docker-compose.yml` gained the separate `matching-db` and
   `matching-service` services for Matching. Listings still has no Compose service or runtime
   code, and no Listings-to-Matching call is implemented; all diagrams here remain accurate.
+
+- 2026-11-08: reviewed shared opt-in profiling extraction into BuildingBlocks. Listings remains a runtime scaffold and does not enable profiling; no runtime communication or model-test arrows change.

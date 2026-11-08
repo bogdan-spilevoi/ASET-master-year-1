@@ -127,3 +127,5 @@ No cloud schedule or receiver is configured by the repository examples.
   so the image includes Ubuntu security fixes newer than `aspnet:10.0` (CVE-2026-109518 in
   `apt` failed the CI Trivy image gate). This is a container build change only; Auth code,
   settings, ports and all flows are unchanged.
+
+- 2026-11-08: reviewed shared opt-in profiling extraction into BuildingBlocks. Auth does not enable profiling, so JWT, validation, persistence, Outbox delivery and all numbered communication arrows are unchanged.

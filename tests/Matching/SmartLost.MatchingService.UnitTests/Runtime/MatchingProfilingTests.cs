@@ -2,6 +2,8 @@ using System.Diagnostics;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using SmartLost.BuildingBlocks.Application.Behaviors;
+using SmartLost.BuildingBlocks.Application.Profiling;
 using SmartLost.BuildingBlocks.Application.Transactions;
 using SmartLost.BuildingBlocks.Core.Results;
 using SmartLost.MatchingService.Application;

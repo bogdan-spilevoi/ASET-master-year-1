@@ -1,7 +1,7 @@
-using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SmartLost.BuildingBlocks.Application;
+using SmartLost.BuildingBlocks.Application.Profiling;
 using SmartLost.MatchingService.Application.Interfaces;
 using SmartLost.MatchingService.Application.Profiling;
 using SmartLost.MatchingService.Application.Profiling.Decorators;
@@ -31,10 +31,7 @@ public static class DependencyInjection
         services.AddSingleton(matching);
         services.AddSingleton(ranking);
         services.AddSingleton<MatchingProfiler>();
-
-        // Registered before the BuildingBlocks behaviors, so profiling is the outermost pipeline decorator
-        // and also measures validation and mapped domain failures.
-        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ProfilingBehavior<,>));
+        services.AddSingleton<IProfilingContext>(provider => provider.GetRequiredService<MatchingProfiler>());
 
         services.AddScoped<CandidateSelector>();
         services.AddScoped<ICandidateSelector>(provider => new ProfiledCandidateSelector(
@@ -43,7 +40,8 @@ public static class DependencyInjection
         services.AddScoped<IRelevanceRanker>(provider => new ProfiledRelevanceRanker(
             provider.GetRequiredService<RelevanceRanker>(), provider.GetRequiredService<MatchingProfiler>()));
 
-        return services.AddBuildingBlocksApplication(typeof(DependencyInjection).Assembly);
+        return services.AddBuildingBlocksApplication(typeof(DependencyInjection).Assembly,
+            useProfiling: true, profilingOptions: profiling);
     }
 
     /// <summary>

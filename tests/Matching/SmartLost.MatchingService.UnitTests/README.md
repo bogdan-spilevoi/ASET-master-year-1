@@ -21,6 +21,13 @@ The suite covers the NMF model and the runtime Matching code. Runtime tests live
 No network, real database, AI runtime or Docker is used. Key sets are stored as PostgreSQL
 `text[]` in production and as a delimited string on the InMemory provider.
 
+MatchingRegressionTests covers ignored AI cancellation/late results, deadline classification,
+caller cancellation, exhausted expired leases, domain attempt guards and the Infrastructure
+concurrency-to-domain mapping. Shared profiling registration and concurrent/nested context
+isolation are tested in BuildingBlocks. The
+[PostgreSQL integration suite](../SmartLost.MatchingService.IntegrationTests/README.md)
+additionally checks actual xmin claim races through HTTP and durable terminal states.
+
 ## NMF model tests
 
 The SearchListing model includes nullable CurrentPhotoId/CurrentPhotoRevision. Tests

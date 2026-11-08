@@ -48,9 +48,15 @@ public sealed class PrepareImageEmbeddingCommandHandler(
             return Result<EmbeddingPreparationState>.Failure(MatchingErrors.TaskNotDue);
         }
 
+        if (task.FailIfAttemptsExhausted(UtcNow(), options.MaximumAttempts))
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result<EmbeddingPreparationState>.Success(task.State);
+        }
+
         // Commit the claim before inference so competing workers observe the lease.
         var leaseId = Guid.NewGuid();
-        task.Claim(leaseId, UtcNow(), options.LeaseDuration);
+        task.Claim(leaseId, UtcNow(), options.LeaseDuration, options.MaximumAttempts);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         PhotoContent? photo = await photos.ReadAsync(task.ListingId, task.Photo, cancellationToken);

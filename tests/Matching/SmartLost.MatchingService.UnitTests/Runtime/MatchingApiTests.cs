@@ -145,7 +145,10 @@ public sealed class MatchingApiTests
         Assert.Equal(1301, latest.EventId);
         Assert.Equal("Information", latest.Level);
         Assert.Contains("GetMatchSuggestionsQuery (api-test)", latest.Message, StringComparison.Ordinal);
-        Assert.All(entries, entry => Assert.StartsWith(RecentLogProvider.CategoryPrefix, entry.Category, StringComparison.Ordinal));
+        Assert.All(entries, entry => Assert.True(
+            entry.Category.StartsWith(RecentLogProvider.CategoryPrefix, StringComparison.Ordinal) ||
+            entry.Category.StartsWith(RecentLogProvider.SharedProfilingCategoryPrefix, StringComparison.Ordinal)));
+        Assert.Contains(entries, entry => entry.Category.StartsWith(RecentLogProvider.SharedProfilingCategoryPrefix, StringComparison.Ordinal));
 
         Assert.Single((await client.GetFromJsonAsync<RecentLogEntry[]>("/api/matching/demo/logs?count=1", _json))!);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/matching/demo/logs?count=0")).StatusCode);

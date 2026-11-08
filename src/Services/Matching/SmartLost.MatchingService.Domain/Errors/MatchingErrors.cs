@@ -65,6 +65,12 @@ public static class MatchingErrors
     public static readonly Error TaskNotDue = new(
         "matching.task_not_due", "The embedding preparation task is not due for processing.", ErrorKind.Conflict);
 
+    public static readonly Error AttemptsExhausted = new(
+        "matching.attempts_exhausted", "The embedding preparation task has reached its attempt limit.", ErrorKind.Conflict);
+
+    public static readonly Error ConcurrentUpdate = new(
+        "matching.concurrent_update", "Matching data changed during the operation. Reload before retrying.", ErrorKind.Conflict);
+
     public static readonly Error LeaseNotOwned = new(
         "matching.lease_not_owned", "The embedding preparation task is not held by this lease.", ErrorKind.Conflict);
 

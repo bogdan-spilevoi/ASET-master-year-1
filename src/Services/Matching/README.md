@@ -14,7 +14,7 @@ in its review notes. CI checks document changes; reviewers check diagram accurac
 | Layer | Implemented |
 | --- | --- |
 | Domain | `Entities/`: `SearchListing`, `ImageEmbedding` (finite L2-normalized vectors, cosine similarity only for compatible versions), `EmbeddingPreparationTask` (lease, retry, Failed/Obsolete transitions). `ValueObjects/`: `PhotoReference`, `EmbeddingVersion`. `Enums/`: `ListingType`, `EmbeddingPreparationState`. `Suggestions/`: `CandidatePolicy`, `RelevanceScorer`, `RankingPolicy`, `MatchSuggestion`. `Errors/`: `MatchingErrors` |
-| Application | Same layout as Auth. `Commands/PrepareImageEmbedding/` and `Queries/GetMatchSuggestions/`, `Queries/AnalyzeListingPhoto/` each hold their request, handler and validator. `Contracts/` holds responses and AI data; `Interfaces/` holds repository, photo, AI, selector and ranker ports; `Services/` holds `CandidateSelector`, `RelevanceRanker` and `MatchingOptions`; `Exceptions/` holds `AiInferenceException`; `Profiling/` holds `ProfilingBehavior`, `MatchingProfiler` and the decorators |
+| Application | Same layout as Auth. `Commands/PrepareImageEmbedding/` and `Queries/GetMatchSuggestions/`, `Queries/AnalyzeListingPhoto/` each hold their request, handler and validator. `Contracts/` holds responses and AI data; `Interfaces/` holds repository, photo, AI, selector and ranker ports; `Services/` holds `CandidateSelector`, `RelevanceRanker` and `MatchingOptions`; `Exceptions/` holds `AiInferenceException`; `Profiling/` holds `MatchingProfiler`, AI options, stage names and the decorators; the common behavior lives in BuildingBlocks |
 | Infrastructure | `MatchingDbContext` (EF Core/Npgsql) with the `InitialCreate` migration, three repositories and `MatchingUnitOfWork`. **Mock** Listings photo reader and mock DINOv3/Qwen adapters (`Mock/`), plus the development `MatchingDemoSeeder` (`Demo/`) |
 | Api | ASP.NET Core entry point, development-only test endpoints, OpenAPI/Swagger in Development, Dockerfile |
 
@@ -40,7 +40,7 @@ baseline, not validated values.
 
 ## Profiling and debugging
 
-`AddApplication()` registers `ProfilingBehavior<,>` before the BuildingBlocks behaviors.
+`AddApplication()` opts into the reusable BuildingBlocks `ProfilingBehavior<,>`.
 This makes it the outermost pipeline decorator, so it also covers validation failures and
 mapped domain errors. For each request it logs the following. No handler contains
 measurement code.
@@ -58,13 +58,25 @@ measurement code.
 
 The code defaults are 2 s, 30 s and 2 min. The example settings use 2 s, 2 s and 5 s
 (`Matching:Profiling`), so the demo's slow and timeout scenarios finish quickly.
+The common behavior, profile/context models, correlation-ID handling and slow-operation
+options live in [BuildingBlocks.Application](../../BuildingBlocks/SmartLost.BuildingBlocks.Application/README.md).
+Matching retains stage names, decorators and AI-specific thresholds/timeouts. Its
+MatchingProfilingOptions extends the shared ProfilingOptions. The recent-log provider
+accepts both Matching categories and the shared profiling behavior category.
+
+AI deadlines request adapter cancellation and stop awaiting an uncooperative asynchronous
+adapter; late results are discarded and recorded as TimedOut. A synchronous late result
+is rejected after returning. Cancellation cannot forcibly abort synchronous code or a
+remote AI process; real adapters must honor the token. Non-AI stages remain awaited to
+completion to preserve scoped database lifetimes.
+
 Logs contain error codes and exception type names only. They never contain exception
 messages, photo bytes or model output.
 
 Example summary from the Compose container:
 
 ```text
-Matching operation GetMatchSuggestionsQuery (live-ranked) finished as Succeeded in 37.3 ms. Stages: CandidateSelection=7.4ms/Succeeded/items=3; RelevanceRanking=25.5ms/Succeeded/items=3. Detail: none.
+Operation GetMatchSuggestionsQuery (live-ranked) finished as Succeeded in 37.3 ms. Stages: CandidateSelection=7.4ms/Succeeded/items=3; RelevanceRanking=25.5ms/Succeeded/items=3. Detail: none.
 ```
 
 ## Projects and dependency direction
@@ -178,8 +190,24 @@ dotnet test tests/Matching/SmartLost.MatchingService.UnitTests/SmartLost.Matchin
 
 The [unit suite](../../../tests/Matching/SmartLost.MatchingService.UnitTests/README.md) covers the NMF
 model, Domain, Application, Infrastructure (EF InMemory, migration model) and the HTTP
-endpoints through `WebApplicationFactory`. It needs no database or Docker. There is no
-Matching integration test project against real PostgreSQL yet.
+endpoints through `WebApplicationFactory`. It needs no database or Docker. The
+[integration suite](../../../tests/Matching/SmartLost.MatchingService.IntegrationTests/README.md)
+uses disposable PostgreSQL 16 to verify concurrent claims through HTTP and persisted
+attempt-limit recovery. Both suites are included in Matching.slnx and the root solution.
+
+Infrastructure translates EF concurrency failures to `matching.concurrent_update`
+(HTTP 409) without adding EF dependencies to Application. Before another claim, expired
+work at MaximumAttempts becomes Failed with `matching.attempts_exhausted`; active leases
+remain protected. No schema migration is needed for these behavior changes.
+
+## Local verification
+
+On 2026-11-08, locked restore with NuGet audit, Release build with warnings as errors,
+info-severity format verification, 248 solution unit tests and 18 integration tests passed.
+The two new Matching PostgreSQL tests verify concurrent HTTP 200/409 outcomes and durable
+failure after an exhausted expired lease. Merged unit Coverlet reports measured 94.78%
+overall and 100% of executable lines changed by this fix. Solution/lock inventory and
+relative documentation links were checked. These are local checks, not a hosted CI run.
 
 ## Design references
 

@@ -1,6 +1,6 @@
 using MediatR;
+using SmartLost.BuildingBlocks.Application.Profiling;
 using SmartLost.BuildingBlocks.Core.Results;
-using SmartLost.MatchingService.Application.Profiling;
 using SmartLost.MatchingService.Domain.Enums;
 
 namespace SmartLost.MatchingService.Application.Commands.PrepareImageEmbedding;
