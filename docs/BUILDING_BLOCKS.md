@@ -18,7 +18,7 @@ root solution to validate consumers together with the shared libraries.
 | Library | Contents | Dependencies |
 | --- | --- | --- |
 | [Core](../src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | `Entity<TId>`, `AggregateRoot<TId>`, `IDomainEvent`, `IHasDomainEvents`, `Guard`, `Result`, `Result<T>`, `IResult`, `Error`, `ErrorKind`, `DomainException`, `PageSlice<T>`, `PagedResult<T>`, `PagedDataGuard` | .NET only |
-| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/) | Validation/exception/optional transaction behaviors, transaction and Outbox contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
+| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/README.md) | Validation/exception/optional transaction, authorization and profiling behaviors, isolated profiling contexts and measurements, transaction and Outbox contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
 | [AspNetCore](../src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/) | `ToActionResult`, `ProblemDetails`, unexpected-exception handler, `HttpCurrentUser`, API registration | Application/Core, ASP.NET Core framework |
 | [Infrastructure](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/) | EF Outbox model/configuration, writer, leased batch processor and registration | Application, EF Core Relational 10.0.12 |
 
@@ -161,6 +161,12 @@ and finite worker host; Azure scale-to-zero consumers still require an external 
 service's Application assembly and registers `ExceptionToResult → Validation → Handler`.
 AuthService wraps this through its `AddApplication()` extension.
 
+Authorization is opt-in: pass `useAuthorization: true` to add
+`AuthorizationBehavior<TRequest,TResponse>` after exception mapping and before validation.
+Mark a command or query with `[Authorize]` to require an authenticated `ICurrentUser`, or with
+`[Authorize("claimType", "claimValue")]` to require an exact claim. The behavior returns
+401 for anonymous callers and 403 for a missing required claim; unattributed requests bypass it.
+
 - Validation calls `ValidateAsync` sequentially because validators may share scoped
   dependencies. Invalid commands return deduplicated field errors without invoking handlers.
 - Exception mapping catches only `DomainException`, which carries an explicit `Error`.
@@ -288,8 +294,9 @@ reads the first authenticated `ClaimsIdentity` in `HttpContext.User`. It never d
 an Authorization header or validates a JWT itself. The host must configure authentication,
 call `UseAuthentication()` before authorization/endpoints and protect restricted endpoints
 with `[Authorize]` or a policy. Auth already has authentication middleware and calls
-`AddBuildingBlocksApi()`, so the adapter is registered there. Its public auth routes do not
-require an access token, and no new endpoint is introduced.
+`AddBuildingBlocksApi()`, so the adapter is registered there. Its register/login/refresh routes
+remain public; `/api/auth/me` requires a bearer token and sends the `[Authorize]`
+`GetCurrentUserQuery` through the Application behavior.
 
 | Member | Source / behavior |
 | --- | --- |
@@ -375,3 +382,12 @@ counted twice. The strictly-above-80% overall and changed-code gates remain unch
 
 See the [root README](../README.md) for all build/test/container commands and
 [AuthService](AUTHSERVICE.md) for the consuming service.
+
+## Combined pipeline registration
+
+The independent `useProfiling`, `useAuthorization` and `useCaching` switches can be
+combined. Their order is Profiling -> ExceptionToResult -> Authorization -> Validation
+-> Caching -> optional Transaction -> Handler. Authorization and validation therefore
+run before a cached result can be returned. Profiling remains outermost and records
+short-circuited operations too. Current service opt-ins are Auth authorization, Listings
+category caching and Matching profiling; extending them to other use cases is separate work.

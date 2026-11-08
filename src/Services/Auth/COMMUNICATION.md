@@ -39,6 +39,29 @@ token history and `auth.user.created` message commit together. Login creates a s
 but exports no session event. Failures short-circuit the successful path above.
 The JWT is generated before saving but returned only after the save succeeds.
 
+## Current user identity
+
+```mermaid
+flowchart LR
+    Client["HTTP client with Bearer JWT"]
+    Middleware["JWT authentication + endpoint [Authorize]"]
+    API["AuthController"]
+    Pipeline["MediatR AuthorizationBehavior"]
+    Query["[Authorize] GetCurrentUserQuery"]
+    User["ICurrentUser / HttpCurrentUser"]
+
+    Client -->|"1. GET /api/auth/me"| Middleware
+    Middleware -->|"1.1 Validate JWT and allow endpoint"| API
+    API -->|"1.2 Dispatch query"| Pipeline
+    Pipeline -->|"1.3 Require authenticated ICurrentUser"| Query
+    Query -->|"1.4 Read identity claims"| User
+    API -->|"1.5 Return CurrentUserResponse"| Client
+```
+
+The HTTP attribute rejects unauthenticated requests before the action executes. The Application
+attribute separately protects direct MediatR dispatches; register, login and refresh requests
+have no Application authorization attribute and remain public.
+
 ## Refresh and replay handling
 
 ```mermaid
@@ -108,11 +131,17 @@ No cloud schedule or receiver is configured by the repository examples.
 
 - [Controller](SmartLost.AuthService.Api/Controllers/AuthController.cs) and [API composition](SmartLost.AuthService.Api/Program.cs)
 - [Register](SmartLost.AuthService.Application/Commands/Register/RegisterUserCommandHandler.cs), [login](SmartLost.AuthService.Application/Commands/Login/LoginUserCommandHandler.cs) and [refresh](SmartLost.AuthService.Application/Commands/Refresh/RefreshTokenCommandHandler.cs) handlers
+- [Current-user query and handler](SmartLost.AuthService.Application/Queries/GetCurrentUser/GetCurrentUserQueryHandler.cs) and [shared authorization behavior](../../BuildingBlocks/SmartLost.BuildingBlocks.Application/Behaviors/AuthorizationBehavior.cs)
 - [Session service](SmartLost.AuthService.Infrastructure/Authentication/AuthenticationSessionService.cs) and [AuthDbContext](SmartLost.AuthService.Infrastructure/Persistence/AuthDbContext.cs)
 - [Event mapper](SmartLost.AuthService.Infrastructure/Outbox/AuthOutboxEventMapper.cs), [HTTP publisher](SmartLost.AuthService.Infrastructure/Outbox/AuthOutboxHttpPublisher.cs) and [shared processor](../../BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/Outbox/OutboxProcessor.cs)
 - [Worker operation and receiver contract](SmartLost.AuthService.Worker/README.md)
 
 ## Review notes
+
+- 2026-11-08: integrated main's authorization/profiling with Listings caching in the shared
+  registration. Auth still enables only authorization; registration/login/refresh remain
+  public and /me retains both HTTP and Application protection. Its API, persistence and
+  Outbox arrows are unchanged. Existing patched Auth images are retained.
 
 - 2026-11-08: reviewed the shared Listings contracts project and CI inventory/coverage
   handling. Auth does not reference it; API, database, worker and Outbox arrows remain
@@ -135,3 +164,16 @@ No cloud schedule or receiver is configured by the repository examples.
 - 2026-10-22: Added a separate NMF structural-model project for Auth entities. It has no
   runtime references from the API, application, domain, infrastructure or worker layers, and
   does not add persistence, messages, workers or outgoing calls; all numbered flows remain unchanged.
+- 2026-11-05: root `docker-compose.yml` gained the separate `matching-db` (host port 5433,
+  volume `matching-db-data`) and `matching-service` (host port 8081) services. Auth services,
+  ports, settings, database and flows are unchanged; Auth has no connection to Matching.
+- 2026-11-05: the API and worker Dockerfiles now run `apt-get upgrade` in the runtime stage,
+  so the image includes Ubuntu security fixes newer than `aspnet:10.0` (CVE-2026-109518 in
+  `apt` failed the CI Trivy image gate). This is a container build change only; Auth code,
+  settings, ports and all flows are unchanged.
+
+- 2026-11-08: reviewed shared opt-in profiling extraction into BuildingBlocks. Auth does not enable profiling, so JWT, validation, persistence, Outbox delivery and all numbered communication arrows are unchanged.
+- 2026-11-08: removed the previous cross-cutting prototype and its persistence/inspection route.
+  Added the opt-in attribute-based AuthorizationBehavior and `/api/auth/me`. Endpoint and
+  Application attributes admit the same bearer-authenticated caller; this adds no persistence,
+  outgoing call, worker or message interaction.

@@ -1,21 +1,49 @@
-# BuildingBlocks Application
+# Shared Application building blocks
 
-Reusable .NET 10 MediatR/FluentValidation application components. Depends on Core and
-application libraries; it contains no EF, ASP.NET controller or memory-cache implementation.
+This library owns reusable MediatR exception, validation, optional transaction,
+authorization, caching and profiling behaviors, plus framework-independent application contracts.
+It depends on Core, MediatR, FluentValidation and DI/logging abstractions; it never
+references a service, EF Core or ASP.NET Core.
 
-- Sequential validation, explicit DomainException-to-Result mapping and opt-in transactions.
-- Pagination request/validator contracts.
-- Current-user, unit-of-work and Outbox application contracts.
-- CacheableQueryAttribute, typed/parameterized key construction, IQueryCache and opt-in
-  CachingBehavior for immutable successful query results.
+## Profiling opt-in
 
-`AddBuildingBlocksApplication(serviceAssembly)` scans handlers/validators and registers
-ExceptionToResult → Validation → Handler. `useCaching: true` inserts CachingBehavior
-after validation; `useTransactions: true` inserts TransactionBehavior after it. Services
-supply backend/transaction registrations. Defaults stay disabled. Cache attributes belong
-only on public read-only queries with identity-complete keys and immutable snapshots.
+`AddBuildingBlocksApplication(assembly, useProfiling: true, profilingOptions: options)`
+registers the outermost `ProfilingBehavior`, a TimeProvider, options and a default
+singleton `IProfilingContext`. `useAuthorization` independently enables the request-attribute
+behavior. With all options enabled the order is:
 
-Listings opts into caching only for GetCategoriesQuery. Auth has not opted in; Matching
-remains a runtime scaffold. See [query caching and AOP](../../../docs/QUERY_CACHING.md),
-[BuildingBlocks conventions](../../../docs/BUILDING_BLOCKS.md) and
-[Infrastructure adapters](../SmartLost.BuildingBlocks.Infrastructure/README.md).
+```text
+Profiling -> ExceptionToResult -> Authorization -> Validation -> optional Caching -> optional Transaction -> Handler
+```
+
+The default is off. `ProfilingOptions` controls the slow-operation threshold.
+`ICorrelatedRequest`, correlation-ID sanitization, `OperationProfile`, stage measurements
+and outcomes are shared contracts. `ProfilingContext` keeps profiles isolated between
+asynchronous flows and restores nested scopes. A service may supply its own context
+implementation before registration; Matching uses its profiler through this interface.
+
+Events 1301 (`OperationProfiled`) and 1302 (`SlowOperation`) record total duration,
+outcome, sanitized correlation ID, stage descriptions, error codes and exception type
+names. The behavior does not persist to a database or log request payloads/model output.
+Service-specific stage names, AI adapters, timeout policy and log presentation stay in
+the service. See [Matching](../../Services/Matching/README.md#profiling-and-debugging)
+and the [shared-library guide](../../../docs/BUILDING_BLOCKS.md).
+
+## Authorization
+
+`[Authorize]` marks a MediatR request as requiring an authenticated `ICurrentUser`.
+`[Authorize("claimType", "claimValue")]` additionally requires one exact claim. The
+`AuthorizationBehavior` returns 401/403 result errors before validation or handlers run.
+Unattributed MediatR requests remain public. HTTP endpoints still need ASP.NET Core
+`[Authorize]` or a policy where endpoint admission must be protected.
+
+## Query caching and combined registration
+
+`useCaching: true` inserts `CachingBehavior` after authorization and validation; the host
+registers `IQueryCache` through BuildingBlocks.Infrastructure. Listings caches only its
+public GetCategoriesQuery. Matching enables profiling, while Auth enables authorization.
+These are independent options and can be combined without changing service-specific handlers.
+A combined DI regression test verifies the order, 401 before cached results, validation
+before hits, single population and profiling scope cleanup. Public cache opt-in still
+requires immutable snapshots and identity-complete keys for identity-dependent queries.
+See [query caching and AOP](../../../docs/QUERY_CACHING.md).

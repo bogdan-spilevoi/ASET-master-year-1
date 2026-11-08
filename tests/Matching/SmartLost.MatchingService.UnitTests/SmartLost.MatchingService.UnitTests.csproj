@@ -5,6 +5,12 @@
   <ItemGroup>
     <ProjectReference Include="../../../src/Contracts/SmartLost.Contracts.Listings/SmartLost.Contracts.Listings.csproj" />
     <ProjectReference Include="../../../src/Services/Matching/SmartLost.MatchingService.Modeling/SmartLost.MatchingService.Modeling.csproj" />
+    <ProjectReference Include="../../../src/Services/Matching/SmartLost.MatchingService.Api/SmartLost.MatchingService.Api.csproj" />
+    <ProjectReference Include="../../../src/Services/Matching/SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj" />
+    <ProjectReference Include="../../../src/Services/Matching/SmartLost.MatchingService.Domain/SmartLost.MatchingService.Domain.csproj" />
+    <ProjectReference Include="../../../src/Services/Matching/SmartLost.MatchingService.Infrastructure/SmartLost.MatchingService.Infrastructure.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.12" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
     <PackageReference Include="coverlet.collector" Version="10.1.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -15,5 +21,8 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 </Project>

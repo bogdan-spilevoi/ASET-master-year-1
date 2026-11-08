@@ -276,6 +276,12 @@ snapshot delivery, inference calls and workers are not implemented in Listings.
 
 ## Review notes
 
+- 2026-11-08: integrated main's Matching runtime and Auth authorization without losing
+  the Listings cache path. Shared registration now supports profiling, authorization and
+  caching together; Listings still enables only caching. Matching's separate host database
+  port is now 5434, leaving Listings on 5433. Current HTTP/cache/EF/seed arrows are unchanged;
+  there are still no real Listings-to-Matching calls.
+
 - 2026-11-08: runtime entities, DTOs, filters and JSON enum conversion now use
   `SmartLost.Contracts.Listings.ListingType` instead of a local Domain enum. Stable
   Lost/Found values, database mapping and HTTP representation are unchanged. Existing

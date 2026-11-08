@@ -11,6 +11,7 @@ Content-Type: application/json
 
 ###
 
+# @name login
 POST {{SmartLost.AuthService.Api_HostAddress}}/api/auth/login
 Content-Type: application/json
 
@@ -18,6 +19,13 @@ Content-Type: application/json
   "email": "alex.popescu@example.com",
   "password": "P@ssw0rd123!"
 }
+
+###
+
+@authToken = {{login.response.body.accessToken}}
+
+GET {{SmartLost.AuthService.Api_HostAddress}}/api/auth/me
+Authorization: Bearer {{authToken}}
 
 ###
 

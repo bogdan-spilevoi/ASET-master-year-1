@@ -1,10 +1,14 @@
 using FluentValidation;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using SmartLost.BuildingBlocks.Application;
+using SmartLost.BuildingBlocks.Application.Authorization;
 using SmartLost.BuildingBlocks.Application.Behaviors;
 using SmartLost.BuildingBlocks.Application.Caching;
+using SmartLost.BuildingBlocks.Application.Profiling;
+using SmartLost.BuildingBlocks.AspNetCore;
 using SmartLost.BuildingBlocks.Core.Results;
 using SmartLost.BuildingBlocks.Infrastructure;
 using SmartLost.BuildingBlocks.Infrastructure.Caching;
@@ -205,6 +209,57 @@ public sealed class QueryCachingTests
     }
 
     [Fact]
+    public async Task CombinedPipelineAuthorizesBeforeValidationAndCachedResultsAndKeepsProfiling()
+    {
+        ServiceCollection services = new();
+        services.AddLogging();
+        services.AddBuildingBlocksApi();
+        services.AddBuildingBlocksApplication(typeof(QueryCachingTests).Assembly,
+            useAuthorization: true, useProfiling: true, useCaching: true);
+        services.AddBuildingBlocksQueryCache();
+        ProbeState state = new();
+        services.AddSingleton(state);
+        InlineValidator<PipelineQuery> validator = [];
+        validator.RuleFor(query => query.Name).Must(_ => state.Valid).WithErrorCode("probe.invalid");
+        services.AddSingleton<IValidator<PipelineQuery>>(validator);
+        using ServiceProvider provider = services.BuildServiceProvider();
+        using IServiceScope scope = provider.CreateScope();
+        ISender sender = scope.ServiceProvider.GetRequiredService<ISender>();
+        IHttpContextAccessor accessor = provider.GetRequiredService<IHttpContextAccessor>();
+        var request = new PipelineQuery("combined");
+        Type[] expectedOrder = [typeof(ProfilingBehavior<,>), typeof(ExceptionToResultBehavior<,>),
+            typeof(AuthorizationBehavior<,>), typeof(ValidationBehavior<,>), typeof(CachingBehavior<,>)];
+        Assert.Equal(expectedOrder, scope.ServiceProvider.GetServices<IPipelineBehavior<PipelineQuery, Result<string>>>()
+            .Select(behavior => behavior.GetType().GetGenericTypeDefinition()));
+        try
+        {
+            Result<string> anonymous = await sender.Send(request);
+            Assert.Equal(ErrorKind.Unauthorized, Assert.Single(anonymous.Errors).Kind);
+            Assert.Equal(0, state.Calls);
+
+            accessor.HttpContext = new DefaultHttpContext
+            {
+                User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+                    [new System.Security.Claims.Claim("sub", Guid.NewGuid().ToString())], "test"))
+            };
+            Assert.True((await sender.Send(request)).IsSuccess);
+            Assert.True((await sender.Send(request)).IsSuccess);
+            Assert.Equal(1, state.Calls);
+            state.Valid = false;
+            Assert.Equal("probe.invalid", Assert.Single((await sender.Send(request)).Errors).Code);
+
+            accessor.HttpContext = null;
+            Assert.Equal(ErrorKind.Unauthorized, Assert.Single((await sender.Send(request)).Errors).Kind);
+            Assert.Equal(1, state.Calls);
+            Assert.Null(provider.GetRequiredService<IProfilingContext>().Current);
+        }
+        finally
+        {
+            accessor.HttpContext = null;
+        }
+    }
+
+    [Fact]
     public async Task CacheGuardsRejectInvalidArguments()
     {
         using MemoryQueryCache cache = new(TimeProvider.System);
@@ -227,6 +282,7 @@ public sealed class QueryCachingTests
     private sealed record PlainQuery(string Name);
 
     [CacheableQuery("pipeline-probe")]
+    [Authorize]
     public sealed record PipelineQuery(string Name) : IRequest<Result<string>>;
 
     public sealed class ProbeState
