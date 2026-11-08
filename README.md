@@ -229,7 +229,7 @@ will be logical references, without foreign keys between service databases.
 | Project | Responsibility |
 | --- | --- |
 | `SmartLost.BuildingBlocks.Core` | Type-aware `Entity<TId>`, `AggregateRoot<TId>`, domain-event contracts, domain `Guard`, immutable `Result`/`Result<T>`, errors, explicit domain exceptions, `PageSlice<T>`/`PagedResult<T>` and pagination defaults; no framework dependencies |
-| `SmartLost.BuildingBlocks.Application` | FluentValidation and opt-in security-audit pipeline behaviors, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction behavior, transaction/Outbox contracts and `ICurrentUser` |
+| `SmartLost.BuildingBlocks.Application` | FluentValidation and opt-in security-audit/authorization pipeline behaviors, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction behavior, transaction/Outbox contracts and `ICurrentUser` |
 | `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped current-user and HTTP audit-context adapters, and API registration |
 | `SmartLost.BuildingBlocks.Infrastructure` | Opt-in logging security-audit sink and EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its audit/outbox persistence |
 
@@ -451,7 +451,7 @@ Generate SQL on demand for review; SQL exports do not need to be committed.
 | `POST` | `/api/auth/login` | Authenticates by email and password and creates a token session |
 | `POST` | `/api/auth/refresh` | Rotates a refresh token and returns a new access/refresh pair |
 | `GET` | `/api/auth/me` | Returns the authenticated user's identity; requires a bearer access token |
-| `GET` | `/api/auth/security/audit-logs` | Lists recent audit events; currently does not require authorization |
+| `GET` | `/api/auth/security/audit-logs` | Lists recent audit events; requires a bearer access token |
 
 Login accepts `{ "email": "user@example.com", "password": "your-password" }`.
 Email matching trims whitespace and ignores casing.
@@ -471,8 +471,9 @@ Expiry values use PostgreSQL's microsecond precision consistently in responses a
 See [refresh token behavior and migration scripts](docs/AUTHSERVICE.md#refresh-tokens).
 Refresh-token tests use isolated SQLite databases for rotation, expiry, replay and competing
 updates; they do not apply migrations to the local PostgreSQL database.
-The audit-log endpoint includes usernames/emails, client IPs and user agents; it is currently
-unauthenticated and is intended only for trusted local/demo use until access is restricted.
+The audit-log endpoint includes usernames/emails, client IPs and user agents and requires a
+bearer access token. It has no role/claim policy yet, so restrict access further before exposing
+it beyond a trusted environment.
 Application failures use `application/problem+json` with an error code, trace identifier and
 field errors when applicable (400 validation, 409 duplicate account, 401 invalid credentials).
 Malformed request bodies use ASP.NET validation problems. Unexpected exceptions return a
@@ -558,7 +559,10 @@ methods and invariants. See [mapping setup](docs/AUTHSERVICE.md#object-mapping).
 Use PascalCase types/methods, `I`-prefixed interfaces, camelCase locals/parameters, `_camelCase`
 private fields, Allman braces, four spaces and file-scoped namespaces. Detailed enforced rules
 and review conventions are in [coding standards](docs/CODING_STANDARDS.md).
-MediatR commands return `Result<T>` for expected business failures. FluentValidation checks
+MediatR commands return `Result<T>` for expected business failures. `IAuthorizableRequest`
+declares authenticated-user and exact-claim requirements for MediatR commands/queries; its
+opt-in pipeline behavior returns 401/403 before validation/handling, while unmarked requests
+remain public. FluentValidation checks
 commands before handlers execute, including direct mediator calls; validators run sequentially.
 Paginated queries can implement `IPaginatedRequest` and derive their validator from
 `BasePaginatedValidator<T>`: `PageIndex` starts at zero and `PageSize` must be 1–100.

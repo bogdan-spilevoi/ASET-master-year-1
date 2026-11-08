@@ -79,6 +79,9 @@ eligibility checking and ranking details; these arrows summarize that design.
 
 ## Review notes
 
+- 2026-11-08: Reviewed after the shared BuildingBlocks AuthorizationBehavior addition. Matching
+  does not enable that opt-in behavior and has no implemented API/application runtime flow, so
+  its numbered communication arrows remain unchanged.
 - 2026-10-26: added the independent EmbeddingPreparationTask model, five state values
   and model tests. The current diagram includes task property notifications. Dashed
   arrows refine the proposed snapshot/checkpoint commit and future leased worker flow;

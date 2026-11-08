@@ -75,7 +75,7 @@ flowchart LR
 
     Client -->|"1. GET /api/auth/me"| Auth
     Auth -->|"1.1 Validate and extract claims"| API
-    API -->|"1.2 Read identity from ICurrentUser"| User
+    API -->|"1.2 [Authorize] allows authenticated caller; read identity from ICurrentUser"| User
     API -->|"1.3 Return CurrentUserResponse"| Client
 ```
 
@@ -158,6 +158,11 @@ No cloud schedule or receiver is configured by the repository examples.
 
 ## Review notes
 
+- 2026-11-08: Enabled the shared AuthorizationBehavior in Auth's MediatR pipeline. The
+  existing register, login and refresh commands do not implement IAuthorizableRequest and
+  therefore remain public. GET /api/auth/security/audit-logs now has endpoint [Authorize];
+  this changes endpoint admission only and adds no outgoing call, message, worker or persistence
+  interaction, so the numbered diagrams remain accurate.
 - Initial diagrams checked against the API, handlers, session service, context and
   outbox implementation. Update affected flows with service changes; if communication
   is unchanged, record what changed and why these diagrams still apply here.

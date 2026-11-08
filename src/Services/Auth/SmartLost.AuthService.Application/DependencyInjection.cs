@@ -7,6 +7,9 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        return services.AddBuildingBlocksApplication(typeof(DependencyInjection).Assembly, useSecurityAudit: true);
+        return services.AddBuildingBlocksApplication(
+            typeof(DependencyInjection).Assembly,
+            useSecurityAudit: true,
+            useAuthorization: true);
     }
 }

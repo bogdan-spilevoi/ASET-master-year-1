@@ -147,10 +147,9 @@ The behavior records individual attempts; it does not currently aggregate failur
 brute-force patterns.
 
 `GET /api/auth/security/audit-logs` returns the newest records, with a requested limit clamped
-to 1–100. The current action has no authorization or Development-only restriction and exposes
-subject identifiers, client IPs and user agents. Keep it on a trusted local/demo deployment;
-restrict access before exposing the API to untrusted clients. The `GET /api/auth/me` endpoint,
-by contrast, requires a valid bearer access token.
+to 1–100, and requires a valid bearer access token. It exposes subject identifiers, client IPs
+and user agents but has no role/claim policy yet; restrict it further before exposing the API to
+untrusted clients. The `GET /api/auth/me` endpoint also requires a valid bearer access token.
 
 ## Object mapping
 
@@ -412,7 +411,7 @@ Deployment remains inactive; no workflow currently applies migrations.
 | `POST` | `/api/auth/login` | Authenticates by email and password and creates a token session |
 | `POST` | `/api/auth/refresh` | Rotates a refresh token and returns a new access/refresh pair |
 | `GET` | `/api/auth/me` | Returns the authenticated user's claims; requires a bearer access token |
-| `GET` | `/api/auth/security/audit-logs` | Returns recent audit records; currently has no authorization requirement |
+| `GET` | `/api/auth/security/audit-logs` | Returns recent audit records; requires a bearer access token |
 
 Login accepts `{ "email": "user@example.com", "password": "your-password" }`; the previous
 `userNameOrEmail` field is no longer accepted as a login identifier. Email is required, must

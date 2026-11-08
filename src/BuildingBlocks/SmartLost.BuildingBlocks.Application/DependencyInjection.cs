@@ -11,7 +11,8 @@ public static class DependencyInjection
         this IServiceCollection services,
         Assembly serviceAssembly,
         bool useTransactions = false,
-        bool useSecurityAudit = false)
+        bool useSecurityAudit = false,
+        bool useAuthorization = false)
     {
         services.AddValidatorsFromAssembly(serviceAssembly);
         services.AddMediatR(configuration =>
@@ -21,6 +22,11 @@ public static class DependencyInjection
             if (useSecurityAudit)
             {
                 configuration.AddOpenBehavior(typeof(SecurityAuditBehavior<,>));
+            }
+
+            if (useAuthorization)
+            {
+                configuration.AddOpenBehavior(typeof(AuthorizationBehavior<,>));
             }
 
             configuration.AddOpenBehavior(typeof(ValidationBehavior<,>));

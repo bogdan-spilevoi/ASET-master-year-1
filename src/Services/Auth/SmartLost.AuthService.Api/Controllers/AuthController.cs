@@ -66,8 +66,10 @@ public sealed class AuthController(ISender sender, IMapper mapper) : ControllerB
             currentUser.IsAuthenticated));
     }
 
+    [Authorize]
     [HttpGet("security/audit-logs")]
     [ProducesResponseType<IReadOnlyList<SecurityAuditLogResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetAuditLogs(
         [FromServices] AuthDbContext dbContext,
         [FromQuery] int limit = 50,

@@ -12,23 +12,24 @@ namespace SmartLost.AuthService.UnitTests;
 public sealed class SecurityAuditEndpointTests
 {
     [Fact]
-    public async Task AuditLogsEndpointReturnsOkWithEmptyList()
+    public async Task AuditLogsEndpointReturns401WhenUnauthenticated()
     {
         using AuthApiFactory factory = new();
         using HttpClient client = factory.CreateClient();
 
         HttpResponseMessage response = await client.GetAsync("/api/auth/security/audit-logs");
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        SecurityAuditLogResponse[]? logs = await response.Content.ReadFromJsonAsync<SecurityAuditLogResponse[]>();
-        Assert.NotNull(logs);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task AuditLogsEndpointClampsLimitBetweenOneAndHundred()
+    public async Task AuditLogsEndpointClampsLimitBetweenOneAndHundredForAuthenticatedUser()
     {
         using AuthApiFactory factory = new();
         using HttpClient client = factory.CreateClient();
+
+        AuthResponse auth = await RegisterAsync(client, "auditlimits", "auditlimits@smartlost.local");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
 
         HttpResponseMessage lowLimit = await client.GetAsync("/api/auth/security/audit-logs?limit=0");
         Assert.Equal(HttpStatusCode.OK, lowLimit.StatusCode);
@@ -72,6 +73,8 @@ public sealed class SecurityAuditEndpointTests
         });
         Assert.True(loginResponse.IsSuccessStatusCode, $"Login failed: {loginResponse.StatusCode}");
 
+        AuthResponse auth = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>() ?? throw new InvalidOperationException("Login response was empty.");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
         HttpResponseMessage auditResponse = await client.GetAsync("/api/auth/security/audit-logs");
         Assert.Equal(HttpStatusCode.OK, auditResponse.StatusCode);
         SecurityAuditLogResponse[]? logs = await auditResponse.Content.ReadFromJsonAsync<SecurityAuditLogResponse[]>();
@@ -120,5 +123,18 @@ public sealed class SecurityAuditEndpointTests
         JsonElement paths = json.RootElement.GetProperty("paths");
         Assert.True(paths.TryGetProperty("/api/auth/me", out _), "Missing /api/auth/me in OpenAPI");
         Assert.True(paths.TryGetProperty("/api/auth/security/audit-logs", out _), "Missing /api/auth/security/audit-logs in OpenAPI");
+    }
+
+    private static async Task<AuthResponse> RegisterAsync(HttpClient client, string userName, string email)
+    {
+        HttpResponseMessage response = await client.PostAsJsonAsync("/api/auth/register", new
+        {
+            userName,
+            email,
+            password = "AuditPass123!"
+        });
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AuthResponse>() ?? throw new InvalidOperationException("Register response was empty.");
     }
 }

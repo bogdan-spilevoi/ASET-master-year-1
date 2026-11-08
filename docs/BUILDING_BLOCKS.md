@@ -18,7 +18,7 @@ root solution to validate consumers together with the shared libraries.
 | Library | Contents | Dependencies |
 | --- | --- | --- |
 | [Core](../src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | `Entity<TId>`, `AggregateRoot<TId>`, `IDomainEvent`, `IHasDomainEvents`, `Guard`, `Result`, `Result<T>`, `IResult`, `Error`, `ErrorKind`, `DomainException`, `PageSlice<T>`, `PagedResult<T>`, `PagedDataGuard` | .NET only |
-| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/) | Validation/exception/optional transaction/security-audit behaviors, audit and Outbox contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
+| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/) | Validation/exception/optional transaction/security-audit/authorization behaviors, audit, authorization and Outbox contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
 | [AspNetCore](../src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/) | `ToActionResult`, `ProblemDetails`, unexpected-exception handler, `HttpCurrentUser`, HTTP audit context and API registration | Application/Core, ASP.NET Core framework |
 | [Infrastructure](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/) | EF Outbox model/configuration, writer, leased batch processor, logging security-audit sink and registration | Application, EF Core Relational 10.0.12 |
 
@@ -162,6 +162,8 @@ service's Application assembly and registers `ExceptionToResult â†’ Validation â
 Security auditing is opt-in: pass `useSecurityAudit: true` to add
 `SecurityAuditBehavior<TRequest,TResponse>` between exception mapping and validation. Auth
 wraps this through `AddApplication()` and enables the behavior for its audited commands.
+Authorization is also opt-in: pass `useAuthorization: true` to add
+`AuthorizationBehavior<TRequest,TResponse>` after auditing and before validation.
 
 - Validation calls `ValidateAsync` sequentially because validators may share scoped
   dependencies. Invalid commands return deduplicated field errors without invoking handlers.
@@ -184,6 +186,18 @@ metadata from the current HTTP request. Non-HTTP hosts can use the default conte
 `AddBuildingBlocksSecurityAudit()` registration. That registration supplies a logging sink;
 services can replace it with a service-owned sink, as Auth does with its database-backed
 `DbSecurityAuditSink`. BuildingBlocks defines no audit table or migration.
+
+### Authorization behavior
+
+`IAuthorizableRequest` protects a MediatR command or query. It requires an authenticated
+`ICurrentUser`; its `AuthorizationRequirements` are evaluated before validation and the
+handler. Each `AuthorizationRequirement.Claim(type, value)` requires an exact claim value;
+omit `value` to require any nonblank value for the type. Failed authentication returns the
+`authorization.unauthenticated` 401 result; a missing declared claim returns the
+`authorization.forbidden` 403 result. Requests that do not implement the interface remain
+public, so Auth's register, login and refresh commands deliberately bypass this behavior.
+Endpoint `[Authorize]` remains necessary to reject unauthenticated HTTP requests before
+endpoint execution and should be used independently where an endpoint exposes protected data.
 
 Transactions are optional. A service must supply scoped `IUnitOfWork` / `ITransaction`
 implementations, mark selected requests with `ITransactionalCommand`, and register with
@@ -290,8 +304,9 @@ an Authorization header or validates a JWT itself. The host must configure authe
 call `UseAuthentication()` before authorization/endpoints and protect restricted endpoints
 with `[Authorize]` or a policy. Auth already has authentication middleware and calls
 `AddBuildingBlocksApi()`, so the adapter is registered there. Register/login/refresh remain
-public. Auth's `/api/auth/me` endpoint requires authentication; its audit-log inspection route
-currently does not require authorization and should remain restricted to trusted demo use.
+public. Auth's `/api/auth/me` and audit-log inspection endpoints require authentication. The
+audit-log route has no role/claim policy yet and should remain restricted to trusted use until
+one is added.
 
 | Member | Source / behavior |
 | --- | --- |

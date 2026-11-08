@@ -84,6 +84,9 @@ are unimplemented. The model tests do not establish any of these integrations.
 
 ## Review notes
 
+- 2026-11-08: Reviewed after the shared BuildingBlocks AuthorizationBehavior addition. Listings
+  does not enable that opt-in behavior and has no implemented API/application runtime flow, so
+  its numbered communication arrows remain unchanged.
 - 2026-10-26: added Listing.ChangeSequence and sequence-bearing model tests/examples.
   Current arrows remain in-process NMF operations. Planned snapshot delivery now names
   the existing Outbox design and its future Listings worker; no receiver, worker,
