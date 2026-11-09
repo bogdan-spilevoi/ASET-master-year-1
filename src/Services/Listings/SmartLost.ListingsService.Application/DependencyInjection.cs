@@ -7,6 +7,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddListingsApplication(this IServiceCollection services)
     {
-        return services.AddBuildingBlocksApplication(typeof(DependencyInjection).Assembly, useCaching: true);
+        return services.AddBuildingBlocksApplication(typeof(DependencyInjection).Assembly,
+            useAuthorization: true, useProfiling: true, useCaching: true);
     }
 }

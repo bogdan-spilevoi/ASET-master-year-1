@@ -100,9 +100,13 @@ This deployment and inference integration are not implemented.
 
 The optional MediatR aspects can be combined in this order:
 `Profiling -> ExceptionToResult -> Authorization -> Validation -> Caching -> Transaction -> Handler`.
-Current opt-ins are Auth authorization, Listings category caching and Matching profiling;
-optional behaviors run only when enabled. A shared DI test checks their combined order
-and ensures authorization is evaluated before a cached result.
+Auth, Listings and Matching register profiling, authorization and caching in that order;
+transactions remain disabled. Profiling observes every MediatR request. Authorization and
+caching act only on attributed requests: currently Auth identity requires authorization
+and Listings categories use caching. Matching caches only the input-only AI photo-analysis
+step after reading the permitted photo on every request. Auth identity and Matching
+suggestions remain uncached.
+Service tests verify registration order, authorization before cache and per-request results.
 
 ### UML and C4 diagrams
 
@@ -723,7 +727,7 @@ dotnet test tests/Listings/SmartLost.ListingsService.IntegrationTests/SmartLost.
 dotnet test tests/Matching/SmartLost.MatchingService.IntegrationTests/SmartLost.MatchingService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.MatchingService.IntegrationTests
 ```
 
-Matching now opts into the shared BuildingBlocks profiling behavior (`useProfiling: true`); Auth remains unchanged and profiling defaults off. Stage/AI decorators and AI policies stay in Matching. The [PostgreSQL integration suite](tests/Matching/SmartLost.MatchingService.IntegrationTests/README.md) verifies HTTP 409 for competing xmin claims and durable failure after an exhausted lease. AI deadlines reject late results; real adapters must still cooperate with cancellation to stop underlying work. No database schema changes are required.
+All three APIs enable the shared BuildingBlocks profiling, authorization and caching behaviors; the shared registration defaults remain opt-in. Only attributed requests require authorization or use query caching. Matching photo analysis caches successful immutable labels for five minutes after every photo-access check; suggestions and Auth identity remain uncached. Stage/AI decorators and AI policies stay in Matching. The [PostgreSQL integration suite](tests/Matching/SmartLost.MatchingService.IntegrationTests/README.md) verifies HTTP 409 for competing xmin claims and durable failure after an exhausted lease. AI deadlines reject late results; real adapters must still cooperate with cancellation to stop underlying work. No database schema changes are required.
 
 Coverlet configuration and the inline coverage/test gates are documented in the
 [CI guide](.github/README.md#local-net-commands).

@@ -1,7 +1,7 @@
 # Attribute-driven MediatR query caching
 
-The first active query is Listings `GetCategoriesQuery`, with a **300-second absolute
-TTL**. List/detail queries remain uncached, so their Open-only visibility is read from
+Listings `GetCategoriesQuery` and Matching `AnalyzePhotoContentQuery` use a
+**300-second absolute TTL**. List/detail queries remain uncached, so their Open-only visibility is read from
 the database on each request. No mutation invalidation, distributed cache, HTTP response
 cache or additional Azure resource is configured.
 
@@ -24,16 +24,42 @@ public sealed record GetCategoriesQuery
 Listings calls `AddBuildingBlocksApplication(..., useCaching: true)` through its
 Application extension. Its Infrastructure registration calls `AddBuildingBlocksQueryCache()`
 for the singleton implementation and an overridable TimeProvider. Shared registration
-defaults to `useCaching: false`; Auth remains uncached and Matching has no runtime cache.
+defaults to `useCaching: false`. All three APIs now enable the behavior and register
+the backend. Listings GetCategoriesQuery and Matching AnalyzePhotoContentQuery carry
+the cache attribute. Auth identity/token requests and Matching suggestions bypass the cache; there is no shared
+cache between processes.
 No service-specific type is referenced by BuildingBlocks.
 
-Listings currently uses **ExceptionToResult → Validation → Caching → Handler**.
-When all three optional aspects are enabled, the order is **Profiling → ExceptionToResult
-→ Authorization → Validation → Caching → Handler**. Authorization and validation always
+Auth, Listings and Matching use **Profiling → ExceptionToResult → Authorization
+→ Validation → Caching → Handler**. Authorization and validation always
 precede cache hits; profiling includes short-circuited requests. If optional
 transactions are enabled as well, their behavior is registered after caching; cache
 attributes are intended only for read-only queries. Model-binding errors occur before
 MediatR; validators still run before every cache lookup, including hits.
+
+## Matching photo analysis
+
+AnalyzeListingPhotoQuery remains uncached. Its handler reads the exact requested photo
+revision through IListingPhotoReader on every request; missing or no-longer-permitted
+photos return 404 even when labels were cached earlier. Only after that check does it
+send [AnalyzePhotoContentQuery](../src/Services/Matching/SmartLost.MatchingService.Application/Queries/AnalyzeListingPhoto/AnalyzePhotoContentQuery.cs)
+through the same MediatR pipeline. The inner query has CacheableQueryAttribute and uses
+the existing process-local backend. No endpoint or database schema is added.
+
+The key includes listing ID, photo ID/revision, media type and a SHA256 fingerprint of
+the serialized input, including the photo bytes. Raw bytes are not retained as keys or
+logged. CorrelationId has JsonIgnore for key serialization: tracing still uses each
+call's ID, while different trace IDs reuse the same analysis. A different revision or
+content cannot reuse the older result. Successful results are copied into read-only
+snapshots, including every nested label list. Failures and cancellation are not stored.
+The original AI timeout/error mapping and profiling decorator remain in effect on misses.
+
+The 300-second cache stores advisory labels from the currently fixed mock analyzer.
+API restart/deployment clears it. A future live adapter with hot-swappable model/prompt
+versions must include those versions in the cache input or policy prefix before use.
+Suggestions remain uncached because eligibility, candidate pools and embeddings can
+change independently. Auth's only query reads JWT claims directly, so no Auth request
+is opted into caching. No user identity, credential or token result is stored.
 
 ## Request flow
 

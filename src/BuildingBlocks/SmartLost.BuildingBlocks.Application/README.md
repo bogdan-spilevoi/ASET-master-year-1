@@ -41,7 +41,11 @@ Unattributed MediatR requests remain public. HTTP endpoints still need ASP.NET C
 
 `useCaching: true` inserts `CachingBehavior` after authorization and validation; the host
 registers `IQueryCache` through BuildingBlocks.Infrastructure. Listings caches only its
-public GetCategoriesQuery. Matching enables profiling, while Auth enables authorization.
+public GetCategoriesQuery; Matching caches its input-only AnalyzePhotoContentQuery after
+checking photo access in the uncached outer query. Auth, Listings and Matching enable all three aspects, with
+profiling around every request and authorization/cache checks only for attributed requests.
+Auth identity and Matching suggestions remain uncached; the cache backend is registered
+in each API process.
 These are independent options and can be combined without changing service-specific handlers.
 A combined DI regression test verifies the order, 401 before cached results, validation
 before hits, single population and profiling scope cleanup. Public cache opt-in still

@@ -200,6 +200,8 @@ public sealed class MatchingProfilingTests
         var listings = new FakeListings();
         var services = new ServiceCollection();
         services.AddLogging(builder => builder.AddProvider(provider));
+        SmartLost.BuildingBlocks.AspNetCore.DependencyInjection.AddBuildingBlocksApi(services);
+        SmartLost.BuildingBlocks.Infrastructure.DependencyInjection.AddBuildingBlocksQueryCache(services);
         services.AddApplication();
         services.AddSingleton<ISearchListingRepository>(listings);
         services.AddSingleton<IImageEmbeddingRepository>(new FakeEmbeddings());
@@ -212,6 +214,14 @@ public sealed class MatchingProfilingTests
         await using ServiceProvider root = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         await using AsyncServiceScope scope = root.CreateAsyncScope();
         ISender sender = scope.ServiceProvider.GetRequiredService<ISender>();
+        Type[] expectedOrder = [typeof(SmartLost.BuildingBlocks.Application.Behaviors.ProfilingBehavior<,>),
+            typeof(SmartLost.BuildingBlocks.Application.Behaviors.ExceptionToResultBehavior<,>),
+            typeof(SmartLost.BuildingBlocks.Application.Behaviors.AuthorizationBehavior<,>),
+            typeof(SmartLost.BuildingBlocks.Application.Behaviors.ValidationBehavior<,>),
+            typeof(SmartLost.BuildingBlocks.Application.Behaviors.CachingBehavior<,>)];
+        Assert.Equal(expectedOrder, scope.ServiceProvider
+            .GetServices<IPipelineBehavior<GetMatchSuggestionsQuery, Result<MatchSuggestionsResponse>>>()
+            .Select(behavior => behavior.GetType().GetGenericTypeDefinition()));
 
         Assert.IsType<ProfiledImageEmbeddingGenerator>(scope.ServiceProvider.GetRequiredService<IImageEmbeddingGenerator>());
         Result<MatchSuggestionsResponse> invalid = await sender.Send(new GetMatchSuggestionsQuery(Guid.Empty, 0, "corr-invalid"));

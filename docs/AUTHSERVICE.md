@@ -26,8 +26,12 @@ main CI entry point.
 
 Application depends on Domain; Infrastructure implements Application abstractions; API
 composes both. Each layer references the appropriate [building blocks](BUILDING_BLOCKS.md).
-The pipeline is `ExceptionToResult → Validation → Handler`: expected duplicate/credential
-errors are returned as `Result<AuthResponse>`, and explicit domain exceptions can be mapped
+The pipeline is `Profiling → ExceptionToResult → Authorization → Validation → Caching → Handler`.
+Profiling records operation metadata; authorization acts on attributed requests. No Auth
+request has a cache attribute, so credentials, tokens and current identity bypass caching.
+The sole Auth query, GetCurrentUserQuery, reads the current JWT claims directly; caching
+adds no useful data-read saving and would require identity-scoped keys.
+Expected duplicate/credential errors are returned as `Result<AuthResponse>`, and explicit domain exceptions can be mapped
 to results. Other exceptions propagate to the sanitized API error handler. Transactions are
 not enabled as a MediatR behavior in this service. EF Core commits registration/session
 creation and each refresh rotation with one `SaveChangesAsync` transaction.

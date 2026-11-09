@@ -41,7 +41,7 @@ public static class DependencyInjection
             provider.GetRequiredService<RelevanceRanker>(), provider.GetRequiredService<MatchingProfiler>()));
 
         return services.AddBuildingBlocksApplication(typeof(DependencyInjection).Assembly,
-            useProfiling: true, profilingOptions: profiling);
+            useAuthorization: true, useProfiling: true, profilingOptions: profiling, useCaching: true);
     }
 
     /// <summary>

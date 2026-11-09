@@ -134,22 +134,19 @@ public sealed class MatchingHandlerTests
     }
 
     [Fact]
-    public async Task PhotoAnalysisMapsMissingPhotosAndAiFailures()
+    public async Task PhotoContentAnalysisMapsAiFailures()
     {
         var photos = new FakePhotos();
         var labels = new PhotoAnalysis([new DetectedObject("containers", "backpack", ["black"], "fabric", null, "solid", [], ["zipper"],
             ["backpack", "black"])], []);
-        var query = new AnalyzeListingPhotoQuery(Guid.NewGuid(), Guid.NewGuid(), 1);
+        var query = new AnalyzePhotoContentQuery(Guid.NewGuid(), Guid.NewGuid(), 1, photos.Content!);
 
-        Assert.Equal(labels, (await new AnalyzeListingPhotoQueryHandler(photos, new FakeAnalyzer(_ => Task.FromResult(labels)))
-            .Handle(query, CancellationToken.None)).Value);
-        Assert.Equal(MatchingErrors.InferenceTimedOut, Assert.Single((await new AnalyzeListingPhotoQueryHandler(photos,
+        Assert.Equal("backpack", Assert.Single((await new AnalyzePhotoContentQueryHandler(new FakeAnalyzer(_ => Task.FromResult(labels)))
+            .Handle(query, CancellationToken.None)).Value.Objects).ObjectType);
+        Assert.Equal(MatchingErrors.InferenceTimedOut, Assert.Single((await new AnalyzePhotoContentQueryHandler(
             new FakeAnalyzer(_ => throw new TimeoutException())).Handle(query, CancellationToken.None)).Errors));
-        Assert.Equal(MatchingErrors.InferenceUnavailable, Assert.Single((await new AnalyzeListingPhotoQueryHandler(photos,
+        Assert.Equal(MatchingErrors.InferenceUnavailable, Assert.Single((await new AnalyzePhotoContentQueryHandler(
             new FakeAnalyzer(_ => throw new AiInferenceException())).Handle(query, CancellationToken.None)).Errors));
-        photos.Content = null;
-        Assert.Equal(MatchingErrors.PhotoUnavailable, Assert.Single((await new AnalyzeListingPhotoQueryHandler(photos,
-            new FakeAnalyzer(_ => Task.FromResult(labels))).Handle(query, CancellationToken.None)).Errors));
     }
 
     [Fact]

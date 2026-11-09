@@ -10,6 +10,9 @@ using SmartLost.AuthService.Api.Contracts;
 using SmartLost.AuthService.Api.Controllers;
 using SmartLost.AuthService.Application.Contracts;
 using SmartLost.AuthService.Application.Queries.GetCurrentUser;
+using SmartLost.BuildingBlocks.Application.Behaviors;
+using SmartLost.BuildingBlocks.Application.Caching;
+using SmartLost.BuildingBlocks.Application.Profiling;
 using SmartLost.BuildingBlocks.Core.Results;
 using Xunit;
 
@@ -23,12 +26,49 @@ public sealed class AuthorizationEndpointTests
         using AuthApiFactory factory = new();
         using IServiceScope scope = factory.Services.CreateScope();
         ISender sender = scope.ServiceProvider.GetRequiredService<ISender>();
+        Type[] expectedOrder = [typeof(ProfilingBehavior<,>), typeof(ExceptionToResultBehavior<,>),
+            typeof(AuthorizationBehavior<,>), typeof(ValidationBehavior<,>), typeof(CachingBehavior<,>)];
+        Assert.Equal(expectedOrder, scope.ServiceProvider
+            .GetServices<IPipelineBehavior<GetCurrentUserQuery, Result<CurrentUserDetails>>>()
+            .Select(behavior => behavior.GetType().GetGenericTypeDefinition()));
+        Assert.Empty(typeof(GetCurrentUserQuery).GetCustomAttributes(typeof(CacheableQueryAttribute), true));
 
         Result<CurrentUserDetails> result = await sender.Send(new GetCurrentUserQuery());
 
         Error error = Assert.Single(result.Errors);
         Assert.Equal("authorization.unauthenticated", error.Code);
         Assert.Equal(ErrorKind.Unauthorized, error.Kind);
+        Assert.Null(scope.ServiceProvider.GetRequiredService<IProfilingContext>().Current);
+    }
+
+    [Fact]
+    public async Task CurrentIdentityIsReadForEachCallerWithCachingBehaviorRegistered()
+    {
+        using AuthApiFactory factory = new();
+        using HttpClient first = factory.CreateClient();
+        using HttpClient second = factory.CreateClient();
+        string suffix = Guid.NewGuid().ToString("N");
+        var identities = new AuthResponse[2];
+        HttpClient[] clients = [first, second];
+        for (int index = 0; index < clients.Length; index++)
+        {
+            using HttpResponseMessage registration = await clients[index].PostAsJsonAsync("/api/auth/register", new
+            {
+                userName = $"user{index}{suffix}",
+                email = $"user{index}{suffix}@example.com",
+                password = "ValidPass123!"
+            });
+            registration.EnsureSuccessStatusCode();
+            identities[index] = (await registration.Content.ReadFromJsonAsync<AuthResponse>())!;
+            clients[index].DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", identities[index].AccessToken);
+        }
+
+        foreach (int index in new[] { 0, 1, 0 })
+        {
+            CurrentUserResponse? identity = await clients[index].GetFromJsonAsync<CurrentUserResponse>("/api/auth/me");
+            Assert.Equal(identities[index].UserId, identity!.UserId);
+            Assert.Equal(identities[index].Email, identity.Email);
+        }
     }
 
     [Fact]

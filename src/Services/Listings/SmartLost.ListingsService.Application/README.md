@@ -12,8 +12,9 @@ GetCategoriesQuery opts into the shared caching behavior (300-second absolute TT
 | [GetListingByIdQuery](Queries/GetListingById/GetListingByIdQuery.cs) | GetListingByIdQueryHandler | GetOpenListingAsync |
 
 [AddListingsApplication](DependencyInjection.cs) registers MediatR/validators using the
-existing BuildingBlocks pipeline: ExceptionToResultBehavior wraps ValidationBehavior,
-which calls the opt-in CachingBehavior only for valid inputs. Unmarked requests continue
+BuildingBlocks pipeline: Profiling → ExceptionToResult → Authorization → Validation
+→ Caching → Handler. Current queries have no authorization attribute and remain public;
+profiling records operation metadata and validators run before cache lookups. Unmarked requests continue
 to their handlers; GetCategoriesQuery can return a cached successful snapshot. Handlers consume
 [IListingsReadStore](Interfaces/IListingsReadStore.cs); Infrastructure supplies its EF
 implementation. Responses use typed Result, DTOs and the shared PagedResult wrapper.

@@ -4,6 +4,10 @@ The implemented .NET 10 authentication service provides register, login and refr
 endpoints, JWT issuance, persistent refresh sessions and a PostgreSQL-owned outbox.
 Its separate finite worker delivers profile integration events over HTTP.
 
+The API registers the shared Profiling → ExceptionToResult → Authorization → Validation
+→ Caching pipeline. Only attributed requests enforce Application authorization; no Auth
+request is cacheable, so identity and token responses are evaluated per request.
+
 - [Communication diagrams](COMMUNICATION.md): current request flows, refresh/replay
   handling and atomic outbox staging followed by worker delivery.
 - [AuthService guide](../../../docs/AUTHSERVICE.md): layers, API contracts, database,
