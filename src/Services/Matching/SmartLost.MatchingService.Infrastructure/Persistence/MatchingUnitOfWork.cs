@@ -1,23 +1,17 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
-using SmartLost.BuildingBlocks.Application.Transactions;
 using SmartLost.BuildingBlocks.Core.Exceptions;
+using SmartLost.BuildingBlocks.Infrastructure.Transactions;
 using SmartLost.MatchingService.Domain.Errors;
 
 namespace SmartLost.MatchingService.Infrastructure.Persistence;
 
-public sealed class MatchingUnitOfWork(MatchingDbContext context) : IUnitOfWork
+public sealed class MatchingUnitOfWork(MatchingDbContext context) : EfUnitOfWork<MatchingDbContext>(context)
 {
-    public async Task<ITransaction> BeginTransactionAsync(CancellationToken cancellationToken)
-    {
-        return new Transaction(await context.Database.BeginTransactionAsync(cancellationToken));
-    }
-
-    public async Task SaveChangesAsync(CancellationToken cancellationToken)
+    public override async Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await context.SaveChangesAsync(cancellationToken);
+            await Context.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -26,21 +20,4 @@ public sealed class MatchingUnitOfWork(MatchingDbContext context) : IUnitOfWork
         }
     }
 
-    private sealed class Transaction(IDbContextTransaction transaction) : ITransaction
-    {
-        public Task CommitAsync(CancellationToken cancellationToken)
-        {
-            return transaction.CommitAsync(cancellationToken);
-        }
-
-        public Task RollbackAsync(CancellationToken cancellationToken)
-        {
-            return transaction.RollbackAsync(cancellationToken);
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            return transaction.DisposeAsync();
-        }
-    }
 }

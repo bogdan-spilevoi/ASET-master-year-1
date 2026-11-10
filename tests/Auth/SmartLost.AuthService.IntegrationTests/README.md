@@ -3,6 +3,11 @@
 These tests run the real API and EF Core Npgsql provider against a disposable PostgreSQL 16
 database using `Testcontainers.PostgreSql` 4.16.0. They do not use an in-memory database provider.
 
+A transaction regression forces registration to flush user, session, token and Outbox
+rows inside the pipeline transaction, then raises a domain failure. Fresh database reads
+verify that every row was rolled back. Existing refresh replay/concurrency tests verify
+that revocation still persists outside the transactional-command wrapper.
+
 ## Test environment
 
 [`AuthServiceFactory`](Fixtures/AuthServiceFactory.cs) starts `postgres:16-alpine` with database/user `authservice_tests` on a

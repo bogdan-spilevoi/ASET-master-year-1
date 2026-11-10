@@ -14,11 +14,11 @@ retains generated ModelElements, metamodel metadata and XMI samples.
 
 [Infrastructure](SmartLost.ListingsService.Infrastructure/README.md) now implements
 ListingsDbContext, entity configurations, a design-time factory, scoped DI registration
-and the InitialCreate migration. [compose.database.yml](compose.database.yml) provides
-an optional local PostgreSQL database. The executable [API](SmartLost.ListingsService.Api/README.md)
+and the InitialCreate migration. [Root Compose](../../../docker-compose.yml) manages
+its local PostgreSQL container alongside the Auth and Matching databases. The executable [API](SmartLost.ListingsService.Api/README.md)
 now exposes public category/listing/detail reads through [Application CQRS](SmartLost.ListingsService.Application/README.md).
-Its [Dockerfile](SmartLost.ListingsService.Api/Dockerfile) and [Compose API override](compose.api.yml)
-run the API beside that same database, using the existing named volume.
+Its [Dockerfile](SmartLost.ListingsService.Api/Dockerfile) and the root Compose file
+run the API beside its own database, retaining a separate data volume.
 Workers, authenticated mutation use cases and blob/message adapters remain unimplemented.
 Runtime layers do not reference Modeling or NMF.
 
@@ -86,8 +86,13 @@ Migration application is explicit; no API/Compose startup or DI registration mig
 For the containerized API after migration, run from the repository root:
 
 ```sh
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml up -d --build
+docker compose up -d --build listings-service
 ```
+
+The API reads the ignored `SmartLost.ListingsService.Api/appsettings.Docker.json`,
+mounted read-only as `/app/appsettings.json`, like Auth and Matching. Create it from
+`appsettings.Docker.example.json` and match its password to the root `.env` value.
+All three APIs and their databases now share one Compose project; databases stay separate.
 
 Swagger remains at `http://localhost:5081/swagger`; the container connects to
 `listings-db:5432`, while local tools still connect through `localhost:5433`.

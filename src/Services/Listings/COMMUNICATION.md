@@ -9,16 +9,18 @@ Modeling is a separate NMF representation; runtime projects do not reference it.
 
 ```mermaid
 flowchart LR
-    Compose["compose.database.yml + compose.api.yml"]
+    Compose["Root docker-compose.yml (shared project)"]
     Build["API Dockerfile: locked restore / Release publish"]
-    Settings["Ignored Listings .env"]
+    Settings["Ignored root .env (PostgreSQL password / volume adoption)"]
+    ApiSettings["Ignored appsettings.Docker.json"]
     API["Non-root listings-service:8080"]
     DB[("listings-db:5432 / existing named volume")]
     Client["Host browser / HTTP client"]
     Tools["Host EF CLI / optional seed.sh"]
     Seed["One-off API image: SeedData:Only=true"]
     Compose -->|"1. Build with repository-root context; exclude local settings"| Build
-    Settings -->|"2. Supply database password and API connection at runtime"| Compose
+    Settings -->|"2. Supply PostgreSQL container password"| Compose
+    ApiSettings -->|"2.1 Read-only bind at /app/appsettings.json; API connection and seed settings"| API
     Compose -->|"3. Wait for PostgreSQL health before API startup"| DB
     Compose -->|"4. Start API in Development; seed disabled"| API
     Client -->|"5. HTTP localhost:5081 to container:8080; Swagger and public GETs"| API
@@ -28,15 +30,18 @@ flowchart LR
     Seed -->|"9. Transactional idempotent fixtures, then exit without HTTP"| DB
 ```
 
-The database-only file still starts only PostgreSQL. The API override reuses that same
-Compose project, network and volume; host port 5081 is bound to loopback. A local dotnet
+The root Compose file groups Auth, Listings and Matching and their own databases.
+Listings retains its database/volume; the existing local volume is adopted as external,
+while fresh setups create a managed volume. `up listings-db` starts only its database;
+host port 5081 is bound to loopback. A local dotnet
 API and the container cannot bind that port simultaneously. No Auth/Matching network
 calls are introduced. API/Compose startup never applies migrations; database health is
 not schema readiness. Database read errors follow the existing HTTP 500 path, without a
 new query retry policy. Both services use `restart: unless-stopped` for process exits;
 one-off seed failures exit nonzero for manual correction/retry. Cache remains per API
 process and is cleared on API restart. Stop/down preserve database data unless volume
-removal is explicitly requested. Cloud deployment remains inactive.
+removal is explicitly requested; adopted external volumes survive even `down --volumes`.
+Cloud deployment remains inactive.
 
 ## Current NMF modeling flow
 
@@ -275,6 +280,22 @@ snapshot delivery, inference calls and workers are not implemented in Listings.
 - [Proposed publication activity](../../../docs/diagrams/member-4/smartlost-publication-activity.puml)
 
 ## Review notes
+
+- 2026-11-10: Reviewed shared EF transaction/Outbox extraction. Listings keeps a normal
+  DbContext and its read-only queries; it does not opt into the Outbox base or transaction
+  behavior. Numbered API/cache/EF/seed/container flows and database ownership are unchanged.
+
+- 2026-11-09: Root Compose now groups all three APIs and their databases. Listings containers
+  were moved from the standalone project while reusing the existing volume as external; fresh
+  setups use a managed volume. Only container grouping, network placement and configuration
+  paths change. HTTP routes, database ownership, CQRS/worker flows and outgoing service calls
+  are unchanged.
+
+- 2026-11-09: switched API configuration to a read-only appsettings.Docker.json bind,
+  matching Auth/Matching. Flow 2 now supplies only the PostgreSQL password and flow 2.1
+  supplies API settings from JSON. Database credentials must match between files; the
+  existing database volume is unchanged. Runtime routes, CQRS/cache, migration and seed
+  flows are unchanged. Docker settings are excluded from build/publish output.
 
 - 2026-11-08: Enabled shared profiling and the authorization wrapper alongside category caching.
   Current public reads have no authorization attribute, so their routes and database/cache

@@ -33,8 +33,8 @@ No service-specific type is referenced by BuildingBlocks.
 Auth, Listings and Matching use **Profiling → ExceptionToResult → Authorization
 → Validation → Caching → Handler**. Authorization and validation always
 precede cache hits; profiling includes short-circuited requests. If optional
-transactions are enabled as well, their behavior is registered after caching; cache
-attributes are intended only for read-only queries. Model-binding errors occur before
+transactions are enabled as well (currently Auth register/login), their behavior is
+registered after caching; cache attributes are intended only for read-only queries. Model-binding errors occur before
 MediatR; validators still run before every cache lookup, including hits.
 
 ## Matching photo analysis

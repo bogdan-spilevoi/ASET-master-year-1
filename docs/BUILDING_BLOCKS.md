@@ -98,8 +98,8 @@ and [finite worker](../src/Services/Auth/SmartLost.AuthService.Worker/README.md)
 
 ### Service integration checklist
 
-These are generic integration instructions; Auth implements its own EF-save commit boundary
-as described in [its Outbox guide](AUTHSERVICE.md#auth-outbox):
+These are generic integration instructions; Auth uses the shared OutboxDbContext and
+EfUnitOfWork commit boundary described in [its Outbox guide](AUTHSERVICE.md#auth-outbox):
 
 1. Reference `SmartLost.BuildingBlocks.Infrastructure` from the service Infrastructure project.
 2. In the service context's `OnModelCreating`, call
@@ -111,9 +111,11 @@ as described in [its Outbox guide](AUTHSERVICE.md#auth-outbox):
 4. Register that context and a scoped `IOutboxEventMapper`, then call
    `services.AddBuildingBlocksOutbox<ServiceDbContext>()`. Each host/DI scope uses one service
    context type; multi-context hosts need separate registrations/containers or an adapter.
-5. In the service's unit of work, invoke `EnqueueDomainEvents()` before saving business
-   changes; complete the transaction, then clear only the captured events. The existing
-   `TransactionBehavior` does not perform event staging or clearing on its own.
+5. Derive the service context from OutboxDbContext and supply its event mapper; register
+   EfUnitOfWork<ServiceDbContext> or a thin service adapter. The shared coordinator stages
+   events on save and clears them after implicit save/final managed commit. Alternatively,
+   retain a custom save boundary that explicitly stages/clears events with the same guarantees.
+   TransactionBehavior itself remains independent of EF and does not stage events.
 6. In a worker host, register its service context and a scoped `IOutboxMessagePublisher`
    for the chosen transport, then call `services.AddBuildingBlocksOutboxProcessor<ServiceDbContext>()`.
    Writer and processor registrations are separate: an API does not need a publisher,
@@ -183,8 +185,25 @@ Successful commands save and commit; failure results roll back without saving. E
 roll back using an uncancelled token and propagate; a rollback failure is logged without
 replacing the original exception. Transactions are disposed on every completed execution.
 Unmarked queries/commands bypass the transaction. These are local service transactions;
-the abstractions do not coordinate transactions across microservices. AuthService does not
-enable this behavior or implement a unit-of-work adapter.
+the abstractions do not coordinate transactions across microservices. AuthService enables
+this behavior for register/login with AuthUnitOfWork; refresh is deliberately unmarked
+because replay revocation must survive a failure Result. Matching embedding processing
+keeps its own short saves around inference; Listings has no mutation commands yet.
+
+### Shared EF transaction components
+
+BuildingBlocks.Infrastructure/Transactions contains EfUnitOfWork<TContext> and the
+internal EfTransaction adapter in separate files. Starting/committing/rolling back a
+transaction is not implemented in a service DbContext. Auth and Matching derive their
+small unit-of-work adapters from the same generic implementation and keep only their
+specific error mapping. Default EfUnitOfWork saving works for a plain DbContext too.
+
+OutboxDbContext is an optional base that delegates staging/cleanup to the separate
+DomainEventOutboxCoordinator. It supplies sync/async SaveChanges integration and receives
+internal transaction lifecycle notifications, without knowing about MediatR or HTTP.
+Service contexts retain model/table ownership. Auth uses this base; Matching and Listings
+retain ordinary DbContexts because they do not currently stage domain-event Outbox rows.
+No migration or change in marked transactional requests is introduced by this extraction.
 
 ## Opt-in query caching
 
@@ -362,8 +381,8 @@ This compiles the libraries and their unit test project without executing tests.
 invariants, entity equality, pagination snapshots/counts/limits/mapping, derived-validator
 discovery through MediatR, pipeline ordering, sequential validation, exception propagation,
 commit/rollback/disposal and HTTP mapping. AuthService's API tests cover actual wiring and
-the register/login response contracts. Database tests currently use EF InMemory; they do
-not verify PostgreSQL constraints or migrations. Additional tests cover aggregate event
+the register/login response contracts. Auth HTTP/transaction tests use SQLite in memory;
+other focused tests also use EF InMemory. These do not verify PostgreSQL constraints or migrations. Additional tests cover aggregate event
 collections, guards, authenticated/anonymous/raw/mapped claims, Outbox envelopes/staging,
 retry/backoff, dead letters, cancellation and lease recovery. Outbox unit tests use a
 SQLite-only UTC-tick converter for SQL date comparisons; production mapping is unchanged.
@@ -395,4 +414,5 @@ request-attribute opt-ins: Auth identity is protected, Listings categories are c
 and Matching caches input-only photo analysis after checking photo access on every outer
 request. Matching demo requests remain unmarked for authorization. No identity or
 suggestion result is cached.
-The shared registration defaults remain off; transactions remain disabled in these APIs.
+The shared registration defaults remain off. Auth enables transactions for register/login;
+Listings and Matching retain their existing persistence boundaries.

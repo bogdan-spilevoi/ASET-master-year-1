@@ -9,6 +9,7 @@ using SmartLost.AuthService.Infrastructure.Authentication;
 using SmartLost.AuthService.Infrastructure.Outbox;
 using SmartLost.AuthService.Infrastructure.Persistence;
 using SmartLost.BuildingBlocks.Application.Outbox;
+using SmartLost.BuildingBlocks.Application.Transactions;
 using SmartLost.BuildingBlocks.Infrastructure;
 using SmartLost.BuildingBlocks.Infrastructure.Outbox;
 
@@ -27,6 +28,7 @@ public static class DependencyInjection
                 "Jwt:SigningKey must contain at least 32 UTF-8 bytes.")
             .ValidateOnStart();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
+        services.AddScoped<IUnitOfWork, AuthUnitOfWork>();
         services.AddScoped<IPasswordHasher<UserAccount>, PasswordHasher<UserAccount>>();
         services.AddScoped<IPasswordService, PasswordService>();
         services.AddSingleton<ITokenService, TokenService>();

@@ -27,7 +27,7 @@ public sealed class AuthorizationEndpointTests
         using IServiceScope scope = factory.Services.CreateScope();
         ISender sender = scope.ServiceProvider.GetRequiredService<ISender>();
         Type[] expectedOrder = [typeof(ProfilingBehavior<,>), typeof(ExceptionToResultBehavior<,>),
-            typeof(AuthorizationBehavior<,>), typeof(ValidationBehavior<,>), typeof(CachingBehavior<,>)];
+            typeof(AuthorizationBehavior<,>), typeof(ValidationBehavior<,>), typeof(CachingBehavior<,>), typeof(TransactionBehavior<,>)];
         Assert.Equal(expectedOrder, scope.ServiceProvider
             .GetServices<IPipelineBehavior<GetCurrentUserQuery, Result<CurrentUserDetails>>>()
             .Select(behavior => behavior.GetType().GetGenericTypeDefinition()));

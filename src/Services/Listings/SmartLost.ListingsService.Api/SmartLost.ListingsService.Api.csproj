@@ -10,5 +10,6 @@
   </ItemGroup>
   <ItemGroup>
     <Content Update="appsettings*.json" CopyToPublishDirectory="Never" />
+    <Content Update="appsettings.Docker*.json" CopyToOutputDirectory="Never" />
   </ItemGroup>
 </Project>

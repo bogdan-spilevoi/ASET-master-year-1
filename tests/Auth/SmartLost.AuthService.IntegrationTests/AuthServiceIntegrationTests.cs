@@ -13,11 +13,14 @@ using Microsoft.Extensions.Options;
 using SmartLost.AuthService.Application.Contracts;
 using SmartLost.AuthService.Application.Interfaces;
 using SmartLost.AuthService.Domain.Entities;
+using SmartLost.AuthService.Domain.Errors;
+using SmartLost.AuthService.Infrastructure.Authentication;
 using SmartLost.AuthService.Infrastructure.Persistence;
 using SmartLost.AuthService.IntegrationTests.Fixtures;
 using SmartLost.AuthService.IntegrationTests.Helpers;
 using SmartLost.BuildingBlocks.Application.Outbox;
 using SmartLost.BuildingBlocks.Core.Exceptions;
+using SmartLost.BuildingBlocks.Core.Results;
 using SmartLost.BuildingBlocks.Infrastructure.Outbox;
 using Xunit;
 
@@ -45,6 +48,29 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
     {
         _client.Dispose();
         return Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task RegistrationPipelineRollsBackFlushedUserSessionTokenAndOutboxOnFailure()
+    {
+        using WebApplicationFactory<Program> failingFactory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                services.AddScoped<AuthenticationSessionService>();
+                services.AddScoped<IAuthenticationSessionService, FlushThenFailSessionService>();
+            }));
+        using HttpClient client = failingFactory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+
+        using HttpResponseMessage response = await client.PostAsJsonAsync("/api/auth/register",
+            TestRequestFactory.ValidRegisterRequest());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        await using AsyncServiceScope scope = _factory.Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+        Assert.Equal(0, await context.Users.CountAsync());
+        Assert.Equal(0, await context.RefreshSessions.CountAsync());
+        Assert.Equal(0, await context.RefreshTokens.CountAsync());
+        Assert.Equal(0, await context.OutboxMessages.CountAsync());
     }
 
     [Fact]
@@ -340,6 +366,25 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
         {
             Deliveries.AddOrUpdate(envelope.Id, 1, (_, count) => count + 1);
             await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken);
+        }
+    }
+
+    private sealed class FlushThenFailSessionService(AuthenticationSessionService inner, AuthDbContext context)
+        : IAuthenticationSessionService
+    {
+        public async Task<AuthResponse> CreateAsync(UserAccount user, CancellationToken cancellationToken)
+        {
+            await inner.CreateAsync(user, cancellationToken);
+            Assert.NotNull(context.Database.CurrentTransaction);
+            await context.SaveChangesAsync(cancellationToken);
+            Assert.Single(user.DomainEvents);
+            Assert.Equal(1, await context.OutboxMessages.CountAsync(cancellationToken));
+            throw new DomainException(AuthErrors.InvalidCredentials);
+        }
+
+        public Task<Result<AuthResponse>> RefreshAsync(string refreshToken, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
         }
     }
 }

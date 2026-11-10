@@ -9,6 +9,7 @@ public static class DependencyInjection
     {
         return services.AddBuildingBlocksApplication(
             typeof(DependencyInjection).Assembly,
+            useTransactions: true,
             useAuthorization: true,
             useProfiling: true,
             useCaching: true);
