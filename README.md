@@ -254,7 +254,7 @@ will be logical references, without foreign keys between service databases.
 | `SmartLost.BuildingBlocks.Core` | Type-aware `Entity<TId>`, `AggregateRoot<TId>`, domain-event contracts, domain `Guard`, immutable `Result`/`Result<T>`, errors, explicit domain exceptions, `PageSlice<T>`/`PagedResult<T>` and pagination defaults; no framework dependencies |
 | `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction/cache/authorization/profiling behaviors and shared profiling contexts, query cache metadata/contract, transaction/Outbox contracts and `ICurrentUser` |
 | `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped HTTP current-user adapter and API registration |
-| `SmartLost.BuildingBlocks.Infrastructure` | Opt-in process-local query cache; EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its table and delivery adapter |
+| `SmartLost.BuildingBlocks.Infrastructure` | Generic EF unit-of-work/transaction adapters, optional OutboxDbContext with separate event coordinator; process-local query cache; EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its table and delivery adapter |
 
 The root, Listings and Matching solutions include the contracts project. Both runtime
 Domain models use its ListingType. Generated NMF enums remain separate, with tests checking
@@ -273,7 +273,7 @@ profile mapping, the HTTP publisher with a fake handler, bounded worker runs, do
 and current-user claims. PostgreSQL integration tests cover atomic Outbox rollback,
 identity-version conflicts and competing delivery claims; CI coverage requirements remain unchanged.
 AuthService enables the transaction behavior for register/login with ITransactionalCommand
-and a scoped AuthUnitOfWork. User/session/token/Outbox rows commit before a successful
+and a scoped AuthUnitOfWork derived from shared EfUnitOfWork<AuthDbContext>. User/session/token/Outbox rows commit before a successful
 response. Refresh keeps its own save/revocation flow so revocation persists even when
 returning failure. Its user/session models use
 `AggregateRoot<Guid>`, domain `Guard` checks and service-owned `AuthErrors`; token history
@@ -742,6 +742,10 @@ README-writing workflow is active; the [deployment template](docs/examples/deplo
 outside `.github/workflows/` and its unfinished inline steps fail until implemented.
 
 ## Development conventions
+
+Reusable persistence mechanics live in BuildingBlocks.Infrastructure as separate transaction,
+unit-of-work and Outbox-coordinator components. Service DbContexts own their EF model;
+service adapters retain error/event mapping rather than copying infrastructure lifecycle code.
 
 Each query, command, handler and validator lives in its own file named after the type,
 even when the declaration is small. Request attributes stay on the query or command.

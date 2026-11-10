@@ -281,6 +281,10 @@ snapshot delivery, inference calls and workers are not implemented in Listings.
 
 ## Review notes
 
+- 2026-11-10: Reviewed shared EF transaction/Outbox extraction. Listings keeps a normal
+  DbContext and its read-only queries; it does not opt into the Outbox base or transaction
+  behavior. Numbered API/cache/EF/seed/container flows and database ownership are unchanged.
+
 - 2026-11-09: Root Compose now groups all three APIs and their databases. Listings containers
   were moved from the standalone project while reusing the existing volume as external; fresh
   setups use a managed volume. Only container grouping, network placement and configuration

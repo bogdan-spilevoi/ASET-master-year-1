@@ -143,6 +143,11 @@ No cloud schedule or receiver is configured by the repository examples.
 
 ## Review notes
 
+- 2026-11-10: Extracted transaction lifecycle into shared EfUnitOfWork/EfTransaction and event
+  staging into OutboxDbContext/DomainEventOutboxCoordinator. AuthDbContext now owns only its
+  model; AuthUnitOfWork preserves repository error mapping. Existing numbered
+  save/commit/rollback, refresh and worker arrows retain the same behavior.
+
 - 2026-11-09: Root Compose now groups all three APIs and their databases. Listings containers
   were moved from the standalone project while reusing the existing volume as external; fresh
   setups use a managed volume. Only container grouping, network placement and configuration

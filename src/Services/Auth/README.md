@@ -10,6 +10,10 @@ request is cacheable, so identity and token responses are evaluated per request.
 Register/login commands use the transaction behavior and scoped AuthUnitOfWork to commit
 user/session/token/Outbox changes together. Domain events clear only after commit.
 Refresh keeps its own save/revocation flow; the current-user query does not start a transaction.
+AuthDbContext inherits shared OutboxDbContext and only declares tables/mapping.
+AuthUnitOfWork derives from shared EfUnitOfWork<AuthDbContext>; its only customization
+is saving through the Auth repository's error mapping. Transaction/event lifecycle code
+is split into reusable BuildingBlocks components.
 
 Queries, commands, handlers and validators use separate files named after their types.
 For example, [GetCurrentUserQuery](SmartLost.AuthService.Application/Queries/GetCurrentUser/GetCurrentUserQuery.cs)

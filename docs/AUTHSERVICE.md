@@ -118,7 +118,13 @@ repeated staging in the same context preserves message IDs. Discard a failed ope
 context before retrying the business operation. Events must not be manually published or
 cleared before that commit.
 
-Auth supports EF-owned automatic transactions and explicit transactions owned by AuthUnitOfWork.
+AuthDbContext inherits shared OutboxDbContext and contains only DbSets and EF model
+configuration. The separate shared DomainEventOutboxCoordinator stages/clears events.
+AuthUnitOfWork is a thin EfUnitOfWork<AuthDbContext> adapter retaining Auth repository
+error mapping; shared EfUnitOfWork/EfTransaction own begin/commit/rollback/disposal.
+There are no pipeline transaction methods in AuthDbContext.
+
+Auth supports EF-owned automatic transactions and explicit transactions owned by its unit of work.
 With a pipeline transaction, SaveChanges stages Outbox messages but retains domain events;
 only the final successful commit clears the saved aggregates. Repeated saves preserve
 Outbox IDs and do not duplicate messages. Rollback or disposal without commit retains

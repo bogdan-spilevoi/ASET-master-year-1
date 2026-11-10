@@ -21,6 +21,13 @@ accurate entry point for developers.
 2. Treat source code and configuration as the source of truth—not old README text.
 3. Do not invent endpoints, commands, ports, services, deployment behavior, or completed features.
 
+## Modularity
+
+- Put reusable infrastructure in BuildingBlocks rather than duplicating it in services.
+- Keep transaction lifecycle, Outbox coordination and service-specific EF mapping/error
+  handling in separate components. DbContexts must not orchestrate MediatR transactions.
+- Keep each main production type in its own matching file.
+
 ## CQRS file organization
 
 - Always keep each query, command, handler and validator in its own file, named after

@@ -135,6 +135,12 @@ category synonym normalization are not implemented.
 
 ## Review notes
 
+- 2026-11-10: MatchingUnitOfWork now inherits shared EfUnitOfWork<MatchingDbContext>; only
+  concurrency error mapping remains service-specific. Explicit rollback now discards tracked
+  state through the shared adapter. Separate claim/result saves and the AI call outside a
+  transaction are unchanged. No Outbox or authorization/runtime service calls are
+  added; numbered flows retain their existing behavior.
+
 - 2026-11-09: Root Compose now groups all three APIs and their databases. Listings containers
   were moved from the standalone project while reusing the existing volume as external; fresh
   setups use a managed volume. Only container grouping, network placement and configuration

@@ -31,7 +31,7 @@ public sealed class AuthenticationSessionService(
         dbContext.RefreshTokens.Add(RefreshToken.Create(session, hash));
         // The pipeline saves and commits the tracked user/session/outbox together.
         // Direct callers retain the existing EF-owned automatic transaction.
-        if (!dbContext.HasPipelineTransaction)
+        if (!dbContext.HasManagedTransaction)
         {
             await userAccountRepository.SaveChangesAsync(cancellationToken);
         }

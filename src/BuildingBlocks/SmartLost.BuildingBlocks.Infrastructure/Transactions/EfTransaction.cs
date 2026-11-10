@@ -1,17 +1,17 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using SmartLost.BuildingBlocks.Application.Transactions;
 
-namespace SmartLost.AuthService.Infrastructure.Persistence;
+namespace SmartLost.BuildingBlocks.Infrastructure.Transactions;
 
-internal sealed class AuthTransaction(AuthDbContext context, IDbContextTransaction transaction) : ITransaction
+internal sealed class EfTransaction(DbContext context, IDbContextTransaction transaction) : ITransaction
 {
     private bool _completed;
 
     public async Task CommitAsync(CancellationToken cancellationToken)
     {
         await transaction.CommitAsync(cancellationToken);
-        context.CompletePipelineTransaction(committed: true);
-        _completed = true;
+        Complete(committed: true);
     }
 
     public async Task RollbackAsync(CancellationToken cancellationToken)
@@ -22,8 +22,7 @@ internal sealed class AuthTransaction(AuthDbContext context, IDbContextTransacti
         }
         finally
         {
-            context.CompletePipelineTransaction(committed: false);
-            _completed = true;
+            Complete(committed: false);
         }
     }
 
@@ -37,8 +36,20 @@ internal sealed class AuthTransaction(AuthDbContext context, IDbContextTransacti
         {
             if (!_completed)
             {
-                context.CompletePipelineTransaction(committed: false);
+                Complete(committed: false);
             }
         }
+    }
+
+    private void Complete(bool committed)
+    {
+        if (!committed)
+        {
+            // SaveChanges may have accepted entities whose database changes were rolled back.
+            context.ChangeTracker.Clear();
+        }
+
+        (context as IEfTransactionParticipant)?.OnTransactionCompleted(committed);
+        _completed = true;
     }
 }

@@ -109,6 +109,11 @@ See [cache policy and limitations](../../../docs/QUERY_CACHING.md#matching-photo
 The focused solution also lists the four shared BuildingBlocks projects directly.
 Neither this service nor BuildingBlocks references another microservice's implementation.
 
+MatchingUnitOfWork reuses shared EfUnitOfWork<MatchingDbContext> for transaction mechanics
+and keeps only its concurrency-to-domain error mapping. Explicit transaction rollback
+uses the shared adapter to discard tracked changes. Inference still uses separate
+claim/result saves; no transaction is held across AI calls and no Outbox is added.
+
 ## Data and integration ownership
 
 Matching owns the `matchingservice` PostgreSQL database. Only Matching accesses it.
