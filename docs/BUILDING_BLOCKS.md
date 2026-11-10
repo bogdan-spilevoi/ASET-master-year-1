@@ -183,8 +183,10 @@ Successful commands save and commit; failure results roll back without saving. E
 roll back using an uncancelled token and propagate; a rollback failure is logged without
 replacing the original exception. Transactions are disposed on every completed execution.
 Unmarked queries/commands bypass the transaction. These are local service transactions;
-the abstractions do not coordinate transactions across microservices. AuthService does not
-enable this behavior or implement a unit-of-work adapter.
+the abstractions do not coordinate transactions across microservices. AuthService enables
+this behavior for register/login with AuthUnitOfWork; refresh is deliberately unmarked
+because replay revocation must survive a failure Result. Matching embedding processing
+keeps its own short saves around inference; Listings has no mutation commands yet.
 
 ## Opt-in query caching
 
@@ -362,8 +364,8 @@ This compiles the libraries and their unit test project without executing tests.
 invariants, entity equality, pagination snapshots/counts/limits/mapping, derived-validator
 discovery through MediatR, pipeline ordering, sequential validation, exception propagation,
 commit/rollback/disposal and HTTP mapping. AuthService's API tests cover actual wiring and
-the register/login response contracts. Database tests currently use EF InMemory; they do
-not verify PostgreSQL constraints or migrations. Additional tests cover aggregate event
+the register/login response contracts. Auth HTTP/transaction tests use SQLite in memory;
+other focused tests also use EF InMemory. These do not verify PostgreSQL constraints or migrations. Additional tests cover aggregate event
 collections, guards, authenticated/anonymous/raw/mapped claims, Outbox envelopes/staging,
 retry/backoff, dead letters, cancellation and lease recovery. Outbox unit tests use a
 SQLite-only UTC-tick converter for SQL date comparisons; production mapping is unchanged.
@@ -395,4 +397,5 @@ request-attribute opt-ins: Auth identity is protected, Listings categories are c
 and Matching caches input-only photo analysis after checking photo access on every outer
 request. Matching demo requests remain unmarked for authorization. No identity or
 suggestion result is cached.
-The shared registration defaults remain off; transactions remain disabled in these APIs.
+The shared registration defaults remain off. Auth enables transactions for register/login;
+Listings and Matching retain their existing persistence boundaries.

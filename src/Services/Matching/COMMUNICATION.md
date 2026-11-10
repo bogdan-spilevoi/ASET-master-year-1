@@ -135,6 +135,12 @@ category synonym normalization are not implemented.
 
 ## Review notes
 
+- 2026-11-09: Root Compose now groups all three APIs and their databases. Listings containers
+  were moved from the standalone project while reusing the existing volume as external; fresh
+  setups use a managed volume. Only container grouping, network placement and configuration
+  paths change. HTTP routes, database ownership, CQRS/worker flows and outgoing service calls
+  are unchanged.
+
 - 2026-11-08: added the input-only photo-analysis cache flow (8.1-8.4). The outer query
   still checks photo access on every request, including hits. Suggestions and identity
   remain uncached; no route, persistence ownership, worker, migration or service call

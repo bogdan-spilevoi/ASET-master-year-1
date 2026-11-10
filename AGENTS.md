@@ -21,6 +21,13 @@ accurate entry point for developers.
 2. Treat source code and configuration as the source of truth—not old README text.
 3. Do not invent endpoints, commands, ports, services, deployment behavior, or completed features.
 
+## CQRS file organization
+
+- Always keep each query, command, handler and validator in its own file, named after
+  the declared type (for example, `GetCurrentUserQuery.cs` and
+  `GetCurrentUserQueryHandler.cs`). Do not combine them, even for small types.
+- Keep authorization and caching attributes on the request declaration in its own file.
+
 ## README structure
 
 Keep the following sections in this order. When an area has no implementation, state that

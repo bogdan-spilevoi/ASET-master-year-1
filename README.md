@@ -101,7 +101,8 @@ This deployment and inference integration are not implemented.
 The optional MediatR aspects can be combined in this order:
 `Profiling -> ExceptionToResult -> Authorization -> Validation -> Caching -> Transaction -> Handler`.
 Auth, Listings and Matching register profiling, authorization and caching in that order;
-transactions remain disabled. Profiling observes every MediatR request. Authorization and
+Auth register/login commands also enable transactions; Listings and Matching keep their
+existing boundaries. Profiling observes every MediatR request. Authorization and
 caching act only on attributed requests: currently Auth identity requires authorization
 and Listings categories use caching. Matching caches only the input-only AI photo-analysis
 step after reading the permitted photo on every request. Auth identity and Matching
@@ -271,8 +272,10 @@ routes and a service key must be configured before running the worker. Unit test
 profile mapping, the HTTP publisher with a fake handler, bounded worker runs, domain guards
 and current-user claims. PostgreSQL integration tests cover atomic Outbox rollback,
 identity-version conflicts and competing delivery claims; CI coverage requirements remain unchanged.
-AuthService enables exception mapping and validation; it does not enable the transaction
-behavior or provide a shared unit-of-work adapter. Its user/session models now use
+AuthService enables the transaction behavior for register/login with ITransactionalCommand
+and a scoped AuthUnitOfWork. User/session/token/Outbox rows commit before a successful
+response. Refresh keeps its own save/revocation flow so revocation persists even when
+returning failure. Its user/session models use
 `AggregateRoot<Guid>`, domain `Guard` checks and service-owned `AuthErrors`; token history
 remains an entity. Event collections are ignored by EF; selected profile events are
 persisted as Outbox messages, and local session events are cleared after commit. See
@@ -360,14 +363,13 @@ Docker-related configuration includes [`.dockerignore`](.dockerignore),
 [`src/Services/Auth/SmartLost.AuthService.Api/Dockerfile`](src/Services/Auth/SmartLost.AuthService.Api/Dockerfile),
 [the Auth worker Dockerfile](src/Services/Auth/SmartLost.AuthService.Worker/Dockerfile) and
 [`src/Services/Matching/SmartLost.MatchingService.Api/Dockerfile`](src/Services/Matching/SmartLost.MatchingService.Api/Dockerfile).
-The default stack has `auth-db` + `auth-service` and `matching-db` + `matching-service`: two API
-containers, each with its own PostgreSQL container. The optional `workers` profile adds a finite
+The default `aset-master-year-1` stack has Auth, Listings and Matching: three API
+containers, each with its own PostgreSQL container, image and data volume. The optional `workers` profile adds a finite
 Auth Outbox job without an exposed port. Matching setup, migration and test-flow commands are in the
 [Matching README](src/Services/Matching/README.md#local-development); copy its two
 `appsettings*.example.json` files before starting `matching-service`.
-Listings adds its own [API Dockerfile](src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile),
-[database Compose file](src/Services/Listings/compose.database.yml) and
-[API Compose override](src/Services/Listings/compose.api.yml).
+Listings uses its own [API Dockerfile](src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile)
+and the same root Compose file. There is no separate Listings Compose stack.
 The API image uses locked restore and excludes local settings from its build context.
 All three runtime images run `apt-get upgrade`, so they include Ubuntu security fixes that are
 newer than the `aspnet:10.0` base image. The CI Trivy image gate fails on HIGH/CRITICAL findings
@@ -393,12 +395,19 @@ temporary container. These are local checks; hosted CI/Linux-amd64 validation is
 Copy the JSON setup templates from the repository root:
 
 ```sh
-cp src/Services/Auth/SmartLost.AuthService.Api/appsettings.example.json src/Services/Auth/SmartLost.AuthService.Api/appsettings.json
-cp src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.example.json src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.json
+cp -n .env.example .env
+cp -n src/Services/Auth/SmartLost.AuthService.Api/appsettings.example.json src/Services/Auth/SmartLost.AuthService.Api/appsettings.json
+cp -n src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.example.json src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.json
+cp -n src/Services/Matching/SmartLost.MatchingService.Api/appsettings.example.json src/Services/Matching/SmartLost.MatchingService.Api/appsettings.json
+cp -n src/Services/Matching/SmartLost.MatchingService.Api/appsettings.Docker.example.json src/Services/Matching/SmartLost.MatchingService.Api/appsettings.Docker.json
+cp -n src/Services/Listings/SmartLost.ListingsService.Api/appsettings.example.json src/Services/Listings/SmartLost.ListingsService.Api/appsettings.json
+cp -n src/Services/Listings/SmartLost.ListingsService.Api/appsettings.Docker.example.json src/Services/Listings/SmartLost.ListingsService.Api/appsettings.Docker.json
 ```
 
-The first file is for local API/EF commands (`Host=localhost`); the second is for Compose
-(`Host=auth-db`). PowerShell uses the same paths with `Copy-Item` instead of `cp`.
+Each service uses appsettings.json for local API/EF commands (`Host=localhost`) and
+appsettings.Docker.json for its container (`Host=auth-db`, `listings-db` or `matching-db`).
+Set LISTINGS_POSTGRES_PASSWORD in the root `.env` and use the same password in Listings
+JSON connection strings. Compose loads the root `.env` automatically. PowerShell uses the same paths with `Copy-Item` instead of `cp`.
 Local `appsettings*.json` files are ignored by Git; only `appsettings*.example.json` files
 are versioned. Replace the JWT signing-key placeholder in local files. Compose's database
 uses the documented development-only password in the examples; keep database passwords
@@ -409,14 +418,14 @@ Validate and start the stack:
 
 ```sh
 docker compose config --quiet
-docker compose up -d --wait auth-db
+docker compose up -d --wait auth-db listings-db matching-db
 ```
 
-Apply the [AuthService CLI migrations](docs/AUTHSERVICE.md#apply-to-a-local-database)
-before starting the API, then start the complete stack:
+Apply each service's [database migrations](#database-and-migrations) before starting
+the APIs, then start the complete stack:
 
 ```sh
-docker compose up --build
+docker compose up -d --build
 ```
 
 Stop the stack:
@@ -431,15 +440,17 @@ Remove the stack:
 docker compose down
 ```
 
-Remove the stack and volumes **including all local database data**:
+Remove the stack and its managed volumes **including their local database data**:
 
 ```sh
 docker compose down -v
 ```
 
 `stop` preserves containers and data; `down` removes containers/network but preserves the
-named database volumes. With Docker Compose the Auth API is `http://localhost:8080` (PostgreSQL
-`localhost:5432`) and the Matching API is `http://localhost:8081` (PostgreSQL `localhost:5434`).
+Compose-managed database volumes. An adopted external Listings volume is retained even
+with `down -v`; deleting it requires a separate explicit Docker volume removal. With Compose,
+Auth is `http://localhost:8080` (DB `localhost:5432`), Listings is `http://localhost:5081`
+(DB `localhost:5433`) and Matching is `http://localhost:8081` (DB `localhost:5434`).
 Local `dotnet run` still uses the launch profile ports in
 [`src/Services/Auth/SmartLost.AuthService.Api/Properties/launchSettings.json`](src/Services/Auth/SmartLost.AuthService.Api/Properties/launchSettings.json).
 
@@ -459,62 +470,34 @@ schedule has not been deployed. Stop/remove optional-profile containers with
 Volume removal remains destructive.
 
 
-Listings has a separate [database-only Compose file](src/Services/Listings/compose.database.yml).
-It exposes PostgreSQL on `127.0.0.1:5433` and uses its own named volume; it starts no API.
-Create ignored local files from templates and set matching development passwords:
+Listings is part of the root Compose stack. Its API reads the ignored
+`src/Services/Listings/SmartLost.ListingsService.Api/appsettings.Docker.json` through a
+read-only `/app/appsettings.json` bind, like Auth and Matching. Its PostgreSQL password
+comes from the root `.env`; the API password must match. JSON is excluded from image
+and publish output. Host port 5081 remains loopback-only; stop any local API using it.
+
+For only Listings, after configuring settings and applying migrations:
 
 ```sh
-cp -n src/Services/Listings/.env.example src/Services/Listings/.env
-cp -n src/Services/Listings/SmartLost.ListingsService.Api/appsettings.example.json src/Services/Listings/SmartLost.ListingsService.Api/appsettings.json
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml config --quiet
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml up -d --wait
+docker compose up -d --build listings-service
+docker compose logs --tail 100 listings-service
+docker compose stop listings-service listings-db
 ```
 
-Lifecycle commands for this separate stack:
+For an existing standalone Listings database, retain its volume before removing the old
+stack without `-v`. Set `LISTINGS_POSTGRES_VOLUME` to its actual Docker volume name and
+`LISTINGS_POSTGRES_VOLUME_EXTERNAL=true` in the root `.env`. The current local setup
+adopts `listings_listings-db-data` directly; no data copy or schema reset is needed.
+Fresh setups leave both optional variables unset so Compose creates its own named volume.
+An adopted external volume is never deleted by `docker compose down -v`.
+
+Seed an already-migrated Listings database without another HTTP listener:
 
 ```sh
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml stop
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml down
-# Destructive: also removes the Listings database volume/data.
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml down --volumes
+docker compose run --rm --no-deps listings-service --SeedData:Only=true
 ```
 
-`stop` retains containers/data; `down` removes containers/network and retains data.
-`.env` is for Compose; EF uses appsettings or `ConnectionStrings__ListingsDatabase`.
-See [Listings Infrastructure](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md)
-for password setup, migration and configuration precedence details.
-
-After applying the Listings migration, add its API container with the Compose override:
-
-```sh
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml config --quiet
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml up -d --build
-```
-
-This reuses the existing Listings database/network/volume. The API runs as a non-root
-user, connects to `listings-db:5432` inside Docker and exposes **127.0.0.1:5081** on the
-host. Its connection string is supplied at runtime from the ignored Listings `.env`;
-local JSON settings are excluded from the image. This is a Development stack, with
-Swagger enabled and seeding disabled by default. Stop any local API using port 5081 first.
-
-Use both files for lifecycle commands when the API container is included:
-
-```sh
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml stop
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml down
-# Destructive: also deletes the Listings database volume/data.
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml down --volumes
-```
-
-Seed through the built API image, without a host .NET SDK or HTTP listener:
-
-```sh
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml run --rm --no-deps listings-service --SeedData:Only=true
-```
-
-The database must already be running and migrated. Neither image build nor API/Compose
-startup applies migrations. The existing CI Dockerfile discovery will build/scan this
-image; no deployment workflow is activated.
+Container startup never applies migrations. See [Listings setup and lifecycle](src/Services/Listings/SmartLost.ListingsService.Api/README.md#docker-api-and-database).
 
 
 The Listings API and EF CLI now share the ignored local connection file at
@@ -759,6 +742,9 @@ README-writing workflow is active; the [deployment template](docs/examples/deplo
 outside `.github/workflows/` and its unfinished inline steps fail until implemented.
 
 ## Development conventions
+
+Each query, command, handler and validator lives in its own file named after the type,
+even when the declaration is small. Request attributes stay on the query or command.
 
 Listings query results use records named `CategoryDto`, `PhotoDto`, `ListingSummaryDto`
 and `ListingDetailsDto` in [Application/Dtos](src/Services/Listings/SmartLost.ListingsService.Application/Dtos/).

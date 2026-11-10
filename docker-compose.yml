@@ -1,3 +1,5 @@
+name: aset-master-year-1
+
 services:
   auth-db:
     image: postgres:16-alpine
@@ -97,6 +99,50 @@ services:
     ports:
       - "8081:8080"
 
+  listings-db:
+    image: postgres:16-alpine
+    container_name: aset-listings-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: listingsservice
+      POSTGRES_USER: listingsservice
+      POSTGRES_PASSWORD: ${LISTINGS_POSTGRES_PASSWORD:?Set LISTINGS_POSTGRES_PASSWORD in the root .env file}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - listings-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  listings-service:
+    image: smartlost-listings-api:local
+    container_name: aset-listings-service
+    build:
+      context: .
+      dockerfile: src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      listings-db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+    volumes:
+      - type: bind
+        source: ./src/Services/Listings/SmartLost.ListingsService.Api/appsettings.Docker.json
+        target: /app/appsettings.json
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "127.0.0.1:5081:8080"
+
 volumes:
   auth-db-data:
   matching-db-data:
+  listings-db-data:
+    name: ${LISTINGS_POSTGRES_VOLUME:-aset-master-year-1_listings-db-data}
+    external: ${LISTINGS_POSTGRES_VOLUME_EXTERNAL:-false}

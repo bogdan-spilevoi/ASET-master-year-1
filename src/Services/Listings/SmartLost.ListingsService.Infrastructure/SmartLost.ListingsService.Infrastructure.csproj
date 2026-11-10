@@ -12,7 +12,7 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <Content Include="../SmartLost.ListingsService.Api/appsettings*.json"
-             Exclude="../SmartLost.ListingsService.Api/appsettings*.example.json" Link="%(Filename)%(Extension)"
+             Exclude="../SmartLost.ListingsService.Api/appsettings*.example.json;../SmartLost.ListingsService.Api/appsettings.Docker.json" Link="%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
   </ItemGroup>
   <ItemGroup>

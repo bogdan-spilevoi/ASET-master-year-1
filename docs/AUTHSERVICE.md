@@ -26,15 +26,19 @@ main CI entry point.
 
 Application depends on Domain; Infrastructure implements Application abstractions; API
 composes both. Each layer references the appropriate [building blocks](BUILDING_BLOCKS.md).
-The pipeline is `Profiling → ExceptionToResult → Authorization → Validation → Caching → Handler`.
+The pipeline is `Profiling → ExceptionToResult → Authorization → Validation → Caching → Transaction → Handler`.
 Profiling records operation metadata; authorization acts on attributed requests. No Auth
 request has a cache attribute, so credentials, tokens and current identity bypass caching.
 The sole Auth query, GetCurrentUserQuery, reads the current JWT claims directly; caching
 adds no useful data-read saving and would require identity-scoped keys.
 Expected duplicate/credential errors are returned as `Result<AuthResponse>`, and explicit domain exceptions can be mapped
-to results. Other exceptions propagate to the sanitized API error handler. Transactions are
-not enabled as a MediatR behavior in this service. EF Core commits registration/session
-creation and each refresh rotation with one `SaveChangesAsync` transaction.
+to results. Other exceptions propagate to the sanitized API error handler.
+RegisterUserCommand and LoginUserCommand implement ITransactionalCommand. Their handler
+stages changes and the transaction behavior calls AuthUnitOfWork.SaveChangesAsync and
+commits before returning success. Validation/authorization run before a transaction opens.
+GetCurrentUserQuery and RefreshTokenCommand bypass the transaction wrapper. Refresh
+keeps its own EF save and persists replay revocation even when returning a failure Result.
+Direct session-service calls outside the pipeline retain their existing EF-owned save.
 
 The database is not shared with other services.
 
@@ -114,10 +118,14 @@ repeated staging in the same context preserves message IDs. Discard a failed ope
 context before retrying the business operation. Events must not be manually published or
 cleared before that commit.
 
-Auth currently requires EF-owned automatic transactions for event-bearing saves. It rejects
-an ambient/explicit transaction or disabled automatic transactions instead of clearing events
-before the caller's final commit. The optional MediatR transaction behavior remains disabled.
-Future explicit transaction support must move clearing to the final commit boundary.
+Auth supports EF-owned automatic transactions and explicit transactions owned by AuthUnitOfWork.
+With a pipeline transaction, SaveChanges stages Outbox messages but retains domain events;
+only the final successful commit clears the saved aggregates. Repeated saves preserve
+Outbox IDs and do not duplicate messages. Rollback or disposal without commit retains
+events on the entity references and clears the change tracker, so discarded work cannot
+be saved accidentally by a subsequent operation. Nested transactions, unrelated explicit
+transactions, ambient transactions and disabled automatic transactions remain rejected
+for the applicable event-save/begin boundaries. No schema migration is needed.
 
 `AuthOutboxEventMapper` exports only `UserAccountCreated` and `UserIdentityChanged`, using
 stable types `auth.user.created` / `auth.user.identity_changed`, contract version 1 and payload
@@ -492,7 +500,8 @@ code from the changed-file coverage requirement, regardless of their folder or f
 Interfaces with implementations and files containing concrete types still require coverage.
 
 `SmartLost.AuthService.UnitTests` exercises service behavior and API response paths with an isolated
-in-memory database, collecting Coverlet coverage, including direct command validation and
+SQLite in-memory HTTP database (including real local transactions), collecting Coverlet
+coverage, including direct command validation and
 HTTP error contracts, invariant identity normalization, atomic identity updates and duplicate
 checks. Migration unit tests verify discovery, snapshot/model consistency, initial table/index
 operations and PostgreSQL forward/idempotent/rollback SQL without connecting to a database,

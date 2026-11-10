@@ -41,7 +41,7 @@ _ReSharper*/
 # Local secrets and credentials; commit sanitized *.example files only
 .env
 .env.*
-!src/Services/Listings/.env.example
+!.env.example
 **/appsettings*.json
 !**/appsettings*.example.json
 **/outboxsettings*.json

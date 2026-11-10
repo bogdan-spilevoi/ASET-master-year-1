@@ -11,7 +11,7 @@ whose implementation is absent. Auth owns every database table shown here.
 flowchart LR
     Client["HTTP client"]
     API["AuthController / AutoMapper"]
-    Pipeline["MediatR: Profiling / ExceptionToResult / Authorization / Validation / Caching"]
+    Pipeline["MediatR: Profiling / ExceptionToResult / Authorization / Validation / Caching / Transaction"]
     Handler["RegisterUserCommandHandler or LoginUserCommandHandler"]
     Password["PasswordService"]
     Repository["UserAccountRepository"]
@@ -22,14 +22,15 @@ flowchart LR
 
     Client -->|"1. POST /api/auth/register or /api/auth/login"| API
     API -->|"1.1 Map request and dispatch command"| Pipeline
-    Pipeline -->|"1.2 Invoke handler after validation"| Handler
+    Pipeline -->|"1.2 After validation: begin AuthUnitOfWork transaction; invoke handler"| Handler
     Handler -->|"1.3 Check uniqueness or load user"| Repository
     Repository -->|"1.3.1 Query Users through AuthDbContext"| DB
     Handler -->|"1.4 Hash password or verify credentials"| Password
     Handler -->|"1.5 Create session after successful checks"| Session
     Session -->|"1.5.1 Generate JWT"| Tokens
-    Session -->|"1.5.2 Stage session and token history; save via repository"| Context
-    Context -->|"1.5.3 Commit tracked rows and selected outbox events together"| DB
+    Session -->|"1.5.2 Stage session and token history without saving"| Context
+    Pipeline -->|"1.5.3 Success: SaveChanges via repository and commit; failure: rollback"| Context
+    Context -->|"1.5.4 Commit tracked rows and selected outbox events together; clear events after commit"| DB
     Handler -->|"1.6 Return result through pipeline"| API
     API -->|"1.7 AuthResponse or error response"| Client
 ```
@@ -37,7 +38,11 @@ flowchart LR
 Registration also stages a new user through the repository. Its user, first session,
 token history and `auth.user.created` message commit together. Login creates a session
 but exports no session event. Failures short-circuit the successful path above.
-The JWT is generated before saving but returned only after the save succeeds.
+The JWT is generated before saving but returned only after the pipeline commits.
+RegisterUserCommand and LoginUserCommand implement ITransactionalCommand. Failure Results,
+exceptions or cancellation roll back the transaction; rollback retains the entity events
+and detaches discarded tracked work. RefreshTokenCommand is unmarked: its replay revocation
+must persist even when the command returns an invalid-token failure.
 
 ## Current user identity
 
@@ -131,12 +136,28 @@ No cloud schedule or receiver is configured by the repository examples.
 
 - [Controller](SmartLost.AuthService.Api/Controllers/AuthController.cs) and [API composition](SmartLost.AuthService.Api/Program.cs)
 - [Register](SmartLost.AuthService.Application/Commands/Register/RegisterUserCommandHandler.cs), [login](SmartLost.AuthService.Application/Commands/Login/LoginUserCommandHandler.cs) and [refresh](SmartLost.AuthService.Application/Commands/Refresh/RefreshTokenCommandHandler.cs) handlers
-- [Current-user query and handler](SmartLost.AuthService.Application/Queries/GetCurrentUser/GetCurrentUserQueryHandler.cs) and [shared authorization behavior](../../BuildingBlocks/SmartLost.BuildingBlocks.Application/Behaviors/AuthorizationBehavior.cs)
+- [Current-user query](SmartLost.AuthService.Application/Queries/GetCurrentUser/GetCurrentUserQuery.cs), [handler](SmartLost.AuthService.Application/Queries/GetCurrentUser/GetCurrentUserQueryHandler.cs) and [shared authorization behavior](../../BuildingBlocks/SmartLost.BuildingBlocks.Application/Behaviors/AuthorizationBehavior.cs)
 - [Session service](SmartLost.AuthService.Infrastructure/Authentication/AuthenticationSessionService.cs) and [AuthDbContext](SmartLost.AuthService.Infrastructure/Persistence/AuthDbContext.cs)
 - [Event mapper](SmartLost.AuthService.Infrastructure/Outbox/AuthOutboxEventMapper.cs), [HTTP publisher](SmartLost.AuthService.Infrastructure/Outbox/AuthOutboxHttpPublisher.cs) and [shared processor](../../BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/Outbox/OutboxProcessor.cs)
 - [Worker operation and receiver contract](SmartLost.AuthService.Worker/README.md)
 
 ## Review notes
+
+- 2026-11-09: Root Compose now groups all three APIs and their databases. Listings containers
+  were moved from the standalone project while reusing the existing volume as external; fresh
+  setups use a managed volume. Only container grouping, network placement and configuration
+  paths change. HTTP routes, database ownership, CQRS/worker flows and outgoing service calls
+  are unchanged.
+
+- 2026-11-09: enabled TransactionBehavior for register/login and added scoped AuthUnitOfWork.
+  Flow 1 now begins a transaction after validation, stages session/token changes, and saves
+  user/session/token/Outbox rows once before the final commit. Events clear after commit;
+  failures roll back and discard tracked state. Refresh, current-user reads, worker delivery
+  and cross-service boundaries are unchanged. SQLite and PostgreSQL tests cover the change.
+
+- 2026-11-09: moved GetCurrentUserQuery and its authorization attribute into its own
+  file, separate from the handler. Types, namespaces, authorization checks and MediatR
+  dispatch are unchanged; all numbered HTTP, persistence and worker arrows still apply.
 
 - 2026-11-08: Enabled shared profiling and the attribute-driven cache wrapper alongside
   authorization. No Auth request carries a cache attribute, so identity/token responses remain

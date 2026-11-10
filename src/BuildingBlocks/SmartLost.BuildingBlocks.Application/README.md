@@ -51,3 +51,11 @@ A combined DI regression test verifies the order, 401 before cached results, val
 before hits, single population and profiling scope cleanup. Public cache opt-in still
 requires immutable snapshots and identity-complete keys for identity-dependent queries.
 See [query caching and AOP](../../../docs/QUERY_CACHING.md).
+
+## Transaction integration
+
+Auth register/login commands implement ITransactionalCommand and enable useTransactions.
+The transaction wrapper runs after caching/validation and commits through a scoped
+AuthUnitOfWork. Refresh remains unmarked so failure-side replay revocation is preserved.
+Matching's AI workflow keeps its separate claim/result saves; Listings currently has no
+mutation commands. See [Auth transaction and Outbox lifecycle](../../../docs/AUTHSERVICE.md#auth-outbox).

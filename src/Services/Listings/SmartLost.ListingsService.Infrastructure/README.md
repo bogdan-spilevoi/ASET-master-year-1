@@ -37,51 +37,39 @@ or call Auth/Matching/Blob Storage. See [query contracts](../SmartLost.ListingsS
 From the repository root, create ignored local files without overwriting existing ones:
 
 ```sh
-cp -n src/Services/Listings/.env.example src/Services/Listings/.env
+cp -n .env.example .env
 cp -n src/Services/Listings/SmartLost.ListingsService.Api/appsettings.example.json src/Services/Listings/SmartLost.ListingsService.Api/appsettings.json
+cp -n src/Services/Listings/SmartLost.ListingsService.Api/appsettings.Docker.example.json src/Services/Listings/SmartLost.ListingsService.Api/appsettings.Docker.json
 ```
 
-Replace the password placeholder in both files with the same local development password.
-`.env` configures Compose; EF reads the connection from appsettings or environment, not
-from `.env`. The example is not copied into build output. The API owns the shared local appsettings source. Infrastructure links it into its
-output for design-time use, excludes that copy from publish and keeps it ignored by Git.
+Match the root `.env` LISTINGS_POSTGRES_PASSWORD with both JSON connection passwords.
+Local API/EF uses `Host=localhost;Port=5433`; the container JSON uses `Host=listings-db;Port=5432`.
+EF reads settings/environment, not `.env`. Infrastructure links the local appsettings.json
+into its design-time output, excluding examples and Docker settings; nothing is published.
 
-[compose.database.yml](../compose.database.yml) starts **only PostgreSQL 16**, bound to
-`127.0.0.1:5433`, with database/user `listingsservice`, a health check and a named data
-volume. The root Compose stack continues to manage Auth separately on port 5432.
-No Listings API, HTTP port, storage or worker is created by this file.
-
-Adding [compose.api.yml](../compose.api.yml) alongside it starts the Listings API container
-on host port 5081 using the same database and data volume. The container connects via
-`listings-db:5432`; host tools continue using `localhost:5433`. It receives its connection
-at runtime from the ignored `.env`, while API/EF tools on the host retain their local JSON
-settings. See [combined stack, seed and lifecycle commands](../SmartLost.ListingsService.Api/README.md#docker-api-and-database).
+[Root Compose](../../../../docker-compose.yml) owns the three-service development stack.
+Listings keeps a separate PostgreSQL database/user, health check and named volume.
+Its API exposes port 5081 and reads appsettings.Docker.json from a read-only bind mount.
+Start only its database before applying migrations:
 
 ```sh
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml config --quiet
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml up -d --wait
+docker compose config --quiet
+docker compose up -d --wait listings-db
 ```
 
-Stop containers while keeping them and their data:
+Stop only Listings without deleting data:
 
 ```sh
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml stop
+docker compose stop listings-service listings-db
 ```
 
-Remove containers/network while retaining the database volume:
-
-```sh
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml down
-```
-
-Destructive reset: `down --volumes` also deletes the Listings database data:
-
-```sh
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml down --volumes
-```
-
-Changing POSTGRES_PASSWORD in `.env` does not change an existing PostgreSQL user's
-password inside a previously initialized data volume.
+`docker compose down` removes the entire shared stack's containers/network while retaining
+volumes. `docker compose down --volumes` is destructive for managed volumes. An adopted
+external Listings volume is preserved: set LISTINGS_POSTGRES_VOLUME to its existing name
+and LISTINGS_POSTGRES_VOLUME_EXTERNAL=true in root `.env` before migrating an old stack.
+Fresh setups leave those variables unset. The current local setup adopts listings_listings-db-data.
+Changing the password setting does not rotate credentials inside an initialized volume.
+See [API container setup](../SmartLost.ListingsService.Api/README.md#docker-api-and-database).
 
 ## EF CLI
 

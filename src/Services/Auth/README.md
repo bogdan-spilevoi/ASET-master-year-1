@@ -5,8 +5,15 @@ endpoints, JWT issuance, persistent refresh sessions and a PostgreSQL-owned outb
 Its separate finite worker delivers profile integration events over HTTP.
 
 The API registers the shared Profiling → ExceptionToResult → Authorization → Validation
-→ Caching pipeline. Only attributed requests enforce Application authorization; no Auth
+→ Caching → Transaction pipeline. Only attributed requests enforce Application authorization; no Auth
 request is cacheable, so identity and token responses are evaluated per request.
+Register/login commands use the transaction behavior and scoped AuthUnitOfWork to commit
+user/session/token/Outbox changes together. Domain events clear only after commit.
+Refresh keeps its own save/revocation flow; the current-user query does not start a transaction.
+
+Queries, commands, handlers and validators use separate files named after their types.
+For example, [GetCurrentUserQuery](SmartLost.AuthService.Application/Queries/GetCurrentUser/GetCurrentUserQuery.cs)
+declares `[Authorize]`; its handler is in `GetCurrentUserQueryHandler.cs`.
 
 - [Communication diagrams](COMMUNICATION.md): current request flows, refresh/replay
   handling and atomic outbox staging followed by worker delivery.

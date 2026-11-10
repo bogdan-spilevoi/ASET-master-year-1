@@ -76,47 +76,66 @@ HIGH/CRITICAL and secret-scan gates remain active.
 The runtime was raised from 10.0.12 to 10.0.14 to incorporate .NET security fixes,
 including [GHSA-p3jp-9v83-76w9](https://github.com/dotnet/runtime/security/advisories/GHSA-p3jp-9v83-76w9).
 
-Configure the ignored Listings `.env`, start the database and apply the existing migration
-as described above. Then, from the repository root:
+Configure the ignored root `.env` for the PostgreSQL container, start the database
+and apply the existing migration as described above. Create separate Docker API settings
+from the repository root (preserve an existing local file):
 
 ```sh
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml config --quiet
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml up -d --build
+cp -n src/Services/Listings/SmartLost.ListingsService.Api/appsettings.Docker.example.json src/Services/Listings/SmartLost.ListingsService.Api/appsettings.Docker.json
 ```
 
-[compose.api.yml](../compose.api.yml) adds `listings-service` to the existing database
-stack. Its container listens on 8080 and publishes **127.0.0.1:5081**, so Swagger remains
+Set `ConnectionStrings:ListingsDatabase` in that JSON to `Host=listings-db;Port=5432`
+and the same database password configured in the root `.env`. The example supplies the database
+and username; replace only the local password placeholder. Then validate/start:
+
+```sh
+docker compose config --quiet
+docker compose up -d --build listings-service
+```
+
+[Root docker-compose.yml](../../../../docker-compose.yml) manages `listings-service`
+and `listings-db` alongside Auth and Matching in one project. Its container listens on 8080 and publishes **127.0.0.1:5081**, so Swagger remains
 at **http://localhost:5081/swagger**. Stop any locally running API using this port before
 starting the container. Compose waits for database health before starting the API;
 it does not check schema readiness or apply migrations.
 
-The API receives `ConnectionStrings__ListingsDatabase` at runtime, using
-`Host=listings-db;Port=5432` and the password from `.env`. No local appsettings file is
-mounted or baked into this image. Use a development password that is valid as an unquoted
-Npgsql connection-string value (for example a random hexadecimal password). An existing
-database volume retains its original password when `.env` changes. Host-side EF/seed tools
-continue to use `Host=localhost;Port=5433` from local JSON/environment configuration.
+Compose mounts the ignored `appsettings.Docker.json` read-only at `/app/appsettings.json`,
+matching the Auth/Matching container convention. A missing file fails container creation
+instead of creating an empty directory. The root `.env` supplies the PostgreSQL password;
+Compose no longer injects the API connection string or seed toggle. Keep the JSON password
+in sync with the existing database password; changing either file does not rotate an
+existing database volume's credentials. Local JSON settings are excluded from the image
+and publish output, and Docker settings are excluded from API/Infrastructure build output.
+Host-side EF/seed tools still use `Host=localhost;Port=5433` from local settings.
 
-The override sets Development explicitly so Swagger is available. Seed is off by default.
+The root Compose file sets Development explicitly so Swagger is available. Seed is off by default.
 To run the same idempotent seed against the running migrated database using the built
 image, without publishing a second HTTP listener:
 
 ```sh
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml run --rm --no-deps listings-service --SeedData:Only=true
+docker compose run --rm --no-deps listings-service --SeedData:Only=true
 ```
 
-Inspect logs or stop/remove this stack:
+Inspect Listings logs, stop just Listings, or remove the entire shared stack:
 
 ```sh
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml logs --tail 100 listings-service
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml stop
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml down
-# Destructive: also deletes the Listings database volume/data.
-docker compose --env-file src/Services/Listings/.env -f src/Services/Listings/compose.database.yml -f src/Services/Listings/compose.api.yml down --volumes
+docker compose logs --tail 100 listings-service
+docker compose stop listings-service listings-db
+docker compose down
+# Destructive: also deletes Compose-managed database volumes for the whole stack.
+docker compose down --volumes
 ```
 
 `stop` preserves containers and data; `down` removes containers/network and preserves
-the volume. A database-only workflow can continue using only `compose.database.yml`.
+volumes. `down` applies to the entire root stack. `down --volumes` removes managed
+volumes but preserves adopted external ones. To start only the database, use
+`docker compose up -d --wait listings-db`.
+
+For an existing standalone Listings volume, set LISTINGS_POSTGRES_VOLUME to its actual
+name and LISTINGS_POSTGRES_VOLUME_EXTERNAL=true in the root `.env`. The current setup
+reuses listings_listings-db-data without moving data. Fresh setups leave these optional
+settings unset and Compose creates a managed volume. The obsolete per-service Compose
+files were removed.
 The Auth root Compose stack is independent; no service calls or shared databases are added.
 
 ## Optional development fixtures
@@ -172,6 +191,12 @@ See [Application CQRS](../SmartLost.ListingsService.Application/README.md),
 the opt-in pipeline, cache debug logs and per-process/TTL consistency.
 
 ## Local verification
+
+On 2026-11-09, the JSON bind change passed merged Compose validation, Release publish,
+Docker image build and a temporary non-root API check with Swagger/OpenAPI HTTP 200.
+Docker settings were absent from API/Infrastructure build and publish output. The
+container used the read-only JSON bind and was removed afterward; no database volume
+or migration was changed. Application test suites were not rerun for this configuration change.
 
 On 2026-11-04, Release build with warnings as errors, info-severity format verification,
 78 Listings unit tests and three PostgreSQL integration tests passed. Both Swagger UI and

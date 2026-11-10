@@ -29,8 +29,12 @@ public sealed class AuthenticationSessionService(
         AuthResponse response = CreateResponse(user, refreshToken, session.ExpiresAtUtc);
         dbContext.RefreshSessions.Add(session);
         dbContext.RefreshTokens.Add(RefreshToken.Create(session, hash));
-        // Registration's tracked user and its first session are committed together.
-        await userAccountRepository.SaveChangesAsync(cancellationToken);
+        // The pipeline saves and commits the tracked user/session/outbox together.
+        // Direct callers retain the existing EF-owned automatic transaction.
+        if (!dbContext.HasPipelineTransaction)
+        {
+            await userAccountRepository.SaveChangesAsync(cancellationToken);
+        }
         return response;
     }
 
