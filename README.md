@@ -802,7 +802,7 @@ Listings query results use records named `CategoryDto`, `PhotoDto`, `ListingSumm
 and `ListingDetailsDto` in [Application/Dtos](src/Services/Listings/SmartLost.ListingsService.Application/Dtos/).
 HTTP input contracts keep the `Request` suffix in the API layer.
 
-AuthService uses AutoMapper 16.2.0 to map API request DTOs to Application commands.
+AuthService uses AutoMapper 16.3.0 to map API request DTOs to Application commands.
 Profiles are registered through the API's `AddApiMapping` extension; domain entities retain their factory
 methods and invariants. See [mapping setup](docs/AUTHSERVICE.md#object-mapping).
 

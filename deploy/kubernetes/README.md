@@ -387,6 +387,11 @@ Logs/configuration may contain local details; do not publish Secret contents.
 
 ## Verification boundaries
 
+Security follow-up on 2026-11-17: the later AutoMapper 16.3.0 maintenance update resolved
+the Auth audit blockers recorded in the historical verification notes below. Full locked
+restore and the repository/container security scans now pass locally; see the
+[Auth verification record](../../src/Services/Auth/README.md#dependency-security-maintenance).
+
 Use `kubectl kustomize deploy/kubernetes/overlays/local` to render without a cluster,
 and `kubectl apply --dry-run=server -k deploy/kubernetes/overlays/local` against the local
 cluster to check API validation/admission. The repository's existing Trivy filesystem
