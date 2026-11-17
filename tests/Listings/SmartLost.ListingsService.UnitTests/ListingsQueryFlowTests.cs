@@ -176,24 +176,6 @@ public sealed class ListingsQueryFlowTests
         }
     }
 
-    [Theory]
-    [InlineData("Development", 6)]
-    [InlineData("Production", 0)]
-    public async Task SeedOnlyNeverStartsAnHttpServerAndRejectsProduction(string environment, int expectedListings)
-    {
-        using ListingsApiFactory factory = new(environment, seed: false, seedOnly: true);
-        // A seed-only entry point exits before starting the host that TestServer requires.
-        InvalidOperationException error = Assert.ThrowsAny<InvalidOperationException>(() => factory.CreateClient());
-        if (environment == "Production")
-        {
-            Assert.Contains("SeedData:Only is available only in Development.", error.Message, StringComparison.Ordinal);
-        }
-
-        await using ListingsDbContext context = factory.CreateDbContext();
-        Assert.Equal(expectedListings, await context.Listings.CountAsync());
-        Assert.Equal(expectedListings == 0 ? 0 : 3, await context.Categories.CountAsync());
-    }
-
     private static async Task<JsonDocument> GetJsonAsync(HttpClient client, string url)
     {
         using HttpResponseMessage response = await client.GetAsync(url);

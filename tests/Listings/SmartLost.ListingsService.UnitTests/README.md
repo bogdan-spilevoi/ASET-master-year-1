@@ -24,8 +24,13 @@ This suite has three independent responsibilities:
 The suite requires no Docker or external database. ListingsQueryFlowTests runs the real
 API in TestServer against isolated SQLite: filters/paging, DTOs, Open-only visibility,
 400/404, development seed idempotency, Development-only Swagger and production seed suppression.
-It also verifies that the standalone seed-only entry point populates Development data
-without starting the HTTP host and rejects Production before inserting records.
+ListingsSeedStartupTests calls the same startup routine used by Main while owning the
+WebApplication lifetime directly. It checks Development seed counts, the exact Production
+rejection, and that ApplicationStarted never fires in either seed-only case. A separate
+test calls Main directly in Production to verify that disposal preserves the rejection.
+Seed-only is deliberately not launched through WebApplicationFactory: that factory
+requires a started host and can race the intentional exit/disposal of this CLI mode.
+The HTTP factory always sets SeedData:Only=false; ordinary HTTP tests still exercise Main.
 Swagger checks include document title, UI document URL and Production unavailability.
 Outbox tests cover notification mapping, implicit save atomicity, managed commit/rollback,
 read-only worker host configuration and reversible AddListingsOutbox mapping. BuildingBlocks

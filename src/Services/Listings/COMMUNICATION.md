@@ -406,6 +406,11 @@ publishes metadata to RabbitMQ; full snapshot production/consumption remains pla
 
 ## Review notes
 
+- 2026-11-17: Split Program construction and execution so seed-only tests can own the
+  application's lifetime without WebApplicationFactory's deferred-start/disposal race.
+  HTTP tests still execute Main. Current seed, persistence and HTTP arrows are unchanged:
+  Production rejects SeedData:Only before writes; Development seed-only exits without HTTP.
+
 - 2026-11-17: Added the root local k8s.sh helper around the existing build/load, migration,
   infrastructure, rollout, logs and stop operations. Updated the operator label; runtime
   API/DB/AMQP arrows and contracts are unchanged. Migration generation remains local;

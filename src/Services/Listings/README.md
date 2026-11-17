@@ -29,6 +29,10 @@ The API registers shared profiling, authorization and caching behaviors. Current
 remain public; only GetCategoriesQuery is cacheable. Profiling observes every MediatR
 request, while listing/detail reads still query current data.
 
+Main owns the application's lifetime and delegates construction/startup to separate methods.
+Seed-only startup is tested directly without asking WebApplicationFactory to start a host
+that intentionally exits; the Production rejection and no-HTTP behavior remain enforced.
+
 The [numbered communication diagrams](COMMUNICATION.md) distinguish current generation,
 Domain/test interactions from proposed integrations. Update them with affected service
 code/configuration/test changes; CI checks document changes and reviewers check accuracy.

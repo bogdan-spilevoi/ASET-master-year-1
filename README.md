@@ -774,7 +774,10 @@ including snapshot drift, configuration and SQL generation. The Listings integra
 applies, rolls back and reapplies the checked-in migration on PostgreSQL 16 and 17.
 [Historical EF verification](docs/LISTINGS_EF_COMPATIBILITY.md) documents the original persistence setup.
 Current Listings tests also cover atomic Outbox saves/rollback, nonempty-database upgrade,
-read-only inspection, Inspect/Publish composition and real RabbitMQ confirms/returns/restart. Matching runtime tests also cover Domain, Application, Infrastructure and HTTP using fakes,
+read-only inspection, Inspect/Publish composition and real RabbitMQ confirms/returns/restart.
+Seed-only tests own the application's lifetime directly, checking no HTTP startup and the
+exact Production rejection; WebApplicationFactory is reserved for the running HTTP host.
+Matching runtime tests also cover Domain, Application, Infrastructure and HTTP using fakes,
 EF InMemory and WebApplicationFactory. Pure interfaces, enums,
 empty records without primary constructors or declared members, and const-only static classes
 are recognized as declarations when absent from Coverlet; executable generated code remains covered by

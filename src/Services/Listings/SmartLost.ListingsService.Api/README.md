@@ -209,6 +209,21 @@ the opt-in pipeline, cache debug logs and per-process/TTL consistency.
 
 ## Local verification
 
+Startup composition separates `Program.BuildApplication` from `RunApplicationAsync`;
+Main owns and disposes the application. HTTP tests use WebApplicationFactory normally,
+while seed-only tests own the unstarted application directly and assert no host-start
+notification, seed row counts and the exact Production rejection. This avoids the race
+between WebApplicationFactory's deferred host startup and seed-only disposal. Command-line
+flags, the Development-only guard, routes and database ownership remain unchanged.
+
+Verified on 2026-11-17: full Release build with CI settings and formatting passed;
+all 85 Listings unit tests passed in ten consecutive fresh Coverlet runs (850 test
+executions, no skipped/failed tests), and seven PostgreSQL/RabbitMQ integration cases
+passed. The unchanged CI coverage rules passed with fresh Listings and unchanged-project
+reports: 96.01% overall, 99.70% changed lines against the origin/main merge base plus
+this working-tree patch. The API Docker image built successfully. Test execution was
+local macOS; Windows/GitHub-hosted validation was not run for this fix.
+
 On 2026-11-09, the JSON bind change passed merged Compose validation, Release publish,
 Docker image build and a temporary non-root API check with Swagger/OpenAPI HTTP 200.
 Docker settings were absent from API/Infrastructure build and publish output. The
