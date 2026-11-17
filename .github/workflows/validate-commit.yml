@@ -409,10 +409,12 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
-          $dockerfiles = @(if (Test-Path src/Services) {
-            Get-ChildItem src/Services -Recurse -Filter Dockerfile -File |
-              Where-Object { $_.FullName -notmatch '[/\\](bin|obj)[/\\]' } |
-              Sort-Object FullName
+          $dockerfiles = @(foreach ($root in @('src/Services', 'deploy/kubernetes/images')) {
+            if (Test-Path $root) {
+              Get-ChildItem $root -Recurse -Filter Dockerfile -File |
+                Where-Object { $_.FullName -notmatch '[/\\](bin|obj)[/\\]' } |
+                Sort-Object FullName
+            }
           })
           if ($dockerfiles.Count -eq 0) {
             'No Dockerfiles yet; container creation is not applicable.'

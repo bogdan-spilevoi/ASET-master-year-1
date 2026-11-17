@@ -14,13 +14,14 @@ namespace SmartLost.ListingsService.UnitTests;
 public sealed class ListingsPersistenceTests
 {
     [Fact]
-    public void InitialMigrationMatchesThePostgreSqlModelAndHasReversibleSevenTableSchema()
+    public void MigrationsPreserveTheOriginalSchemaAndAddAReversibleOutbox()
     {
         using ListingsDbContext context = new ListingsDbContextFactory().CreateDbContext([]);
         Assert.Equal("Npgsql.EntityFrameworkCore.PostgreSQL", context.Database.ProviderName);
         Assert.False(context.Database.HasPendingModelChanges());
         IMigrationsAssembly assembly = context.GetService<IMigrationsAssembly>();
-        KeyValuePair<string, System.Reflection.TypeInfo> entry = Assert.Single(assembly.Migrations);
+        Assert.Equal(2, assembly.Migrations.Count);
+        KeyValuePair<string, System.Reflection.TypeInfo> entry = Assert.Single(assembly.Migrations, item => item.Key.EndsWith("_InitialCreate", StringComparison.Ordinal));
         Assert.EndsWith("_InitialCreate", entry.Key, StringComparison.Ordinal);
         Migration migration = assembly.CreateMigration(entry.Value, context.Database.ProviderName!);
         Assert.Equal(7, migration.UpOperations.OfType<CreateTableOperation>().Count());
@@ -29,6 +30,11 @@ public sealed class ListingsPersistenceTests
         Assert.Equal(["ListingId", "CategoryId"], assignments.PrimaryKey!.Columns);
         Assert.DoesNotContain(migration.UpOperations.OfType<CreateTableOperation>(), table => table.Name is "Users" or "OutboxMessages");
         Assert.Equal(7, migration.TargetModel.GetEntityTypes().Count());
+        KeyValuePair<string, System.Reflection.TypeInfo> outboxEntry = Assert.Single(assembly.Migrations, item => item.Key.EndsWith("_AddListingsOutbox", StringComparison.Ordinal));
+        Migration outbox = assembly.CreateMigration(outboxEntry.Value, context.Database.ProviderName!);
+        Assert.Equal("OutboxMessages", Assert.Single(outbox.UpOperations.OfType<CreateTableOperation>()).Name);
+        Assert.Equal("OutboxMessages", Assert.Single(outbox.DownOperations.OfType<DropTableOperation>()).Name);
+        Assert.Equal(8, outbox.TargetModel.GetEntityTypes().Count());
         string script = context.GetService<IMigrator>().GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent);
         Assert.Contains("__EFMigrationsHistory", script, StringComparison.Ordinal);
         Assert.Contains("CREATE UNIQUE INDEX \"IX_Photos_ListingId\"", script, StringComparison.Ordinal);

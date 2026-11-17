@@ -8,12 +8,14 @@
     <Project Path="SmartLost.ListingsService.Domain/SmartLost.ListingsService.Domain.csproj" />
     <Project Path="SmartLost.ListingsService.Infrastructure/SmartLost.ListingsService.Infrastructure.csproj" />
     <Project Path="SmartLost.ListingsService.Modeling/SmartLost.ListingsService.Modeling.csproj" />
+    <Project Path="SmartLost.ListingsService.Worker/SmartLost.ListingsService.Worker.csproj" />
   </Folder>
   <Folder Name="/BuildingBlocks/">
     <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Core/SmartLost.BuildingBlocks.Core.csproj" />
     <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
     <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
     <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/SmartLost.BuildingBlocks.Infrastructure.csproj" />
+    <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/SmartLost.BuildingBlocks.Messaging.RabbitMq.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="../../../tests/Listings/SmartLost.ListingsService.UnitTests/SmartLost.ListingsService.UnitTests.csproj" />

@@ -7,6 +7,7 @@
     <Project Path="src/BuildingBlocks/SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
     <Project Path="src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
     <Project Path="src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/SmartLost.BuildingBlocks.Infrastructure.csproj" />
+    <Project Path="src/BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/SmartLost.BuildingBlocks.Messaging.RabbitMq.csproj" />
   </Folder>
   <Folder Name="/Services/" />
   <Folder Name="/Services/Auth/">
@@ -23,6 +24,7 @@
     <Project Path="src/Services/Listings/SmartLost.ListingsService.Domain/SmartLost.ListingsService.Domain.csproj" />
     <Project Path="src/Services/Listings/SmartLost.ListingsService.Infrastructure/SmartLost.ListingsService.Infrastructure.csproj" />
     <Project Path="src/Services/Listings/SmartLost.ListingsService.Modeling/SmartLost.ListingsService.Modeling.csproj" />
+    <Project Path="src/Services/Listings/SmartLost.ListingsService.Worker/SmartLost.ListingsService.Worker.csproj" />
   </Folder>
   <Folder Name="/Services/Matching/">
     <Project Path="src/Services/Matching/SmartLost.MatchingService.Api/SmartLost.MatchingService.Api.csproj" />

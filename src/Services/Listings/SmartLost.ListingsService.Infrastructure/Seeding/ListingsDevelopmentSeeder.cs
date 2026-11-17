@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SmartLost.BuildingBlocks.Application.Transactions;
 using SmartLost.Contracts.Listings;
 using SmartLost.ListingsService.Domain.Entities;
 using SmartLost.ListingsService.Domain.Enums;
@@ -7,14 +8,14 @@ using SmartLost.ListingsService.Infrastructure.Persistence;
 namespace SmartLost.ListingsService.Infrastructure.Seeding;
 
 /// <summary>Explicit development fixtures; existing records are preserved on sequential reruns.</summary>
-public sealed class ListingsDevelopmentSeeder(ListingsDbContext context)
+public sealed class ListingsDevelopmentSeeder(ListingsDbContext context, IUnitOfWork unitOfWork)
 {
     private static readonly Guid _lostAuthor = Guid.Parse("11111111-1111-4111-8111-111111111111");
     private static readonly Guid _foundAuthor = Guid.Parse("22222222-2222-4222-8222-222222222222");
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
-        await using Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await using ITransaction transaction = await unitOfWork.BeginTransactionAsync(cancellationToken);
         Dictionary<string, Category> categories = new(StringComparer.Ordinal);
         foreach (string name in new[] { "backpack", "wallet", "keys" })
         {
@@ -36,7 +37,7 @@ public sealed class ListingsDevelopmentSeeder(ListingsDbContext context)
         await AddAsync("Demo found brown wallet", ListingType.Found, categories["wallet"], ListingState.Open, false, now, cancellationToken);
         await AddAsync("Demo draft keys", ListingType.Lost, categories["keys"], ListingState.Draft, false, now, cancellationToken);
         await AddAsync("Demo withdrawn keys", ListingType.Found, categories["keys"], ListingState.Closed, false, now, cancellationToken);
-        await context.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 

@@ -1,6 +1,6 @@
 # Listings PostgreSQL migration integration tests
 
-The suite applies the **checked-in Listings Infrastructure migration** to isolated
+The suite applies the **checked-in Listings Infrastructure migrations** to isolated
 PostgreSQL 16-alpine and 17-alpine databases using Testcontainers.PostgreSql 4.16.0.
 Each theory case owns/disposes its container, uses a random host port and no persistent
 volume. Local appsettings, the development Compose stack and Auth database are not used.
@@ -14,6 +14,10 @@ ListingsApiIntegrationTests additionally starts the real API in TestServer again
 isolated migrated PostgreSQL 16 database and verifies the public read CQRS flow, seed
 fixtures, combined filters, safe photo DTOs and hidden Draft/Closed detail responses.
 The test overrides context options explicitly so local appsettings are never used as a database target.
+ListingsOutboxIntegrationTests upgrades a nonempty InitialCreate database, preserves its
+listing, stages notification metadata atomically, inspects the same pending message twice
+without delivery-state changes and verifies that a managed rollback undoes both the
+business change and its new Outbox row.
 
 From the repository root:
 
@@ -28,3 +32,12 @@ inventory automatically discovers it and runs integration suites on Linux/Docker
 unit suites retain Linux/Windows/macOS and the existing Coverlet gates.
 See [Infrastructure setup](../../../src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md)
 and the [communication diagrams](../../../src/Services/Listings/COMMUNICATION.md).
+
+## RabbitMQ delivery
+
+RabbitMqOutboxIntegrationTests adds three isolated real-broker/PostgreSQL cases: confirmed
+persistent mandatory publishing before any consumer, returned/unroutable message retry,
+and durable queue survival/reconnection after broker Stop/Start. The same message ID is
+retained on republish, demonstrating why future consumers require deduplication. Broker
+containers use random host ports/test-only credentials and are removed by the fixture.
+These are protocol integration tests, not a security scan of the deployable broker image.

@@ -13,7 +13,7 @@ This suite has three independent responsibilities:
   local events, encapsulation and consistency of manually maintained Domain fields/enums/defaults
   with the Ecore model. Reflection is used only
   in tests to simulate corrupted materialized state and exercise defensive guards.
-- [EfCompatibility](EfCompatibility/): the real seven-entity Infrastructure context and
+- [EfCompatibility](EfCompatibility/): seven Domain entities plus Outbox in the real Infrastructure context and
   relational checks for round trips, private setters, collection backing fields,
   bidirectional navigations, photo replacement/removal, category assignment removal,
   historical FK/unique links, cascades and stale-writer rejection. SQLite is a relational
@@ -27,7 +27,10 @@ API in TestServer against isolated SQLite: filters/paging, DTOs, Open-only visib
 It also verifies that the standalone seed-only entry point populates Development data
 without starting the HTTP host and rejects Production before inserting records.
 Swagger checks include document title, UI document URL and Production unavailability.
-It does not deliver Outbox events or award points to real users. The
+Outbox tests cover notification mapping, implicit save atomicity, managed commit/rollback,
+read-only worker host configuration and reversible AddListingsOutbox mapping. BuildingBlocks
+tests cover bounded no-tracking reads, unchanged delivery state, polling failures,
+cancellation and scope disposal. It does not deliver Outbox events or award points to real users. The
 [separate integration suite](../SmartLost.ListingsService.IntegrationTests/README.md)
 applies actual migrations on disposable PostgreSQL 16 and 17.
 See [Domain](../../../src/Services/Listings/SmartLost.ListingsService.Domain/README.md),
@@ -49,3 +52,8 @@ Domain declarations are maintained manually; no Python or Domain generation step
 CategoryCachingTests counts category SELECTs through the real HTTP/MediatR/EF flow, verifies
 one read for repeated requests, absolute TTL refresh using an injected clock and immutable
 cached DTOs. It uses an isolated SQLite connection and no real-time sleep.
+
+Worker mode tests verify Publish registers the shared processor/continuous host and RabbitMQ
+publisher without the inspection reader, and rejects unknown modes. BuildingBlocks tests
+cover mandatory persistent properties, waiting for confirms, connection reuse/recovery,
+serialized concurrent calls, configuration, continuous polling and scoped cancellation.

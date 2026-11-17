@@ -14,12 +14,15 @@ retains generated ModelElements, metamodel metadata and XMI samples.
 
 [Infrastructure](SmartLost.ListingsService.Infrastructure/README.md) now implements
 ListingsDbContext, entity configurations, a design-time factory, scoped DI registration
-and the InitialCreate migration. [Root Compose](../../../docker-compose.yml) manages
+and the InitialCreate/AddListingsOutbox migrations. [Root Compose](../../../docker-compose.yml) manages
 its local PostgreSQL container alongside the Auth and Matching databases. The executable [API](SmartLost.ListingsService.Api/README.md)
 now exposes public category/listing/detail reads through [Application CQRS](SmartLost.ListingsService.Application/README.md).
 Its [Dockerfile](SmartLost.ListingsService.Api/Dockerfile) and the root Compose file
 run the API beside its own database, retaining a separate data volume.
-Workers, authenticated mutation use cases and blob/message adapters remain unimplemented.
+A standalone [worker](SmartLost.ListingsService.Worker/README.md) supports read-only Inspect
+and RabbitMQ Publish modes. Local Kubernetes enables confirmed, persistent publishing to
+a durable queue. Authenticated mutation use cases, blob adapters and Matching consumers
+remain unimplemented.
 Runtime layers do not reference Modeling or NMF.
 
 The API registers shared profiling, authorization and caching behaviors. Current reads
@@ -37,8 +40,9 @@ code/configuration/test changes; CI checks document changes and reviewers check 
 | [Api](SmartLost.ListingsService.Api/README.md) | Public GET controllers, validation/result HTTP adapters, OpenAPI and composition. | Application, Infrastructure, BuildingBlocks.AspNetCore. |
 | [Application](SmartLost.ListingsService.Application/README.md) | MediatR query/handler/validator slices, read-store port and response DTOs. | Domain, BuildingBlocks.Application. |
 | [Domain](SmartLost.ListingsService.Domain/README.md) | Manual entity declarations and business behavior. | BuildingBlocks.Core, Contracts.Listings. |
-| [Infrastructure](SmartLost.ListingsService.Infrastructure/README.md) | Service-owned EF persistence, migration tooling and DI; storage/delivery adapters pending. | Application, Domain, BuildingBlocks.Infrastructure. |
+| [Infrastructure](SmartLost.ListingsService.Infrastructure/README.md) | Service-owned EF persistence, migration tooling and worker registration; blob adapters pending. | Application, Domain, BuildingBlocks.Infrastructure. |
 | [Modeling](SmartLost.ListingsService.Modeling/README.md) | Ecore/NMeta/XMI representation, independent of runtime entity maintenance. | NMF-Basics; no runtime project references. |
+| [Worker](SmartLost.ListingsService.Worker/README.md) | Inspect/Publish Outbox host; broker-confirmed delivery in Kubernetes, no HTTP listener. | Infrastructure, shared RabbitMQ transport.  |
 
 [Listings.slnx](Listings.slnx) and root [Aset.slnx](../../../Aset.slnx) list the same
 project files, alongside shared dependencies and Listings tests; solutions do not
@@ -52,9 +56,11 @@ values and existing JSON representation are unchanged; no database migration is 
 Only Listings accesses its database; private photo storage remains unimplemented. Auth user IDs and Matching
 identifiers are logical references, without cross-service physical foreign keys.
 Domain enforces local lifecycle, ownership and reviewed-revision rules, but application
-transactions, global reservations, consumed Found eligibility, durable idempotency,
-automatic invalidation and Outbox integration remain unimplemented. Local domain events
-are not currently staged or sent to other services.
+transactions for future mutation use cases, global reservations, consumed Found eligibility,
+durable consumer idempotency and automatic invalidation remain unimplemented. Selected
+local notifications are staged into Outbox atomically with entity saves. Implicit EF
+transactions and the shared unit of work support this boundary; the seed uses the shared
+unit of work. No events are sent to another service.
 
 ## Development
 
@@ -94,7 +100,21 @@ mounted read-only as `/app/appsettings.json`, like Auth and Matching. Create it 
 `appsettings.Docker.example.json` and match its password to the root `.env` value.
 All three APIs and their databases now share one Compose project; databases stay separate.
 
-Swagger remains at `http://localhost:5081/swagger`; the container connects to
+An alternative [local Kubernetes setup](../../../deploy/kubernetes/README.md) runs only
+Listings: three API replicas, a separate PostgreSQL/PVC and an explicit migration-bundle
+Job. It keeps Compose data separate. The existing API Dockerfile has an opt-in
+`migrations` target; the default target remains the API. A one-replica Publish worker
+has its own Dockerfile/Deployment and no network port. RabbitMQ runs as a separate
+StatefulSet with a retained PVC and internal Service.
+Use [the local helper](../../../k8s.sh): `./k8s.sh deploy listings` rebuilds/loads API,
+worker and migration images, runs the migration Job, then updates both Deployments.
+`./k8s.sh migrate` applies the latest rebuilt bundle alone; `migration-add <Name>`
+generates a new local migration. See the [command guide](../../../deploy/kubernetes/README.md#short-local-commands).
+Kubernetes also retains the current per-process category cache.
+Its local overlay exposes only Listings at `http://localhost:5082` through NodePort
+30081 and a loopback Kind host mapping; no port-forward process is required.
+
+For Compose, Swagger remains at `http://localhost:5081/swagger`; the container connects to
 `listings-db:5432`, while local tools still connect through `localhost:5433`.
 See [container setup, seed and lifecycle commands](SmartLost.ListingsService.Api/README.md#docker-api-and-database).
 

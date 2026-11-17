@@ -5,7 +5,14 @@ COPY . .
 RUN dotnet restore "src/Services/Listings/SmartLost.ListingsService.Api/SmartLost.ListingsService.Api.csproj" --locked-mode
 RUN dotnet publish "src/Services/Listings/SmartLost.ListingsService.Api/SmartLost.ListingsService.Api.csproj" --no-restore --configuration Release --output /app/publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.14@sha256:1a48394b6f29d3a32c79d9edecd4abda0ecbe8776d567dbfc4590ed6979c740c AS runtime
+FROM build AS migrations-build
+RUN dotnet tool restore
+RUN dotnet ef migrations bundle --no-build --configuration Release \
+    --project src/Services/Listings/SmartLost.ListingsService.Infrastructure \
+    --startup-project src/Services/Listings/SmartLost.ListingsService.Infrastructure \
+    --context ListingsDbContext --output /app/migrations/efbundle
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.15@sha256:bfd912c83295ce66d4b706ebb8541b9f14259b0e76fbb88b2751f58ce2399d2e AS runtime-base
 # USN-8996-1: patch inherited APT packages; use HTTPS while updating APT itself.
 RUN sed -i 's|http://|https://|g' /etc/apt/sources.list.d/ubuntu.sources \
     && apt-get update \
@@ -17,6 +24,12 @@ WORKDIR /app
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 
+FROM runtime-base AS migrations
+COPY --from=migrations-build /app/migrations/efbundle .
+USER app
+ENTRYPOINT ["./efbundle"]
+
+FROM runtime-base AS runtime
 COPY --from=build /app/publish .
 USER app
 
