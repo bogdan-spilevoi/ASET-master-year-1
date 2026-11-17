@@ -151,7 +151,7 @@ backend from the Angular and sign-out work required for the semester.
 
 ## Object mapping
 
-The API references `AutoMapper` 16.2.0. `Program.cs` calls `AddApiMapping`, defined in
+The API references `AutoMapper` 16.3.0. `Program.cs` calls `AddApiMapping`, defined in
 [`DependencyInjection`](../src/Services/Auth/SmartLost.AuthService.Api/DependencyInjection.cs), to register profiles
 from the API assembly through `AddAutoMapper`, using public constructors for record destinations. The core package
 includes dependency injection support; no separate DI package is needed.

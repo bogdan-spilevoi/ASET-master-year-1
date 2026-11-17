@@ -135,6 +135,13 @@ category synonym normalization are not implemented.
 
 ## Review notes
 
+- 2026-11-17: Reviewed shared continuous Outbox host and opt-in RabbitMQ transport. Matching does not register this transport and has no RabbitMQ consumer. Listings notifications currently wait in a broker queue; Matching API/AI/database arrows are unchanged.
+
+
+- 2026-11-17: Reviewed shared Outbox inspection reader/host additions. Matching does not
+  register them or adopt Outbox persistence. Existing API/AI mock/database flows remain
+  unchanged; no worker, consumer, broker or new outgoing call is introduced here.
+
 - 2026-11-10: MatchingUnitOfWork now inherits shared EfUnitOfWork<MatchingDbContext>; only
   concurrency error mapping remains service-specific. Explicit rollback now discards tracked
   state through the shared adapter. Separate claim/result saves and the AI call outside a

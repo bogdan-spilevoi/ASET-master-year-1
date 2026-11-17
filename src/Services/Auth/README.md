@@ -50,3 +50,18 @@ and rejects HIGH/CRITICAL vulnerabilities and secrets.
 On 2026-11-06 both images were rebuilt locally for Linux/arm64, reported both APT packages
 at `2.8.4ubuntu0.1` and passed Trivy 0.74.0 HIGH/CRITICAL vulnerability and secret scans.
 Non-root users were retained. Hosted CI validation remains separate.
+
+## Dependency security maintenance
+
+The API uses AutoMapper 16.3.0, including the fixes for
+[GHSA-6vhm-j9h7-f9gh](https://github.com/advisories/GHSA-6vhm-j9h7-f9gh) and
+[GHSA-gpwp-5797-mjff](https://github.com/advisories/GHSA-gpwp-5797-mjff).
+API and downstream test lockfiles are updated together. NuGet auditing stays enabled
+for direct/transitive dependencies, and warnings remain errors. Mapping contracts are unchanged.
+
+Local verification on 2026-11-17: the exact CI audited/locked restore, full Release build
+and formatting passed; all 374 unit and 26 integration tests passed. The checked-in
+coverage gate logic passed at 96.01% overall and 99.70% changed executable lines against
+the branch's origin/main merge base. Repository Trivy and all six default container
+build/image scans passed. Test execution used macOS; container builds/scans and the
+PowerShell gates used Linux/arm64. Windows and GitHub-hosted runs were not executed locally.

@@ -54,6 +54,10 @@ See [query caching and AOP](../../../docs/QUERY_CACHING.md).
 
 ## Transaction integration
 
+`IOutboxReader` is the transport-independent read-only inspection contract. It returns
+a bounded pending batch and does not claim, acknowledge or publish messages. Listings'
+inspection worker consumes the shared EF implementation; delivery remains a separate opt-in.
+
 Auth register/login commands implement ITransactionalCommand and enable useTransactions.
 The transaction wrapper runs after caching/validation and commits through a scoped
 AuthUnitOfWork. Refresh remains unmarked so failure-side replay revocation is preserved.

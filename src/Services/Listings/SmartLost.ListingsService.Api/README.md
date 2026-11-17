@@ -29,6 +29,21 @@ image URL or file bytes are exposed. Returning metadata does not imply an upload
 
 ## Local setup
 
+For three API replicas and PostgreSQL in local Kubernetes, use the
+[Kubernetes runbook](../../../../deploy/kubernetes/README.md). It documents separate
+image build/load, Secret/configuration setup, migration Job, optional seed, fixed-port access,
+pod recovery and data removal. The default Dockerfile target still builds the API;
+`--target migrations` builds the EF bundle used only by the explicit Job.
+No API startup migration or new endpoint is added.
+Apply AddListingsOutbox before updated seeding. The seed now commits new fixtures and
+notification metadata atomically through the shared unit of work; unchanged fixtures
+do not generate historical Outbox rows. A separate
+[worker](../SmartLost.ListingsService.Worker/README.md) inspects pending rows by default;
+Kubernetes selects Publish to send them to RabbitMQ with confirmations. The API itself
+does not connect to RabbitMQ, and Matching consumption is not implemented.
+The local URL is `http://localhost:5082/swagger`, using NodePort 30081 plus Kind's
+loopback host mapping. The base Service remains ClusterIP; other services stay unexposed.
+
 The canonical local connection file is now beside this API. Infrastructure links that
 same file to its output for EF CLI; both consume `ConnectionStrings:ListingsDatabase`.
 The previous generated local Infrastructure settings were moved to this location when
@@ -63,7 +78,7 @@ Startup does not create databases or apply migrations.
 ## Docker API and database
 
 The [multi-stage Dockerfile](Dockerfile) uses a repository-root build context, locked
-restore with SDK 10.0.401 and an ASP.NET 10.0.14 runtime. Both base images are pinned by
+restore with SDK 10.0.401 and an ASP.NET 10.0.15 runtime. Both base images are pinned by
 multi-platform manifest digest. The final image runs as the built-in non-root `app` user;
 the root `.dockerignore` and publish settings exclude local credentials/settings.
 
@@ -75,6 +90,8 @@ change or scan exclusion. Builds fail if the fixed packages are unavailable; CI'
 HIGH/CRITICAL and secret-scan gates remain active.
 The runtime was raised from 10.0.12 to 10.0.14 to incorporate .NET security fixes,
 including [GHSA-p3jp-9v83-76w9](https://github.com/dotnet/runtime/security/advisories/GHSA-p3jp-9v83-76w9).
+The current API and migration targets use 10.0.15, replacing 10.0.14 after the local
+Kubernetes image scan identified CVE-2026-114146, CVE-2026-114147 and CVE-2026-114149.
 
 Configure the ignored root `.env` for the PostgreSQL container, start the database
 and apply the existing migration as described above. Create separate Docker API settings
@@ -191,6 +208,21 @@ See [Application CQRS](../SmartLost.ListingsService.Application/README.md),
 the opt-in pipeline, cache debug logs and per-process/TTL consistency.
 
 ## Local verification
+
+Startup composition separates `Program.BuildApplication` from `RunApplicationAsync`;
+Main owns and disposes the application. HTTP tests use WebApplicationFactory normally,
+while seed-only tests own the unstarted application directly and assert no host-start
+notification, seed row counts and the exact Production rejection. This avoids the race
+between WebApplicationFactory's deferred host startup and seed-only disposal. Command-line
+flags, the Development-only guard, routes and database ownership remain unchanged.
+
+Verified on 2026-11-17: full Release build with CI settings and formatting passed;
+all 85 Listings unit tests passed in ten consecutive fresh Coverlet runs (850 test
+executions, no skipped/failed tests), and seven PostgreSQL/RabbitMQ integration cases
+passed. The unchanged CI coverage rules passed with fresh Listings and unchanged-project
+reports: 96.01% overall, 99.70% changed lines against the origin/main merge base plus
+this working-tree patch. The API Docker image built successfully. Test execution was
+local macOS; Windows/GitHub-hosted validation was not run for this fix.
 
 On 2026-11-09, the JSON bind change passed merged Compose validation, Release publish,
 Docker image build and a temporary non-root API check with Swagger/OpenAPI HTTP 200.
