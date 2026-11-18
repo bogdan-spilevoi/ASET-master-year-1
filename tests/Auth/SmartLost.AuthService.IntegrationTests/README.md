@@ -15,10 +15,12 @@ random host port. The API uses the `Testing` environment, the container connecti
 and test-only JWT configuration supplied by the fixture. Local `appsettings.json` and the
 development Compose database are not used as test dependencies.
 
-The fixture applies EF migrations only to its own container database, truncates the four
-application tables (including OutboxMessages) before every test, and disposes the API host and container afterward.
-Testcontainers' resource reaper provides additional cleanup. No persistent volume is used.
-Application startup itself still does not apply migrations.
+The fixture applies EF migrations only to its own container database, truncates the five
+application tables (including `EmailConfirmationTokens` and `OutboxMessages`) before
+every test, replaces `IEmailSender` with an in-memory recording double, and disposes the
+API host and container afterward. Testcontainers' resource reaper provides additional
+cleanup. No persistent volume is used. Application startup itself still does not apply
+migrations.
 
 ## Database interaction and helpers
 
@@ -66,7 +68,8 @@ CI runs this suite on Linux with Docker available.
 - Two simultaneous refresh requests reading the same token: one rotation commits, the other
   fails its concurrency check and revokes the session; its token insert rolls back.
 - Login with real EF-seeded password hashes, and independent scoped connections with an active reader.
-- All three migrations, including OutboxMessages and identity versions.
+- All four migrations, including `EmailConfirmationTokens`, `OutboxMessages` and identity versions.
+- Email confirmation token issuance on registration, hashed persistence and single-use / expired / unknown consumption via `/api/auth/confirm-email`.
 - Profile message payloads without email/security data, and local-only session events.
 - Atomic rollback of a failed identity update and its Outbox insert.
 - Concurrent profile updates publishing only the committed version.

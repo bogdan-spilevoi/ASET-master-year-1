@@ -16,9 +16,11 @@ flowchart LR
     Password["PasswordService"]
     Repository["UserAccountRepository"]
     Session["AuthenticationSessionService"]
+    ConfirmSvc["EmailConfirmationService + IEmailSender"]
     Tokens["TokenService"]
     Context["AuthDbContext + outbox mapper/writer"]
-    DB[("Auth PostgreSQL: Users, RefreshSessions, RefreshTokens, OutboxMessages")]
+    DB[("Auth PostgreSQL: Users, RefreshSessions, RefreshTokens, EmailConfirmationTokens, OutboxMessages")]
+    Mailpit["Mailpit SMTP (:1025) / configured SMTP"]
 
     Client -->|"1. POST /api/auth/register or /api/auth/login"| API
     API -->|"1.1 Map request and dispatch command"| Pipeline
@@ -29,20 +31,55 @@ flowchart LR
     Handler -->|"1.5 Create session after successful checks"| Session
     Session -->|"1.5.1 Generate JWT"| Tokens
     Session -->|"1.5.2 Stage session and token history without saving"| Context
-    Pipeline -->|"1.5.3 Success: SaveChanges via repository and commit; failure: rollback"| Context
-    Context -->|"1.5.4 Commit tracked rows and selected outbox events together; clear events after commit"| DB
+    Handler -->|"1.5.3 Register only: stage EmailConfirmationToken hash and flush transaction changes"| ConfirmSvc
+    ConfirmSvc -->|"1.5.4 Save pending rows and Outbox row in open transaction"| DB
+    ConfirmSvc -->|"1.5.5 Register only: send confirmation link over SMTP"| Mailpit
+    Pipeline -->|"1.5.6 Success: commit transaction; failure or SMTP error: rollback"| Context
+    Context -->|"1.5.7 Commit all staged rows and clear events on success"| DB
     Handler -->|"1.6 Return result through pipeline"| API
     API -->|"1.7 AuthResponse or error response"| Client
 ```
 
-Registration also stages a new user through the repository. Its user, first session,
-token history and `auth.user.created` message commit together. Login creates a session
-but exports no session event. Failures short-circuit the successful path above.
+Registration stages a new user (`EmailConfirmed = false`), first session, refresh token history,
+`EmailConfirmationToken` SHA-256 hash and `auth.user.created` outbox row inside the active
+`TransactionBehavior` transaction, flushes them before SMTP dispatch, and sends the confirmation
+email via `IEmailSender` (`SmtpEmailSender`). Any database or SMTP failure rolls back the
+transaction before commit; login creates a session without sending an email or exporting a
+session event. Failures short-circuit the successful path above.
 The JWT is generated before saving but returned only after the pipeline commits.
 RegisterUserCommand and LoginUserCommand implement ITransactionalCommand. Failure Results,
 exceptions or cancellation roll back the transaction; rollback retains the entity events
 and detaches discarded tracked work. RefreshTokenCommand is unmarked: its replay revocation
 must persist even when the command returns an invalid-token failure.
+
+## Email confirmation
+
+```mermaid
+flowchart LR
+    Client["HTTP client / browser link"]
+    API["AuthController: GET or POST /api/auth/confirm-email"]
+    Pipeline["MediatR: Profiling / ExceptionToResult / Validation"]
+    Handler["ConfirmEmailCommandHandler"]
+    ConfirmSvc["EmailConfirmationService"]
+    DB[("Auth PostgreSQL: EmailConfirmationTokens, Users")]
+
+    Client -->|"1. GET ?token=... or POST {token}"| API
+    API -->|"1.1 Map request and dispatch ConfirmEmailCommand"| Pipeline
+    Pipeline -->|"1.2 Reject empty/whitespace token (400)"| Client
+    Pipeline -->|"1.3 Invoke handler (no TransactionBehavior wrapper)"| Handler
+    Handler -->|"1.4 ConfirmAsync(token)"| ConfirmSvc
+    ConfirmSvc -->|"1.5 Hash token and load token + User"| DB
+    ConfirmSvc -->|"1.6 Consume token, confirm User and SaveChanges"| DB
+    ConfirmSvc -->|"1.6a Missing/expired -> 400; used/concurrency conflict -> 409"| Handler
+    Handler -->|"1.7 EmailConfirmationResponse or ProblemDetails"| API
+    API -->|"1.8 200 OK or 400/409 response"| Client
+```
+
+Confirmation links carry the raw 32-byte Base64Url token, while persistence stores only its
+SHA-256 hex digest with an expiry timestamp (`ExpiresAtUtc`) and single-use timestamp
+(`UsedAtUtc`). Confirming a token marks both `EmailConfirmationToken.UsedAtUtc` and
+`UserAccount.EmailConfirmed` / `EmailConfirmedAtUtc` atomically via `AuthDbContext.SaveChangesAsync`,
+emitting no outbox event. Concurrent consumption maps `DbUpdateConcurrencyException` to `409 Conflict`.
 
 ## Current user identity
 
@@ -132,16 +169,45 @@ does not poll continuously: it runs a bounded number of batches and exits, inclu
 when a batch acknowledges zero messages. Later retries require another invocation.
 No cloud schedule or receiver is configured by the repository examples.
 
+## Local Kubernetes Auth and Mailpit runtime
+
+```mermaid
+flowchart LR
+    Dev["Developer / HTTP client"]
+    K8sApi["auth-service Deployment (3 replicas, NodePort 30080 -> localhost:5080)"]
+    MigrateJob["auth-migrate Job (efbundle)"]
+    AuthDb[("auth-db StatefulSet (:5432, PVC)")]
+    Mailpit["mailpit Deployment (SMTP :1025, UI :8025)"]
+
+    Dev -->|"1. ./k8s.sh up or deploy auth -> run Job before API rollout"| MigrateJob
+    MigrateJob -->|"1.1 Apply AuthDbContext EF migrations"| AuthDb
+    Dev -->|"2. HTTP -> http://localhost:5080/api/auth/* or /swagger"| K8sApi
+    K8sApi -->|"2.1 ConnectionStrings__AuthDatabase"| AuthDb
+    K8sApi -->|"2.2 SMTP STARTTLS disabled local mail (:1025)"| Mailpit
+    Dev -.->|"3. ./k8s.sh ui mailpit -> kubectl port-forward (:8025)"| Mailpit
+```
+
+In the local Kubernetes Kind overlay (`deploy/kubernetes/overlays/local`), `auth-service` runs
+read-only rootfs non-root pods injected with `auth-settings` ConfigMap (`EmailConfirmation:ConfirmationBaseUrl`
+pointing to `http://localhost:5080/api/auth/confirm-email` and `Smtp:Host=mailpit`) and
+`auth-credentials` Secret (`ConnectionStrings__AuthDatabase`, `Jwt__SigningKey`). Mailpit runs
+as a single in-memory non-root pod (`axllent/mailpit:v1.34.0`) exposed only inside the cluster and
+reachable locally on `http://localhost:8025` through `./k8s.sh ui mailpit`.
+
 ## Source references
 
 - [Controller](SmartLost.AuthService.Api/Controllers/AuthController.cs) and [API composition](SmartLost.AuthService.Api/Program.cs)
-- [Register](SmartLost.AuthService.Application/Commands/Register/RegisterUserCommandHandler.cs), [login](SmartLost.AuthService.Application/Commands/Login/LoginUserCommandHandler.cs) and [refresh](SmartLost.AuthService.Application/Commands/Refresh/RefreshTokenCommandHandler.cs) handlers
+- [Register](SmartLost.AuthService.Application/Commands/Register/RegisterUserCommandHandler.cs), [confirm email](SmartLost.AuthService.Application/Commands/ConfirmEmail/ConfirmEmailCommandHandler.cs), [login](SmartLost.AuthService.Application/Commands/Login/LoginUserCommandHandler.cs) and [refresh](SmartLost.AuthService.Application/Commands/Refresh/RefreshTokenCommandHandler.cs) handlers
 - [Current-user query](SmartLost.AuthService.Application/Queries/GetCurrentUser/GetCurrentUserQuery.cs), [handler](SmartLost.AuthService.Application/Queries/GetCurrentUser/GetCurrentUserQueryHandler.cs) and [shared authorization behavior](../../BuildingBlocks/SmartLost.BuildingBlocks.Application/Behaviors/AuthorizationBehavior.cs)
-- [Session service](SmartLost.AuthService.Infrastructure/Authentication/AuthenticationSessionService.cs) and [AuthDbContext](SmartLost.AuthService.Infrastructure/Persistence/AuthDbContext.cs)
+- [Session service](SmartLost.AuthService.Infrastructure/Authentication/AuthenticationSessionService.cs), [email confirmation service](SmartLost.AuthService.Infrastructure/Authentication/EmailConfirmationService.cs) and [AuthDbContext](SmartLost.AuthService.Infrastructure/Persistence/AuthDbContext.cs)
+- [Shared SMTP email sender](../../BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/Emails/SmtpEmailSender.cs)
 - [Event mapper](SmartLost.AuthService.Infrastructure/Outbox/AuthOutboxEventMapper.cs), [HTTP publisher](SmartLost.AuthService.Infrastructure/Outbox/AuthOutboxHttpPublisher.cs) and [shared processor](../../BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/Outbox/OutboxProcessor.cs)
 - [Worker operation and receiver contract](SmartLost.AuthService.Worker/README.md)
+- [Auth Kubernetes manifests](../../../deploy/kubernetes/base/auth), [Mailpit manifests](../../../deploy/kubernetes/base/mailpit) and [Auth migration Job](../../../deploy/kubernetes/migrations/auth-job.yaml)
 
 ## Review notes
+
+- 2026-11-18: Added Auth email confirmation (`GET`/`POST /api/auth/confirm-email`), hashed single-use `EmailConfirmationTokens` table (`20261118121203_AddEmailConfirmation` migration), `Mailpit` SMTP integration in root `docker-compose.yml` (`1025`/`8025`), shared BuildingBlocks `IEmailSender` / `SmtpEmailSender`, pinned Auth Dockerfiles (`migrations` target + `USER app`), and local Kubernetes manifests + `./k8s.sh` targets (`auth`, `mailpit`, NodePort `30080` -> `localhost:5080`). Updated registration, email confirmation and local Kubernetes flows; `/api/auth/me`, refresh rotation and finite HTTP worker outbox flows remain unchanged.
 
 - 2026-11-17: Upgraded API AutoMapper from 16.2.0 to 16.3.0 and refreshed API/unit/integration
   dependency locks to fix GHSA-6vhm-j9h7-f9gh and GHSA-gpwp-5797-mjff. Existing request-to-command

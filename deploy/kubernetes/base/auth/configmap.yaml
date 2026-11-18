@@ -25,7 +25,7 @@ data:
         "LogLevel": {
           "Default": "Information",
           "Microsoft.AspNetCore": "Warning",
-          "Microsoft.EntityFrameworkCore.Warning": "Warning"
+          "Microsoft.EntityFrameworkCore": "Warning"
         }
       },
       "AllowedHosts": "*"

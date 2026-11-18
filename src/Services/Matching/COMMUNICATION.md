@@ -135,6 +135,11 @@ category synonym normalization are not implemented.
 
 ## Review notes
 
+- 2026-11-18: Reviewed shared BuildingBlocks `IEmailSender` / `SmtpEmailSender`, root Compose
+  `mailpit` container, and local Kubernetes Auth/Mailpit manifests plus `./k8s.sh` additions.
+  Matching does not register `IEmailSender`, has no Kubernetes manifests yet, and has no
+  runtime communication with Mailpit; all existing Matching API/AI/database arrows are unchanged.
+
 - 2026-11-17: Reviewed shared continuous Outbox host and opt-in RabbitMQ transport. Matching does not register this transport and has no RabbitMQ consumer. Listings notifications currently wait in a broker queue; Matching API/AI/database arrows are unchanged.
 
 

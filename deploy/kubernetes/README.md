@@ -1,9 +1,11 @@
-# Local Kubernetes: Listings, PostgreSQL and RabbitMQ
+# Local Kubernetes: Auth, Listings, Mailpit and RabbitMQ
 
-This setup runs three Listings API replicas, one Outbox Publish worker, PostgreSQL 16
-and RabbitMQ 4.4 in namespace `smartlost`. Each StatefulSet has a separate 1 GiB PVC.
-An explicit EF migration-bundle Job prepares the database. Auth, Matching, Redis, Ingress
-and Azure deployment are not included. Root Compose remains independent.
+This setup runs three Auth API replicas with PostgreSQL 16 and Mailpit (`v1.34.0`), plus
+three Listings API replicas, one Outbox Publish worker, PostgreSQL 16 and RabbitMQ 4.4
+in namespace `smartlost`. Each database and RabbitMQ StatefulSet has a separate 1 GiB PVC;
+Mailpit runs in-memory without a PVC. Explicit EF migration-bundle Jobs prepare each
+database. Matching, Redis, Ingress and Azure deployment are not included. Root Compose
+remains independent.
 
 ## Short local commands
 
@@ -11,36 +13,44 @@ Use the executable [root helper](../../k8s.sh) from the repository root (Bash on
 
 ```sh
 ./k8s.sh help
-./k8s.sh config           # First setup: create ignored files, then edit their placeholders
-./k8s.sh up               # Create/reuse Kind, build/load all images, infra, migration, rollout
-./k8s.sh deploy listings  # Existing setup: rebuild API/worker/bundle, load, migrate, rollout
-./k8s.sh deploy rabbitmq  # Rebuild/load broker image and restart its StatefulSet
-./k8s.sh migrate          # Rebuild/load only the bundle and execute the migration Job
+./k8s.sh config                  # First setup: create ignored files, then edit their placeholders
+./k8s.sh up                      # Create/reuse Kind, build/load all images, infra, migrations, rollout
+./k8s.sh deploy auth             # Rebuild/load Auth API/bundle, migrate auth-db, roll out Auth + Mailpit
+./k8s.sh deploy listings         # Rebuild/load Listings API/worker/bundle, load, migrate, rollout
+./k8s.sh deploy mailpit          # Apply/restart Mailpit Deployment in smartlost
+./k8s.sh deploy rabbitmq         # Rebuild/load broker image and restart its StatefulSet
+./k8s.sh migrate auth            # Rebuild/load Auth bundle and execute auth-migrate Job (or: listings / all)
 ./k8s.sh status
-./k8s.sh logs worker --follow
-./k8s.sh ui               # Temporary RabbitMQ UI forwarding; Ctrl+C stops it
-./k8s.sh stop             # Scale workloads to zero; retain database and broker PVCs
+./k8s.sh logs auth-api --follow  # Or: listings-api, worker, db, auth-db, mailpit, rabbitmq, auth-migrations
+./k8s.sh ui mailpit              # Temporary Mailpit UI forwarding (8025); Ctrl+C stops it
+./k8s.sh ui rabbitmq             # Temporary RabbitMQ UI forwarding (15672); Ctrl+C stops it
+./k8s.sh stop                    # Scale workloads to zero; retain database and broker PVCs
 ```
 
-`build` and `load` accept `api`, `worker`, `migrations`, `rabbitmq`, `listings` or `all`:
+`build` and `load` accept `listings-api` (`api`), `listings-worker` (`worker`),
+`listings-migrations` (`migrations`), `auth-api`, `auth-migrations`, `rabbitmq`,
+`listings`, `auth` or `all`:
 
 ```sh
-./k8s.sh build worker
-./k8s.sh load worker
-./k8s.sh restart worker
+./k8s.sh build auth
+./k8s.sh load auth
+./k8s.sh restart auth-api
 ./k8s.sh validate
 ```
 
 These separate commands do exactly their named step: build does not load, load does not
-restart, and restart does not build or migrate. Prefer `deploy listings` for a complete
-application update. `deploy all` rebuilds/restarts the broker too; `up` additionally creates
-the cluster if missing. First installation requires `up`, so the broker image is loaded.
-To resume after `stop`, use `up`; `restart` does not scale stopped workloads back up.
+restart, and restart does not build or migrate. Prefer `deploy auth` / `deploy listings`
+for a complete service update. `deploy` with no argument defaults to `all`, which
+rebuilds/restarts all workloads including Mailpit and RabbitMQ; `up` additionally creates
+the cluster if missing. First installation requires `up` (or building/loading the needed
+service images). To resume after `stop`, use `up`; `restart` does not scale stopped
+workloads back up.
 
 To **generate** a migration locally after changing entities/EF mappings:
 
 ```sh
-./k8s.sh migration-add DescribeYourChange
+./k8s.sh migration-add auth DescribeYourChange
+./k8s.sh migration-add listings DescribeYourChange
 ```
 
 Review/commit the generated Infrastructure migration and snapshot, then use `migrate` or
@@ -77,33 +87,42 @@ or GitHub workflow was changed by adding this helper; .NET suites were not rerun
 | File/directory | Responsibility |
 | --- | --- |
 | [../../k8s.sh](../../k8s.sh) | Local build/load/migration/rollout and diagnostic shortcuts; no cloud/CI orchestration or volume deletion. |
-| [local/kind.yaml](local/kind.yaml) | One-node local Kind cluster; publishes only `127.0.0.1:5082` to node port 30081. |
-| [base/kustomization.yaml](base/kustomization.yaml) | Namespace and currently implemented modules. |
-| [base/listings/](base/listings/) | API Deployment/Service, configuration and PostgreSQL StatefulSet/headless Service. |
+| [local/kind.yaml](local/kind.yaml) | One-node local Kind cluster; publishes `127.0.0.1:5080` (`30080`) for Auth and `127.0.0.1:5082` (`30081`) for Listings. |
+| [base/kustomization.yaml](base/kustomization.yaml) | Namespace and currently implemented modules (`auth`, `mailpit`, `listings`, `rabbitmq`). |
+| [base/auth/](base/auth/) | Auth API Deployment/Service, non-secret `auth-settings` ConfigMap (`mailpit:1025`, `localhost:5080` callback) and `auth-db` StatefulSet/headless Service. |
+| [base/mailpit/](base/mailpit/) | Internal Mailpit `v1.34.0` Deployment/Service (`smtp :1025`, `http :8025`), non-root read-only rootfs. |
+| [base/listings/](base/listings/) | Listings API Deployment/Service, configuration and PostgreSQL StatefulSet/headless Service. |
 | [base/listings/worker-deployment.yaml](base/listings/worker-deployment.yaml) | One Publish worker, no Service or published port; JSON/Secret shared with Listings. |
 | [base/rabbitmq/](base/rabbitmq/) | Internal headless Service and broker StatefulSet/PVC; AMQP 5672, management 15672. |
 | [images/rabbitmq/Dockerfile](images/rabbitmq/Dockerfile) | Digest-pinned broker base with patched Ubuntu apt libraries; non-root runtime. |
+| [local/auth/.env.example](local/auth/.env.example) | Placeholder Auth DB password, connection string and 32+ char `jwt-signing-key`; never a checked-in Secret. |
 | [local/rabbitmq/.env.example](local/rabbitmq/.env.example) | Separate ignored broker credentials/cookie file. |
-| [overlays/local/kustomization.yaml](overlays/local/kustomization.yaml) | `smartlost` namespace, three API replicas and the Listings-only NodePort patch. |
+| [overlays/local/kustomization.yaml](overlays/local/kustomization.yaml) | `smartlost` namespace, three replicas each for Auth and Listings, and local NodePort patches. |
+| [overlays/local/auth-nodeport.yaml](overlays/local/auth-nodeport.yaml) | Local Service override: NodePort 30080; base Auth Service remains ClusterIP. |
 | [overlays/local/listings-nodeport.yaml](overlays/local/listings-nodeport.yaml) | Local Service override: NodePort 30081; the base Service remains ClusterIP. |
-| [migrations/listings-job.yaml](migrations/listings-job.yaml) | Explicit migration bundle; one attempt, five-minute deadline. |
-| [local/.env.example](local/.env.example) | Placeholder credentials for the ignored local `.env`; never a checked-in Secret. |
+| [migrations/auth-job.yaml](migrations/auth-job.yaml) | Explicit Auth migration bundle; one attempt, five-minute deadline. |
+| [migrations/listings-job.yaml](migrations/listings-job.yaml) | Explicit Listings migration bundle; one attempt, five-minute deadline. |
+| [local/.env.example](local/.env.example) | Placeholder credentials for ignored Listings `.env`; never a checked-in Secret. |
+| [Auth Dockerfile](../../src/Services/Auth/SmartLost.AuthService.Api/Dockerfile) | Default `runtime` API target and opt-in `migrations` target, sharing the patched `10.0.15` runtime base. |
 | [Listings Dockerfile](../../src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile) | Default `runtime` API target and opt-in `migrations` target, sharing the patched runtime base. |
 
-The base API Service uses ClusterIP port 80 and selects pods listening on 8080. The local
-overlay adds NodePort 30081, mapped by Kind to `127.0.0.1:5082`. PostgreSQL is reachable
-inside this namespace at `listings-db:5432`; it has no host port. The database belongs
-only to Listings. API readiness executes the uncached public list query against the
-database; startup/liveness check the HTTP listener's TCP port. These probes add no new
-HTTP routes and are not a comprehensive application health check.
+Each base API Service uses ClusterIP port 80 and selects pods listening on 8080. The local
+overlay adds NodePort 30080 (mapped by Kind to `127.0.0.1:5080`) for Auth and NodePort
+30081 (mapped by Kind to `127.0.0.1:5082`) for Listings. PostgreSQL instances are reachable
+only inside the `smartlost` namespace at `auth-db:5432` and `listings-db:5432`; each database
+belongs only to its owning service. Auth readiness probes `/openapi/v1.json` (enabled in
+Development); Listings readiness executes the uncached public list query against its
+database; startup/liveness check HTTP TCP or Mailpit health routes (`/livez`, `/readyz`).
+These probes add no new public business routes and are not a comprehensive health suite.
 
-The ConfigMap mounts non-secret JSON at `/app/appsettings.json`. The Secret supplies
-`ConnectionStrings__ListingsDatabase`, overriding JSON through standard .NET
-configuration, and the matching PostgreSQL initialization password. Changing a Secret
+The ConfigMaps mount non-secret JSON at `/app/appsettings.json`. Secrets supply
+`ConnectionStrings__ListingsDatabase` (plus `postgres-password` for Listings PostgreSQL) and
+`ConnectionStrings__AuthDatabase` + `Jwt__SigningKey` (plus `postgres-password` for Auth
+PostgreSQL), overriding JSON through standard .NET configuration. Changing a Secret
 does not rotate credentials in an initialized database; environment changes require a
 pod restart. A ConfigMap mounted with `subPath` also requires restarting the API/worker pods.
-Only the local overlay exists; Development enables the current Swagger and seed flow.
-Do not treat this configuration as an Azure/production deployment.
+Only the local overlay exists; Development enables Swagger, OpenAPI (`/openapi/v1.json`)
+and the Listings seed flow. Do not treat this configuration as an Azure/production deployment.
 
 ## Prerequisites and cluster
 
@@ -133,20 +152,24 @@ default StorageClass provisions storage inside its node container; PVC data surv
 PostgreSQL pod replacement, but not deletion of the Kind cluster.
 
 Kind port mappings are configured when the node container is created. An older cluster
-without the 5082 mapping must be recreated; applying YAML alone cannot add that host
-mapping. Preserve its database first using [backup and restore](#backup-and-restore-before-cluster-recreation).
+without both the `5080` (`30080`) and `5082` (`30081`) mappings must be recreated; applying YAML
+alone cannot add host mappings. Preserve any existing databases first using
+[backup and restore](#backup-and-restore-before-cluster-recreation).
 
 ## Images
 
-Build all four images and load them into the local cluster; a host Docker image alone is
-not sufficient for Kind's container runtime:
+Build all custom images and load them into the local cluster; a host Docker image alone is
+not sufficient for Kind's container runtime (`axllent/mailpit:v1.34.0` and `postgres:16-alpine`
+are pulled upstream by Kind on `IfNotPresent` when not already cached):
 
 ```sh
+docker build --provenance=false --file src/Services/Auth/SmartLost.AuthService.Api/Dockerfile --tag smartlost-auth-api:local .
+docker build --provenance=false --file src/Services/Auth/SmartLost.AuthService.Api/Dockerfile --target migrations --tag smartlost-auth-migrations:local .
 docker build --provenance=false --file src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile --tag smartlost-listings-api:local .
 docker build --provenance=false --file src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile --target migrations --tag smartlost-listings-migrations:local .
 docker build --provenance=false --file src/Services/Listings/SmartLost.ListingsService.Worker/Dockerfile --tag smartlost-listings-worker:local .
 docker build --provenance=false --file deploy/kubernetes/images/rabbitmq/Dockerfile --tag smartlost-rabbitmq:local .
-kind load docker-image smartlost-listings-api:local smartlost-listings-migrations:local smartlost-listings-worker:local smartlost-rabbitmq:local --name smartlost-local
+kind load docker-image smartlost-auth-api:local smartlost-auth-migrations:local smartlost-listings-api:local smartlost-listings-migrations:local smartlost-listings-worker:local smartlost-rabbitmq:local --name smartlost-local
 ```
 
 `--provenance=false` avoids Docker Desktop attestation-index import failures when loading
@@ -213,18 +236,44 @@ kubectl -n smartlost port-forward service/rabbitmq 15672:15672
 ```
 
 Open <http://localhost:15672> with credentials from the ignored broker file. Ctrl+C ends the
-forward. The fixed Listings URL needs no port-forward.
+forward. The fixed API URLs (`5080`, `5082`) need no port-forward.
+
+## Auth credentials and Mailpit
+
+Create `deploy/kubernetes/local/auth/.env`, replace the password placeholders in both keys,
+and replace `jwt-signing-key` with a random value of at least 32 characters:
+
+```sh
+cp -n deploy/kubernetes/local/auth/.env.example deploy/kubernetes/local/auth/.env
+chmod 600 deploy/kubernetes/local/auth/.env
+kubectl -n smartlost create secret generic auth-credentials --from-env-file=deploy/kubernetes/local/auth/.env --dry-run=client -o yaml | kubectl -n smartlost apply -f -
+kubectl -n smartlost apply -f deploy/kubernetes/base/auth/db-service.yaml -f deploy/kubernetes/base/auth/db-statefulset.yaml
+kubectl -n smartlost rollout status statefulset/auth-db --timeout=180s
+kubectl -n smartlost apply -k deploy/kubernetes/base/mailpit
+kubectl -n smartlost rollout status deployment/mailpit --timeout=180s
+```
+
+Mailpit runs as non-root UID/GID `65532` with a read-only root filesystem, `/tmp` `emptyDir`,
+SMTP on port `1025` inside the cluster, and Web UI on port `8025` via temporary port-forward:
+
+```sh
+kubectl -n smartlost port-forward service/mailpit 8025:8025
+```
 
 ## Migrate, then start the API
 
-The Job applies the existing checked-in EF migrations and exits. API startup and
-StatefulSet startup never apply schema migrations:
+The Jobs apply the checked-in EF migrations and exit. API startup and StatefulSet startup
+never apply schema migrations:
 
 ```sh
+kubectl -n smartlost apply -f deploy/kubernetes/migrations/auth-job.yaml
+kubectl -n smartlost wait --for=condition=complete job/auth-migrate --timeout=300s
+kubectl -n smartlost logs job/auth-migrate
 kubectl -n smartlost apply -f deploy/kubernetes/migrations/listings-job.yaml
 kubectl -n smartlost wait --for=condition=complete job/listings-migrate --timeout=300s
 kubectl -n smartlost logs job/listings-migrate
 kubectl apply -k deploy/kubernetes/overlays/local
+kubectl -n smartlost rollout status deployment/auth-service --timeout=180s
 kubectl -n smartlost rollout status deployment/listings-service --timeout=180s
 kubectl -n smartlost rollout status deployment/listings-outbox-worker --timeout=180s
 kubectl -n smartlost get pods,services,pvc
@@ -270,19 +319,23 @@ snapshots and Matching consumption remain unimplemented.
 
 ## Access and optional fixtures
 
-Once the local overlay is applied and the API is ready, access the following fixed URLs.
+Once the local overlay is applied and the APIs are ready, access the following fixed URLs.
 No `kubectl port-forward` process is required:
 
-- Swagger: <http://localhost:5082/swagger>
-- OpenAPI: <http://localhost:5082/openapi/v1.json>
+- Auth Swagger: <http://localhost:5080/swagger>
+- Auth OpenAPI: <http://localhost:5080/openapi/v1.json>
+- Listings Swagger: <http://localhost:5082/swagger>
+- Listings OpenAPI: <http://localhost:5082/openapi/v1.json>
 - Categories: <http://localhost:5082/api/categories>
 - Open listings: <http://localhost:5082/api/listings?pageIndex=0&pageSize=10>
 
-Port 5082 avoids the existing Compose API's port 5081. Kind maps this loopback-only port
-to the Service's NodePort 30081, which routes connections to ready API endpoints on 8080.
-New connections can select different replicas; connection reuse does not guarantee a
-different pod per HTTP request. Only Listings has a host mapping/NodePort; no Auth,
-Matching or database port is exposed. Stop any old port-forward using 5082 before creating
+Ports 5080 (Auth) and 5082 (Listings) avoid Compose ports 8080 and 5081. Kind maps these
+loopback-only ports to NodePorts 30080 and 30081, which route connections to ready API
+endpoints on 8080. New connections can select different replicas; connection reuse does not
+guarantee a different pod per HTTP request. Only Auth (`30080`) and Listings (`30081`) have
+host mappings/NodePorts; Matching, Redis, Mailpit (`8025` UI / `1025` SMTP), RabbitMQ and
+database ports are cluster-internal (use `./k8s.sh ui mailpit` or `./k8s.sh ui rabbitmq`
+when UI access is needed). Stop any old port-forward using 5080 or 5082 before creating
 the replacement cluster. Docker Desktop must stay running for the local cluster.
 
 Seed once using the existing Development-only mode in one API pod. This starts a second,
@@ -351,23 +404,24 @@ All three API replicas share this one database; a singleton database has an outa
 replacement. It is not a replicated/HA PostgreSQL installation. To check API replacement,
 delete one API pod and wait for `rollout status deployment/listings-service`.
 
-Stop Listings while retaining its configuration and database storage:
+Stop all services while retaining their configuration and database storage (`./k8s.sh stop`):
 
 ```sh
-kubectl -n smartlost scale deployment/listings-service --replicas=0
-kubectl -n smartlost scale deployment/listings-outbox-worker --replicas=0
-kubectl -n smartlost scale statefulset/rabbitmq --replicas=0
-kubectl -n smartlost scale statefulset/listings-db --replicas=0
+kubectl -n smartlost scale deployment/auth-service deployment/listings-service deployment/listings-outbox-worker deployment/mailpit --replicas=0
+kubectl -n smartlost scale statefulset/rabbitmq statefulset/auth-db statefulset/listings-db --replicas=0
 ```
 
-Start it again without rerunning a completed migration:
+Start again without rerunning completed migrations (`./k8s.sh up` or scale up and apply):
 
 ```sh
-kubectl -n smartlost scale statefulset/listings-db --replicas=1
+kubectl -n smartlost scale statefulset/auth-db statefulset/listings-db statefulset/rabbitmq --replicas=1
+kubectl -n smartlost rollout status statefulset/auth-db --timeout=180s
 kubectl -n smartlost rollout status statefulset/listings-db --timeout=180s
-kubectl -n smartlost scale statefulset/rabbitmq --replicas=1
 kubectl -n smartlost rollout status statefulset/rabbitmq --timeout=300s
+kubectl -n smartlost scale deployment/mailpit --replicas=1
+kubectl -n smartlost rollout status deployment/mailpit --timeout=180s
 kubectl apply -k deploy/kubernetes/overlays/local
+kubectl -n smartlost rollout status deployment/auth-service --timeout=180s
 kubectl -n smartlost rollout status deployment/listings-service --timeout=180s
 kubectl -n smartlost rollout status deployment/listings-outbox-worker --timeout=180s
 ```
@@ -398,9 +452,37 @@ cluster to check API validation/admission. The repository's existing Trivy files
 scan covers Kubernetes configuration; the existing container CI builds/scans the default
 API/worker targets and the broker Dockerfile, not the opt-in migration target. No deployment workflow is activated.
 
-See [Listings communication](../../src/Services/Listings/COMMUNICATION.md) for the numbered
-local Kubernetes flow and [module documentation](../../src/Services/Listings/README.md)
-for current API/application boundaries.
+See [Auth communication](../../src/Services/Auth/COMMUNICATION.md) and
+[Listings communication](../../src/Services/Listings/COMMUNICATION.md) for the numbered
+local Kubernetes flows, and [Auth documentation](../../docs/AUTHSERVICE.md) /
+[Listings documentation](../../src/Services/Listings/README.md) for current API and
+application boundaries.
+
+### Auth and Mailpit manifests on 2026-11-18
+
+- Added `base/auth`, `base/mailpit`, `migrations/auth-job.yaml`, `local/auth/.env.example`,
+  `overlays/local/auth-nodeport.yaml` (`30080` -> `127.0.0.1:5080`), updated Auth
+  Dockerfiles (`migrations` bundle stage, pinned `10.0.401`/`10.0.15` digests, non-root
+  `app` user), and extended `./k8s.sh` with `auth` and `mailpit` commands.
+- Verified locally on 2026-11-18:
+  - Manifest & helper checks: `kubectl kustomize deploy/kubernetes/overlays/local`,
+    `kubectl apply --dry-run=server -k deploy/kubernetes/overlays/local`, `bash -n k8s.sh`.
+  - Containers & security: built `smartlost-auth-api:local`, `smartlost-auth-migrations:local`
+    (`--target migrations` `efbundle`) and `smartlost-auth-worker:local`; Trivy 0.74.0
+    (`fs` excluding generated `bin`/`obj`/`artifacts`/`AIModels`/`.tools`, plus `image`
+    `vuln,secret`) and Gitleaks v8.30.1 (`git` 94 commits + clean `HEAD` export) passed with
+    0 `HIGH`/`CRITICAL` findings or leaks.
+  - Test suites: all 393 unit tests (`Auth` 104, `BuildingBlocks` 107, `Listings` 85,
+    `Matching` 97) with Coverlet 96.23% overall / 100.00% changed executable lines vs branch
+    base, plus all 28 integration tests (`Auth` 19/19, `Listings` 7/7, `Matching` 2/2).
+  - Live Kind `v0.33.0` (`kindest/node:v1.37.0`, `smartlost-local`) Auth + Mailpit rollout:
+    `auth-db` `1/1 Ready`, `mailpit` `1/1 Ready`, `auth-migrate` completed all 4 migrations
+    and a repeat Job confirmed idempotency, `auth-service` rolled out `3/3 Ready` on
+    NodePort `30080` (`http://localhost:5080`); end-to-end tests verified Swagger/OpenAPI
+    (`200`), `register` (`201`), Mailpit email capture with `localhost:5080` confirmation link,
+    `GET /api/auth/confirm-email` (`200`), token replay (`409`), `GET /api/auth/me` (`200`),
+    and `POST /api/auth/confirm-email` unknown/blank token errors (`400`), followed by DB and
+    Mailpit cleanup. Hosted GitHub Actions CI remains separate.
 
 ### Executed locally on 2026-11-17
 

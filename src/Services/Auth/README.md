@@ -1,8 +1,10 @@
 # Auth service
 
-The implemented .NET 10 authentication service provides register, login and refresh
-endpoints, JWT issuance, persistent refresh sessions and a PostgreSQL-owned outbox.
-Its separate finite worker delivers profile integration events over HTTP.
+The implemented .NET 10 authentication service provides register, login, refresh,
+current-user and email confirmation endpoints, JWT issuance, persistent refresh sessions,
+hashed single-use email confirmation tokens dispatched via SMTP (Mailpit in local dev)
+and a PostgreSQL-owned outbox. Its separate finite worker delivers profile integration
+events over HTTP.
 
 The API registers the shared Profiling → ExceptionToResult → Authorization → Validation
 → Caching → Transaction pipeline. Only attributed requests enforce Application authorization; no Auth
@@ -39,17 +41,22 @@ review verifies that the arrows and implementation status remain accurate.
 ## Container security maintenance
 
 The [API Dockerfile](SmartLost.AuthService.Api/Dockerfile) and
-[worker Dockerfile](SmartLost.AuthService.Worker/Dockerfile) patch Ubuntu APT packages
-before switching to the non-root application user. Both `apt` and `libapt-pkg6.0t64`
-must be at least `2.8.4ubuntu0.1` for
-[USN-8996-1](https://ubuntu.com/security/notices/USN-8996-1). Package sources use HTTPS
-during this bootstrap update; missing fixes fail the build. Runtime settings, database
-ownership and application commands are unchanged. CI still scans the resulting images
-and rejects HIGH/CRITICAL vulnerabilities and secrets.
+[worker Dockerfile](SmartLost.AuthService.Worker/Dockerfile) use pinned `10.0.401` SDK
+and `10.0.15` ASP.NET runtime digests, patch Ubuntu APT packages before switching to the
+built-in non-root `app` user (UID/GID `1654`), and expose an EF `migrations` bundle target
+for Kubernetes `auth-migrate`. Both `apt` and `libapt-pkg6.0t64` must be at least
+`2.8.4ubuntu0.1` for [USN-8996-1](https://ubuntu.com/security/notices/USN-8996-1).
+Package sources use HTTPS during this bootstrap update; missing fixes fail the build.
+Runtime settings, database ownership and application commands are unchanged. CI builds
+every service Dockerfile on Linux and scans images with Trivy for HIGH/CRITICAL
+vulnerabilities and secrets.
 
-On 2026-11-06 both images were rebuilt locally for Linux/arm64, reported both APT packages
-at `2.8.4ubuntu0.1` and passed Trivy 0.74.0 HIGH/CRITICAL vulnerability and secret scans.
-Non-root users were retained. Hosted CI validation remains separate.
+On 2026-11-06 the earlier image revision passed a local Linux/arm64 Trivy 0.74.0 scan;
+on 2026-11-18 all three updated Auth targets (`smartlost-auth-api:local`, `migrations`
+bundle `smartlost-auth-migrations:local`, and `smartlost-auth-worker:local`) built locally
+with Docker Desktop (including `USN-8996-1` APT version checks), passed Trivy 0.74.0
+HIGH/CRITICAL vulnerability and secret scans (0 findings), and ran live on Kind (`v1.37.0`)
+with Mailpit; hosted GitHub Actions CI remains separate.
 
 ## Dependency security maintenance
 
