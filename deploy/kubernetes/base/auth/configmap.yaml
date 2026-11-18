@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-settings
+data:
+  appsettings.json: |
+    {
+      "Jwt": {
+        "Issuer": "AuthService",
+        "Audience": "AuthService",
+        "ExpiryMinutes": 60,
+        "RefreshTokenExpiryDays": 7
+      },
+      "Smtp": {
+        "Host": "mailpit",
+        "Port": 1025,
+        "FromAddress": "noreply@smartlost.local",
+        "FromDisplayName": "SmartLost"
+      },
+      "EmailConfirmation": {
+        "ConfirmationBaseUrl": "http://localhost:5080/api/auth/confirm-email",
+        "TokenExpiryHours": 24
+      },
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft.AspNetCore": "Warning",
+          "Microsoft.EntityFrameworkCore.Warning": "Warning"
+        }
+      },
+      "AllowedHosts": "*"
+    }
