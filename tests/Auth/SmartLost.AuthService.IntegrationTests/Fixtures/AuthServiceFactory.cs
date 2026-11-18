@@ -64,7 +64,8 @@ public sealed class AuthServiceFactory : WebApplicationFactory<Program>, IAsyncL
         RefreshInterceptor.Disarm();
         using IServiceScope scope = Services.CreateScope();
         AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE \"OutboxMessages\", \"RefreshTokens\", \"RefreshSessions\", \"Users\";");
+        await context.Database.ExecuteSqlRawAsync(
+            "TRUNCATE TABLE \"OutboxMessages\", \"EmailConfirmationTokens\", \"RefreshTokens\", \"RefreshSessions\", \"Users\";");
     }
 
     protected override IHost CreateHost(IHostBuilder builder)

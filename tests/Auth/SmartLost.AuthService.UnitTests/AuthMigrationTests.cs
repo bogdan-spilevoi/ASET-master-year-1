@@ -44,6 +44,14 @@ public sealed class AuthMigrationTests
         Microsoft.EntityFrameworkCore.Metadata.IEntityType entity = migration.TargetModel.FindEntityType(typeof(UserAccount).FullName!)!;
         Assert.Equal("Users", entity.GetTableName());
         Assert.Equal(2, entity.GetIndexes().Count());
+
+        KeyValuePair<string, System.Reflection.TypeInfo> latestEntry = assembly.Migrations.Last();
+        Assert.EndsWith("_AddEmailConfirmation", latestEntry.Key, StringComparison.Ordinal);
+        Migration latestMigration = assembly.CreateMigration(latestEntry.Value, context.Database.ProviderName!);
+        CreateTableOperation tokensTable = Assert.Single(latestMigration.UpOperations.OfType<CreateTableOperation>());
+        Assert.Equal("EmailConfirmationTokens", tokensTable.Name);
+        Microsoft.EntityFrameworkCore.Metadata.IEntityType tokenEntity = latestMigration.TargetModel.FindEntityType(typeof(EmailConfirmationToken).FullName!)!;
+        Assert.Equal("EmailConfirmationTokens", tokenEntity.GetTableName());
     }
 
     [Fact]
@@ -53,12 +61,15 @@ public sealed class AuthMigrationTests
         IMigrator migrator = context.GetService<IMigrator>();
         string script = migrator.GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent);
         Assert.Contains("CREATE TABLE \"Users\"", script, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE \"EmailConfirmationTokens\"", script, StringComparison.Ordinal);
         Assert.Contains("CREATE UNIQUE INDEX \"IX_Users_NormalizedUserName\"", script, StringComparison.Ordinal);
         Assert.Contains("CREATE UNIQUE INDEX \"IX_Users_NormalizedEmail\"", script, StringComparison.Ordinal);
+        Assert.Contains("CREATE UNIQUE INDEX \"IX_EmailConfirmationTokens_TokenHash\"", script, StringComparison.Ordinal);
         Assert.Contains("__EFMigrationsHistory", script, StringComparison.Ordinal);
 
         string id = context.GetService<IMigrationsAssembly>().Migrations.Last().Key;
         string rollback = migrator.GenerateScript(id, Migration.InitialDatabase);
+        Assert.Contains("DROP TABLE \"EmailConfirmationTokens\"", rollback, StringComparison.Ordinal);
         Assert.Contains("DROP TABLE \"Users\"", rollback, StringComparison.Ordinal);
         Assert.Contains("DELETE FROM \"__EFMigrationsHistory\"", rollback, StringComparison.Ordinal);
     }
