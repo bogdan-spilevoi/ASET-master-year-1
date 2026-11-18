@@ -18,9 +18,9 @@ root solution to validate consumers together with the shared libraries.
 | Library | Contents | Dependencies |
 | --- | --- | --- |
 | [Core](../src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | `Entity<TId>`, `AggregateRoot<TId>`, `IDomainEvent`, `IHasDomainEvents`, `Guard`, `Result`, `Result<T>`, `IResult`, `Error`, `ErrorKind`, `DomainException`, `PageSlice<T>`, `PagedResult<T>`, `PagedDataGuard` | .NET only |
-| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/README.md) | Validation/exception/optional transaction, authorization and profiling behaviors, isolated profiling contexts and measurements, transaction and Outbox contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
+| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/README.md) | Validation/exception/optional transaction, authorization and profiling behaviors, isolated profiling contexts and measurements, transaction, Outbox and email (`IEmailSender`) contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
 | [AspNetCore](../src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/) | `ToActionResult`, `ProblemDetails`, unexpected-exception handler, `HttpCurrentUser`, API registration | Application/Core, ASP.NET Core framework |
-| [Infrastructure](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/) | EF Outbox model/configuration, writer, leased processor and optional inspection/delivery hosts | Application, EF Core Relational 10.0.12 |
+| [Infrastructure](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/) | EF Outbox model/configuration, writer, leased processor, optional inspection/delivery hosts, query cache and opt-in `SmtpEmailSender` | Application, EF Core Relational 10.0.12 |
 | [Messaging.RabbitMq](../src/BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/README.md) | Opt-in persistent mandatory publishing, confirms and durable topic topology | Application, RabbitMQ.Client 7.2.2 |
 
 Service Domain projects reference Core; service Application projects reference Application;

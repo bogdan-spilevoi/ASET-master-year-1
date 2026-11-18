@@ -22,6 +22,9 @@ no service-specific context, database connection, provider or business model is 
   batch processing (default 2-second interval), including after empty batches/failures.
   The caller must register a real `IOutboxMessagePublisher`. RabbitMQ is in a separate
   opt-in [transport project](../SmartLost.BuildingBlocks.Messaging.RabbitMq/README.md).
+- `Emails/SmtpEmailOptions`, `Emails/SmtpEmailSender` and `AddBuildingBlocksSmtpEmailSender`:
+  opt-in SMTP email delivery targeting `IEmailSender` with startup option validation
+  (used by Auth with Mailpit).
 
 Services provide the event mapper, context/migration, transport publisher, error mapping
 and worker host. Transaction mechanics and event-save lifecycle are shared components. Auth now adopts them through a service-owned migration,
