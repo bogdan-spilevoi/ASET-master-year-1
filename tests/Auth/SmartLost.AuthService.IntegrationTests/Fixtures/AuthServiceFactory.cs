@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -10,6 +11,7 @@ using Microsoft.Extensions.Hosting;
 using SmartLost.AuthService.Application.Interfaces;
 using SmartLost.AuthService.Domain.Entities;
 using SmartLost.AuthService.Infrastructure.Persistence;
+using SmartLost.BuildingBlocks.Application.Emails;
 using Testcontainers.PostgreSql;
 using Xunit;
 
@@ -24,6 +26,8 @@ public sealed class AuthServiceFactory : WebApplicationFactory<Program>, IAsyncL
         .Build();
 
     public ConcurrentRefreshInterceptor RefreshInterceptor { get; } = new();
+
+    public RecordingEmailSender EmailSender { get; } = new();
 
     public HttpClient CreateAuthenticatedClient(UserAccount user)
     {
@@ -62,6 +66,7 @@ public sealed class AuthServiceFactory : WebApplicationFactory<Program>, IAsyncL
     public async Task ResetAsync()
     {
         RefreshInterceptor.Disarm();
+        EmailSender.Clear();
         using IServiceScope scope = Services.CreateScope();
         AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
         await context.Database.ExecuteSqlRawAsync(
@@ -80,6 +85,8 @@ public sealed class AuthServiceFactory : WebApplicationFactory<Program>, IAsyncL
         builder.ConfigureAppConfiguration(configuration => configuration.AddInMemoryCollection(TestSettings()));
         builder.ConfigureServices(services =>
         {
+            services.RemoveAll<IEmailSender>();
+            services.AddSingleton<IEmailSender>(EmailSender);
             services.RemoveAll<DbContextOptions<AuthDbContext>>();
             services.RemoveAll<DbContextOptions>();
             services.RemoveAll<IDbContextOptionsConfiguration<AuthDbContext>>();
@@ -100,5 +107,23 @@ public sealed class AuthServiceFactory : WebApplicationFactory<Program>, IAsyncL
             ["Jwt:ExpiryMinutes"] = "60",
             ["Jwt:RefreshTokenExpiryDays"] = "7"
         };
+    }
+
+    public sealed class RecordingEmailSender : IEmailSender
+    {
+        public ConcurrentQueue<EmailMessage> Messages { get; } = new();
+
+        public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+        {
+            Messages.Enqueue(message);
+            return Task.CompletedTask;
+        }
+
+        public void Clear()
+        {
+            while (Messages.TryDequeue(out _))
+            {
+            }
+        }
     }
 }

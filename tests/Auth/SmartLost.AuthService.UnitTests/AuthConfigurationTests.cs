@@ -93,6 +93,23 @@ public sealed class AuthConfigurationTests : IDisposable
         Assert.NotEmpty(exception.Failures);
     }
 
+    [Theory]
+    [InlineData("EmailConfirmation:ConfirmationBaseUrl", "")]
+    [InlineData("EmailConfirmation:ConfirmationBaseUrl", "relative/path")]
+    [InlineData("EmailConfirmation:ConfirmationBaseUrl", "ftp://example.com/confirm")]
+    [InlineData("EmailConfirmation:TokenExpiryHours", "0")]
+    [InlineData("EmailConfirmation:TokenExpiryHours", "169")]
+    public async Task InvalidEmailConfirmationConfigurationFailsAtStartup(string key, string value)
+    {
+        Dictionary<string, string?> settings = ValidSettings();
+        settings[key] = value;
+        using IHost host = CreateHost(settings);
+
+        OptionsValidationException exception = await Assert.ThrowsAsync<OptionsValidationException>(() => host.StartAsync());
+        Assert.Equal(typeof(EmailConfirmationOptions), exception.OptionsType);
+        Assert.NotEmpty(exception.Failures);
+    }
+
     [Fact]
     public async Task ValidConfigurationStartsAndConfiguresTheDatabaseWithoutConnecting()
     {

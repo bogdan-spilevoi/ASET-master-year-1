@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartLost.AuthService.Api.Contracts;
+using SmartLost.AuthService.Application.Commands.ConfirmEmail;
 using SmartLost.AuthService.Application.Commands.Login;
 using SmartLost.AuthService.Application.Commands.Refresh;
 using SmartLost.AuthService.Application.Commands.Register;
@@ -48,6 +49,29 @@ public sealed class AuthController(ISender sender, IMapper mapper) : ControllerB
     {
         LoginUserCommand command = mapper.Map<LoginUserCommand>(request);
         Result<AuthResponse> result = await sender.Send(command, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [HttpGet("confirm-email")]
+    [ProducesResponseType<EmailConfirmationResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ConfirmEmailFromQuery([FromQuery] string? token = null, CancellationToken cancellationToken = default)
+    {
+        Result<EmailConfirmationResponse> result = await sender.Send(
+            new ConfirmEmailCommand(token ?? string.Empty),
+            cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [HttpPost("confirm-email")]
+    [ProducesResponseType<EmailConfirmationResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailRequest request, CancellationToken cancellationToken)
+    {
+        ConfirmEmailCommand command = mapper.Map<ConfirmEmailCommand>(request);
+        Result<EmailConfirmationResponse> result = await sender.Send(command, cancellationToken);
         return this.ToActionResult(result);
     }
 

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -18,6 +19,7 @@ using SmartLost.AuthService.Application.Contracts;
 using SmartLost.AuthService.Application.Interfaces;
 using SmartLost.AuthService.Domain.Entities;
 using SmartLost.AuthService.Infrastructure.Persistence;
+using SmartLost.BuildingBlocks.Application.Emails;
 using SmartLost.BuildingBlocks.Core.Results;
 using Xunit;
 
@@ -189,6 +191,8 @@ public sealed class AuthApiTests : IClassFixture<AuthApiFactory>
 
 public sealed class AuthApiFactory : WebApplicationFactory<Program>
 {
+    public RecordingEmailSender EmailSender { get; } = new();
+
     protected override IHost CreateHost(IHostBuilder builder)
     {
         builder.ConfigureHostConfiguration(configuration => configuration.AddInMemoryCollection(new Dictionary<string, string?>
@@ -214,6 +218,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         builder.UseEnvironment("Development");
         builder.ConfigureServices(services =>
         {
+            services.RemoveAll<IEmailSender>();
+            services.AddSingleton<IEmailSender>(EmailSender);
             services.RemoveAll<DbContextOptions<AuthDbContext>>();
             services.RemoveAll<DbContextOptions>();
             services.RemoveAll<IDbContextOptionsConfiguration<AuthDbContext>>();
@@ -225,5 +231,16 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             });
             services.AddDbContext<AuthDbContext>((provider, options) => options.UseSqlite(provider.GetRequiredService<SqliteConnection>()));
         });
+    }
+
+    public sealed class RecordingEmailSender : IEmailSender
+    {
+        public ConcurrentQueue<EmailMessage> Messages { get; } = new();
+
+        public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+        {
+            Messages.Enqueue(message);
+            return Task.CompletedTask;
+        }
     }
 }

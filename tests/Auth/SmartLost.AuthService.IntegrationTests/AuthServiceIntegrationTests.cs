@@ -8,8 +8,10 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using SmartLost.AuthService.Api.Contracts;
 using SmartLost.AuthService.Application.Contracts;
 using SmartLost.AuthService.Application.Interfaces;
 using SmartLost.AuthService.Domain.Entities;
@@ -18,6 +20,7 @@ using SmartLost.AuthService.Infrastructure.Authentication;
 using SmartLost.AuthService.Infrastructure.Persistence;
 using SmartLost.AuthService.IntegrationTests.Fixtures;
 using SmartLost.AuthService.IntegrationTests.Helpers;
+using SmartLost.BuildingBlocks.Application.Emails;
 using SmartLost.BuildingBlocks.Application.Outbox;
 using SmartLost.BuildingBlocks.Core.Exceptions;
 using SmartLost.BuildingBlocks.Core.Results;
@@ -338,6 +341,76 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
             }
 
             _factory.RefreshInterceptor.Disarm();
+        }
+    }
+
+    [Fact]
+    public async Task RegisterSendsConfirmationEmailAndTokenConfirmsUserOnceOnPostgreSql()
+    {
+        AuthResponse registered = await RegisterAsync();
+        EmailMessage sentEmail = Assert.Single(_factory.EmailSender.Messages);
+        Assert.Equal("Maria@Example.com", sentEmail.ToAddress);
+        const string Marker = "token=";
+        int start = sentEmail.TextBody.IndexOf(Marker, StringComparison.Ordinal);
+        Assert.True(start >= 0);
+        start += Marker.Length;
+        int end = start;
+        while (end < sentEmail.TextBody.Length && !char.IsWhiteSpace(sentEmail.TextBody[end]))
+        {
+            end++;
+        }
+
+        string token = Uri.UnescapeDataString(sentEmail.TextBody[start..end]);
+
+        using HttpResponseMessage confirmResponse = await _client.GetAsync($"/api/auth/confirm-email?token={Uri.EscapeDataString(token)}");
+        Assert.Equal(HttpStatusCode.OK, confirmResponse.StatusCode);
+        EmailConfirmationResponse confirmed = (await confirmResponse.Content.ReadFromJsonAsync<EmailConfirmationResponse>())!;
+        Assert.Equal(registered.UserId, confirmed.UserId);
+        Assert.True(confirmed.EmailConfirmed);
+
+        await using (AsyncServiceScope scope = _factory.Services.CreateAsyncScope())
+        {
+            AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+            UserAccount persistedUser = await context.Users.SingleAsync();
+            EmailConfirmationToken persistedToken = await context.EmailConfirmationTokens.SingleAsync();
+            Assert.True(persistedUser.EmailConfirmed);
+            Assert.NotNull(persistedUser.EmailConfirmedAtUtc);
+            Assert.NotNull(persistedToken.UsedAtUtc);
+        }
+
+        using HttpResponseMessage replay = await _client.PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest { Token = token });
+        Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
+    }
+
+    [Fact]
+    public async Task SmtpFailureRollsBackFlushedRegistrationInPostgreSql()
+    {
+        using WebApplicationFactory<Program> failingFactory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IEmailSender>();
+                services.AddSingleton<IEmailSender, FailingEmailSender>();
+            }));
+        using HttpClient client = failingFactory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+
+        using HttpResponseMessage response = await client.PostAsJsonAsync("/api/auth/register",
+            TestRequestFactory.ValidRegisterRequest());
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+
+        await using AsyncServiceScope scope = _factory.Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+        Assert.Equal(0, await context.Users.CountAsync());
+        Assert.Equal(0, await context.RefreshSessions.CountAsync());
+        Assert.Equal(0, await context.RefreshTokens.CountAsync());
+        Assert.Equal(0, await context.EmailConfirmationTokens.CountAsync());
+        Assert.Equal(0, await context.OutboxMessages.CountAsync());
+    }
+
+    private sealed class FailingEmailSender : IEmailSender
+    {
+        public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+        {
+            throw new InvalidOperationException("Simulated SMTP outage.");
         }
     }
 

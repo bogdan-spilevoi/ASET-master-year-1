@@ -38,3 +38,17 @@ Content-Type: application/json
 }
 
 ###
+
+# Open the token delivered to Mailpit (http://localhost:8025) or confirm via GET/POST.
+GET {{SmartLost.AuthService.Api_HostAddress}}/api/auth/confirm-email?token=paste-the-confirmation-token-here
+
+###
+
+POST {{SmartLost.AuthService.Api_HostAddress}}/api/auth/confirm-email
+Content-Type: application/json
+
+{
+  "token": "paste-the-confirmation-token-here"
+}
+
+###

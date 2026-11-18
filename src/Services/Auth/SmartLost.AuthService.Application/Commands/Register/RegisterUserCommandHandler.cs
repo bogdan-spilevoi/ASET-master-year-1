@@ -10,7 +10,8 @@ namespace SmartLost.AuthService.Application.Commands.Register;
 public sealed class RegisterUserCommandHandler(
     IUserAccountRepository userAccountRepository,
     IPasswordService passwordService,
-    IAuthenticationSessionService sessionService) : IRequestHandler<RegisterUserCommand, Result<AuthResponse>>
+    IAuthenticationSessionService sessionService,
+    IEmailConfirmationService emailConfirmationService) : IRequestHandler<RegisterUserCommand, Result<AuthResponse>>
 {
     public async Task<Result<AuthResponse>> Handle(RegisterUserCommand request, CancellationToken cancellationToken)
     {
@@ -26,6 +27,7 @@ public sealed class RegisterUserCommandHandler(
         userAccount.SetPasswordHash(passwordService.Hash(userAccount, request.Password));
         userAccountRepository.Add(userAccount);
         AuthResponse response = await sessionService.CreateAsync(userAccount, cancellationToken);
+        await emailConfirmationService.SendConfirmationAsync(userAccount, cancellationToken);
         return Result<AuthResponse>.Success(response);
     }
 }

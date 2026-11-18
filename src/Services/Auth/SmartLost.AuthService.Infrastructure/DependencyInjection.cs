@@ -11,6 +11,7 @@ using SmartLost.AuthService.Infrastructure.Persistence;
 using SmartLost.BuildingBlocks.Application.Outbox;
 using SmartLost.BuildingBlocks.Application.Transactions;
 using SmartLost.BuildingBlocks.Infrastructure;
+using SmartLost.BuildingBlocks.Infrastructure.Emails;
 using SmartLost.BuildingBlocks.Infrastructure.Outbox;
 
 namespace SmartLost.AuthService.Infrastructure;
@@ -27,12 +28,19 @@ public static class DependencyInjection
             .Validate(options => !string.IsNullOrWhiteSpace(options.SigningKey) && Encoding.UTF8.GetByteCount(options.SigningKey) >= 32,
                 "Jwt:SigningKey must contain at least 32 UTF-8 bytes.")
             .ValidateOnStart();
+        services.AddOptions<EmailConfirmationOptions>()
+            .Bind(configuration.GetSection(EmailConfirmationOptions.SectionName))
+            .ValidateDataAnnotations()
+            .Validate(options => options.IsValid(), "Configure a valid HTTP/HTTPS EmailConfirmation:ConfirmationBaseUrl and TokenExpiryHours between 1 and 168.")
+            .ValidateOnStart();
+        services.AddBuildingBlocksSmtpEmailSender(options => configuration.GetSection(SmtpEmailOptions.SectionName).Bind(options));
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
         services.AddScoped<IUnitOfWork, AuthUnitOfWork>();
         services.AddScoped<IPasswordHasher<UserAccount>, PasswordHasher<UserAccount>>();
         services.AddScoped<IPasswordService, PasswordService>();
         services.AddSingleton<ITokenService, TokenService>();
         services.AddScoped<IAuthenticationSessionService, AuthenticationSessionService>();
+        services.AddScoped<IEmailConfirmationService, EmailConfirmationService>();
         return services;
     }
 
