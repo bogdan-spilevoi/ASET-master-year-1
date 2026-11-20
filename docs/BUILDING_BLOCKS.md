@@ -139,8 +139,10 @@ Use synchronized UTC clocks on worker instances. Provider-specific behavior stil
 integration verification against PostgreSQL; EF InMemory cannot exercise this mechanism.
 
 Defaults: batches of 20, maximum 8 delivery attempts, exponential retry starting at 2 seconds
-and capped at 5 minutes, 30-second delivery timeout and 2-minute lease. Options validate on
-startup; the lease must exceed the delivery timeout. A failed final attempt is dead-lettered;
+and capped at 5 minutes, 30-second delivery timeout and 2-minute lease; optional
+`OutboxOptions.MessageTypes` restricts a processor instance to specific message types while
+leaving other message types untouched. Options validate on startup; the lease must exceed
+the delivery timeout. A failed final attempt is dead-lettered;
 expired claims that exhausted the attempt limit are also dead-lettered on the next run.
 Persisted errors are generic codes; exceptions are sent to the host's logger, not the table.
 Success records `ProcessedOn`; terminal rows remain for a service-defined retention policy.
