@@ -1,12 +1,21 @@
 # Auth Outbox worker
 
-A finite .NET 10 console job belonging to AuthService. It reads Auth's `OutboxMessages`
-table and delivers profile integration events through configurable HTTP POST routes.
-It exposes no HTTP endpoint or port. No cloud job or deployment is configured.
+A .NET 10 console host belonging to AuthService with two explicit `Worker:Mode` modes:
 
-See the [Auth communication diagrams](../COMMUNICATION.md#durable-profile-notification-and-delivery)
-for atomic message staging, leased worker delivery and the receiver boundary. Keep
-that diagram current when worker or delivery behavior changes.
+- **`Batch` (default)**: finite job reading `auth.user.created` and
+  `auth.user.identity_changed` rows from `OutboxMessages` and delivering them to
+  configured HTTP POST routes, then exiting cleanly.
+- **`Email`**: continuous delivery host (`OutboxDeliveryService`) polling every 2 seconds
+  for `auth.email.confirmation_requested` messages and sending confirmation emails with
+  retry/backoff via `IEmailSender` (`SmtpEmailSender`, targeting Mailpit in local dev).
+
+Each worker mode filters `OutboxOptions.MessageTypes` so profile HTTP events and SMTP email
+confirmations stay isolated. It exposes no HTTP endpoint or port. No cloud deployment is
+configured.
+
+See the [Auth communication diagrams](../COMMUNICATION.md#post-commit-confirmation-email-worker-delivery)
+for atomic message staging, post-commit email delivery, leased worker delivery and the
+receiver boundary. Keep that diagram current when worker or delivery behavior changes.
 
 ## Messages and receiver contract
 
@@ -91,8 +100,14 @@ completed, not that all messages have been delivered. Inspect queue state and lo
 ## Containers
 
 The [Dockerfile](Dockerfile) builds from the repository root with locked restore and
-runs as a non-root user. The [Compose worker profile](../../../../docker-compose.yml)
-mounts `outboxsettings.Docker.json` read-only and starts only when explicitly requested:
+runs as a non-root user (`app`, UID/GID `1654`). In [docker-compose.yml](../../../../docker-compose.yml):
+
+- `auth-email-worker` runs continuously in the default stack (`Worker:Mode=Email`,
+  `OutboxDelivery:PollInterval=00:00:02`), mounting
+  `src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.json` at
+  `/app/outboxsettings.json` to deliver confirmation emails to `mailpit:1025`.
+- `auth-outbox-worker` remains under the optional `workers` profile (`Worker:Mode=Batch`),
+  mounting `outboxsettings.Docker.json` read-only and starting only when explicitly requested:
 
 ```sh
 docker compose --profile workers config --quiet

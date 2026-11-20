@@ -406,6 +406,11 @@ publishes metadata to RabbitMQ; full snapshot production/consumption remains pla
 
 ## Review notes
 
+- 2026-11-20: Reviewed shared BuildingBlocks `OutboxOptions.MessageTypes` filtering and root
+  Compose / Kubernetes additions (`auth-email-worker` in Compose, `auth-outbox-worker` in K8s).
+  Listings leaves `OutboxOptions.MessageTypes` null so its worker behavior, database ownership,
+  RabbitMQ topology, API routes and `./k8s.sh` Listings flows remain unchanged.
+
 - 2026-11-18: Reviewed shared BuildingBlocks `IEmailSender` / `SmtpEmailSender`, root Compose
   `mailpit` container, and local Kubernetes Auth/Mailpit manifests plus `./k8s.sh` targets.
   Listings does not register `IEmailSender`, does not communicate with Mailpit or Auth at

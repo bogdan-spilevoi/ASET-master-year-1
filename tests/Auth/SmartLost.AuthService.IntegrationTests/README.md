@@ -17,10 +17,9 @@ development Compose database are not used as test dependencies.
 
 The fixture applies EF migrations only to its own container database, truncates the five
 application tables (including `EmailConfirmationTokens` and `OutboxMessages`) before
-every test, replaces `IEmailSender` with an in-memory recording double, and disposes the
-API host and container afterward. Testcontainers' resource reaper provides additional
-cleanup. No persistent volume is used. Application startup itself still does not apply
-migrations.
+every test, and disposes the API host and container afterward. Testcontainers' resource
+reaper provides additional cleanup. No persistent volume is used. Application startup
+itself still does not apply migrations.
 
 ## Database interaction and helpers
 
@@ -69,7 +68,10 @@ CI runs this suite on Linux with Docker available.
   fails its concurrency check and revokes the session; its token insert rolls back.
 - Login with real EF-seeded password hashes, and independent scoped connections with an active reader.
 - All four migrations, including `EmailConfirmationTokens`, `OutboxMessages` and identity versions.
-- Email confirmation token issuance on registration, hashed persistence and single-use / expired / unknown consumption via `/api/auth/confirm-email`.
+- Email confirmation token issuance and `auth.email.confirmation_requested` outbox staging on
+  registration, post-commit Outbox worker delivery with retry on SMTP outage while leaving
+  `auth.user.created` untouched, safe HTML `GET /api/auth/confirm-email` rendering without
+  token consumption, `POST` single-use / replay / error paths, and full transaction rollback.
 - Profile message payloads without email/security data, and local-only session events.
 - Atomic rollback of a failed identity update and its Outbox insert.
 - Concurrent profile updates publishing only the committed version.

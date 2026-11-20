@@ -1,23 +1,27 @@
 # AuthService
 
-A .NET 10 authentication microservice for the ASET solution. It exposes register, login, refresh, current-user and email confirmation endpoints, issues JWTs, sends email confirmation links via SMTP (`Mailpit` in local Compose and Kubernetes), and stores users plus a service-owned Outbox in PostgreSQL. A finite worker delivers profile messages to configured receivers.
+A .NET 10 authentication microservice for the ASET solution. It exposes register, login, refresh, current-user and email confirmation endpoints, issues JWTs, queues email confirmation links atomically into the PostgreSQL Outbox (`auth.email.confirmation_requested`) for post-commit SMTP delivery with retry (`SmartLost.AuthService.Worker` in `Email` mode targeting `Mailpit` in local dev), and delivers profile messages in finite `Batch` mode.
 
 ## Architecture
 
 The service has five projects under `src/Services/Auth/`. Its unit and integration
 test projects live under `tests/Auth/`. The solution uses the same Auth grouping:
 
-- `SmartLost.AuthService.Api`: HTTP contracts/controllers, authentication setup and composition.
+- `SmartLost.AuthService.Api`: HTTP contracts/controllers, safe confirmation HTML page renderer,
+  authentication setup and composition.
 - `SmartLost.AuthService.Application`: MediatR commands, FluentValidation validators,
-  auth responses and repository/password/token/email-confirmation abstractions.
+  auth responses, integration event type constants (`auth.email.confirmation_requested`)
+  and repository/password/token/email-confirmation abstractions.
 - `SmartLost.AuthService.Domain`: `UserAccount` and `RefreshSession` aggregate roots,
   the `RefreshToken` history entity, `EmailConfirmationToken`, domain guards, domain
   events and shared Auth error definitions.
 - `SmartLost.AuthService.Infrastructure`: EF Core/Npgsql, password hashing, JWT issuance,
-  persistent refresh-token sessions, hashed email confirmation tokens, SMTP dispatch via
-  shared `IEmailSender`, atomic Outbox staging and HTTP delivery.
+  persistent refresh-token sessions, hashed email confirmation tokens queued into Outbox,
+  SMTP Outbox publisher (`AuthOutboxEmailPublisher`) via shared `IEmailSender`, atomic
+  Outbox staging and profile HTTP delivery.
 - [`SmartLost.AuthService.Worker`](../src/Services/Auth/SmartLost.AuthService.Worker/README.md):
-  finite, separately executable Auth Outbox delivery job.
+  dual-mode Auth Outbox host (`Batch` finite profile HTTP delivery job; `Email` continuous
+  confirmation email delivery host filtered by `OutboxOptions.MessageTypes`).
 
 Open [Auth.slnx](../src/Services/Auth/Auth.slnx) for this service, its four shared
 BuildingBlocks dependencies and its unit/integration test projects. These are the
@@ -286,24 +290,26 @@ additional local configuration loader or user-secrets setup.
 | --- | --- |
 | `ConnectionStrings:AuthDatabase` | Full PostgreSQL connection string |
 | `Jwt` | Issuer, audience, signing key and token lifetime |
-| `Smtp` | SMTP host (`localhost` / `mailpit`), port (`1025`), sender address/name and optional credentials/TLS |
-| `EmailConfirmation` | Public confirmation link base URL (`/api/auth/confirm-email`) and token expiry hours (`24` default) |
+| `Smtp` | Used by `SmartLost.AuthService.Worker` (`Worker:Mode=Email`): SMTP host (`localhost` / `mailpit`), port (`1025`), sender address/name and optional credentials/TLS |
+| `EmailConfirmation` | Used by API when queuing confirmation links: public base URL (`/api/auth/confirm-email`) and token expiry hours (`24` default) |
+| `Worker`, `Outbox`, `OutboxDelivery` | Worker mode (`Batch` or `Email`), poll interval, batch size, retry attempts and batch delivery limits |
 | `Logging`, `AllowedHosts` | Logging and host configuration |
 
-Use `appsettings.json` for local API/EF processes and `appsettings.Docker.json` for Compose.
+Use `appsettings.json` for local API/EF processes and `appsettings.Docker.json` for Compose
+(`auth-service` and `auth-email-worker`).
 Both examples use the local database `authservice`, user `authservice`, port `5432` and
 password `change-me-dev-db-password`, SMTP port `1025`, `noreply@smartlost.local` and
 24-hour confirmation tokens; their DB/SMTP hostnames and link base URLs differ
 (`localhost` / `http://localhost:5048/api/auth/confirm-email` vs `auth-db`, `mailpit` /
 `http://localhost:8080/api/auth/confirm-email`). In local Kubernetes, the `auth-settings`
-ConfigMap sets `Smtp:Host=mailpit` and `ConfirmationBaseUrl=http://localhost:5080/api/auth/confirm-email`,
+ConfigMap sets `Worker:Mode=Email`, `OutboxDelivery:PollInterval=00:00:02`, `Smtp:Host=mailpit`
+and `ConfirmationBaseUrl=http://localhost:5080/api/auth/confirm-email`,
 while `Jwt__SigningKey` and `ConnectionStrings__AuthDatabase` come from the `auth-credentials` Secret.
 The password in `docker-compose.yml` is for this development stack only. If changing it,
 keep both local connection strings and the database configuration consistent; keep real
-credentials out of committed files. JWT, `Smtp` and `EmailConfirmation` options are
-validated at startup (`Issuer`, `Audience`, 32+ UTF-8 byte signing key, positive lifetimes,
-non-empty SMTP host/from address, valid port, positive `TokenExpiryHours` and valid
-http/https confirmation base URI). Validation messages do not include secret values.
+credentials out of committed files. API validates `Jwt` and `EmailConfirmation` options at
+startup, while `Worker` (`Email` mode) validates `Smtp` and `Outbox`/`OutboxDelivery` options
+on startup; validation messages do not include secret values.
 
 For a local API process after applying migrations:
 
@@ -415,11 +421,11 @@ Deployment remains inactive; no workflow currently applies migrations.
 
 | Method | Route | Description |
 | --- | --- | --- |
-| `POST` | `/api/auth/register` | Creates a new user, sends an email confirmation link, and returns access/refresh tokens |
+| `POST` | `/api/auth/register` | Creates a new user, enqueues an Outbox email confirmation request (`auth.email.confirmation_requested`), and returns access/refresh tokens |
 | `POST` | `/api/auth/login` | Authenticates by email and password and creates a token session |
 | `POST` | `/api/auth/refresh` | Rotates a refresh token and returns a new access/refresh pair |
-| `GET` | `/api/auth/confirm-email?token=...` | Confirms an email address from a confirmation link query token |
-| `POST` | `/api/auth/confirm-email` | Confirms an email address from a `{ "token": "..." }` JSON payload |
+| `GET` | `/api/auth/confirm-email?token=...` | Renders a safe HTML confirmation page whose button submits `POST /api/auth/confirm-email` (never consumes the token on `GET`) |
+| `POST` | `/api/auth/confirm-email` | Confirms an email address from a `{ "token": "..." }` JSON payload and consumes the single-use token |
 | `GET` | `/api/auth/me` | Returns the current bearer-token identity |
 
 Login accepts `{ "email": "user@example.com", "password": "your-password" }`; the previous
@@ -428,9 +434,15 @@ be a valid email address and contain at most 256 characters after trimming.
 
 Register returns 201; login and refresh return 200 with `AuthResponse`: `userId`, `userName`,
 `email`, `accessToken`, `expiresAtUtc`, `refreshToken` and `refreshTokenExpiresAtUtc`.
-`GET` and `POST /api/auth/confirm-email` return 200 with `EmailConfirmationResponse`
-(`userId`, `email`, `emailConfirmed`, `confirmedAtUtc`), 400 for invalid/missing/expired
-tokens, and 409 if already consumed. Application errors return `ProblemDetails`: 400 validation,
+`GET /api/auth/confirm-email?token=...` returns `text/html` (200 with confirmation form/button
+or 400 without confirm button when `token` is blank) with `Referrer-Policy: no-referrer`,
+`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and a restrictive CSP header,
+protecting against automated link-scanner pre-consumption. Submitting the confirmation form
+calls `POST /api/auth/confirm-email`, which returns 200 with `EmailConfirmationResponse`
+(`userId`, `email`, `emailConfirmed`, `confirmedAtUtc`), 400 for missing/invalid/expired
+tokens, and 409 if already consumed. (No email-change endpoint exists yet; when added, any
+prior unconsumed confirmation tokens should be invalidated or bound to the confirmed address.)
+Application errors return `ProblemDetails`: 400 validation,
 409 duplicate account or consumed confirmation token, and 401 invalid credentials.
 Extensions contain `code`, `traceId` and `errors` (including validation property names).
 Unexpected errors return a sanitized 500 problem; exception details remain in server logs.
@@ -537,17 +549,19 @@ This includes generated migration/snapshot code
 in Coverlet coverage; the existing coverage gates remain unchanged.
 `SmartLost.AuthService.IntegrationTests` uses Testcontainers 4.16.0 to start a disposable
 `postgres:16-alpine` instance. Its `Testing` environment configures EF Core's production
-Npgsql provider with the container connection string and test-only JWT/email configuration,
-replacing `IEmailSender` with an in-memory recording double. No local
+Npgsql provider with the container connection string and test-only JWT configuration. No local
 appsettings file or existing Compose database is used. The fixture applies the checked-in EF
 migrations to this test database, truncates all five application tables before each test and disposes the container
 after the suite. There are no persistent volumes or fixed host ports.
 
 The suite verifies migration application, register/login persistence and normalization,
-email confirmation token hashing and `GET`/`POST /api/auth/confirm-email` flows (valid,
-single-use replay and unknown tokens), scoped EF seeding with real password hashes, independent database connections with an active reader,
-HTTP duplicate rejection, actual PostgreSQL unique-constraint mapping after competing
-preflight checks, refresh rotation/replay revocation, expiry and concurrent refresh rollback.
+atomic `EmailConfirmationTokens` + `auth.email.confirmation_requested` Outbox staging on
+registration, post-commit Outbox worker email delivery with SMTP failure retry while leaving
+`auth.user.created` untouched, safe `GET /api/auth/confirm-email` HTML rendering without
+consuming tokens, `POST` consumption/replay/unknown handling, scoped EF seeding with real
+password hashes, independent database connections with an active reader, HTTP duplicate
+rejection, actual PostgreSQL unique-constraint mapping after competing preflight checks,
+refresh rotation/replay revocation, expiry and concurrent refresh rollback.
 It also verifies the Outbox and EmailConfirmation migrations, sanitized profile messages, rollback on failed
 identity changes, competing identity versions and concurrent Outbox workers on PostgreSQL.
 The concurrency test synchronizes two HTTP requests before their database saves, so both read

@@ -2,9 +2,12 @@
 
 The implemented .NET 10 authentication service provides register, login, refresh,
 current-user and email confirmation endpoints, JWT issuance, persistent refresh sessions,
-hashed single-use email confirmation tokens dispatched via SMTP (Mailpit in local dev)
-and a PostgreSQL-owned outbox. Its separate finite worker delivers profile integration
-events over HTTP.
+hashed single-use email confirmation tokens queued atomically into the PostgreSQL outbox
+(`auth.email.confirmation_requested`) and delivered after commit with retry via SMTP
+(Mailpit in local dev) by `SmartLost.AuthService.Worker` (`Worker:Mode=Email`). Opening
+`GET /api/auth/confirm-email` renders an HTML confirmation page without consuming the
+token; submitting its button calls `POST /api/auth/confirm-email`. Its finite worker
+mode (`Worker:Mode=Batch`) delivers profile integration events over HTTP.
 
 The API registers the shared Profiling → ExceptionToResult → Authorization → Validation
 → Caching → Transaction pipeline. Only attributed requests enforce Application authorization; no Auth
@@ -52,11 +55,12 @@ every service Dockerfile on Linux and scans images with Trivy for HIGH/CRITICAL
 vulnerabilities and secrets.
 
 On 2026-11-06 the earlier image revision passed a local Linux/arm64 Trivy 0.74.0 scan;
-on 2026-11-18 all three updated Auth targets (`smartlost-auth-api:local`, `migrations`
-bundle `smartlost-auth-migrations:local`, and `smartlost-auth-worker:local`) built locally
+on 2026-11-20 all three updated Auth targets (`smartlost-auth-api:local`, `migrations`
+bundle `smartlost-auth-migrations:local`, and `smartlost-auth-worker:local`) rebuilt
 with Docker Desktop (including `USN-8996-1` APT version checks), passed Trivy 0.74.0
-HIGH/CRITICAL vulnerability and secret scans (0 findings), and ran live on Kind (`v1.37.0`)
-with Mailpit; hosted GitHub Actions CI remains separate.
+HIGH/CRITICAL vulnerability and secret scans (0 findings) plus Gitleaks v8.30.1 (0 leaks),
+and ran live on Kind (`v1.37.0`) with `auth-outbox-worker` (`Worker:Mode=Email`) and
+Mailpit; hosted GitHub Actions CI remains separate.
 
 ## Dependency security maintenance
 

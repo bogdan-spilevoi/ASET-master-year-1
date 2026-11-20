@@ -235,8 +235,8 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | Module | Responsibility | Documentation |
 | --- | --- | --- |
 | [`.github/`](.github/) | GitHub Actions workflows, PR/main validation, Coverlet gates, security and container checks | [CI guide](.github/README.md) |
-| [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh/confirm-email API, JWT issuance, rotating refresh sessions, SMTP email confirmation and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
-| [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Finite Auth Outbox job delivering versioned public-profile snapshots to configured HTTP receivers | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
+| [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh/confirm-email API, JWT issuance, rotating refresh sessions, safe confirmation page and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
+| [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Dual-mode Auth Outbox worker: `Batch` (finite HTTP profile events) and `Email` (continuous confirmation SMTP delivery with retry) | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
 | [`src/Services/Listings/`](src/Services/Listings/) | Manually maintained Domain aggregates/entities with guarded listing, decision, recovery and credibility behavior; separate NMF/XMI models; EF migrations and atomic Outbox persistence; public GET categories/listings/details through CQRS | [Module README](src/Services/Listings/README.md), [API](src/Services/Listings/SmartLost.ListingsService.Api/README.md), [Application](src/Services/Listings/SmartLost.ListingsService.Application/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md), [Domain and behavior](src/Services/Listings/SmartLost.ListingsService.Domain/README.md), [Infrastructure](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md) |
 | [`src/Services/Listings/SmartLost.ListingsService.Worker/`](src/Services/Listings/SmartLost.ListingsService.Worker/) | Inspect/Publish host for service-owned Outbox; Kubernetes uses persistent RabbitMQ publishing with confirms and retries | [Worker README](src/Services/Listings/SmartLost.ListingsService.Worker/README.md) |
 | [`src/Services/Matching/`](src/Services/Matching/) | Suggestion ranking, embedding preparation and photo-analysis use cases with `ProfilingBehavior` and AI-call profiling decorators, a Matching-only PostgreSQL database, mock photo/AI adapters and development-only test endpoints; real Listings/AI integration and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
@@ -255,7 +255,7 @@ will be logical references, without foreign keys between service databases.
 | `SmartLost.BuildingBlocks.Core` | Type-aware `Entity<TId>`, `AggregateRoot<TId>`, domain-event contracts, domain `Guard`, immutable `Result`/`Result<T>`, errors, explicit domain exceptions, `PageSlice<T>`/`PagedResult<T>` and pagination defaults; no framework dependencies |
 | `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction/cache/authorization/profiling behaviors and shared profiling contexts, query cache metadata/contract, transaction/Outbox contracts, `EmailMessage`/`IEmailSender` contract and `ICurrentUser` |
 | `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped HTTP current-user adapter and API registration |
-| `SmartLost.BuildingBlocks.Infrastructure` | Generic EF unit-of-work/transaction adapters, optional OutboxDbContext with separate event coordinator; process-local query cache; `SmtpEmailOptions`/`SmtpEmailSender`; EF Outbox mapping/staging, leased delivery/retry/dead letters, and opt-in read-only inspection/continuous delivery hosts; each service owns its table and delivery adapter |
+| `SmartLost.BuildingBlocks.Infrastructure` | Generic EF unit-of-work/transaction adapters, optional OutboxDbContext with separate event coordinator; process-local query cache; `SmtpEmailOptions`/`SmtpEmailSender`; EF Outbox mapping/staging, leased delivery/retry/dead letters with `OutboxOptions.MessageTypes` filtering, and opt-in read-only inspection/continuous delivery hosts; each service owns its table and delivery adapter |
 | [`SmartLost.BuildingBlocks.Messaging.RabbitMq`](src/BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/README.md) | Opt-in persistent mandatory publishing, durable topic topology and publisher confirms; no database dependency |
 
 The root, Listings and Matching solutions include the contracts project. Both runtime
@@ -368,8 +368,10 @@ Docker-related configuration includes [`.dockerignore`](.dockerignore),
 The default `aset-master-year-1` stack has Auth, Listings and Matching: three API
 containers, each with its own PostgreSQL container, image and data volume, plus
 `mailpit` (`axllent/mailpit:v1.34.0`) for local SMTP email capture (`127.0.0.1:1025` SMTP
-and `http://localhost:8025` Web UI). The optional `workers` profile adds a finite
-Auth Outbox job without an exposed port. Matching setup, migration and test-flow commands are in the
+and `http://localhost:8025` Web UI) and `auth-email-worker` (`Worker:Mode=Email`,
+polling every 2s for `auth.email.confirmation_requested` after registration commits).
+The optional `workers` profile adds the finite `Batch` Auth Outbox job (`auth-outbox-worker`)
+without an exposed port. Matching setup, migration and test-flow commands are in the
 [Matching README](src/Services/Matching/README.md#local-development); copy its two
 `appsettings*.example.json` files before starting `matching-service`.
 Listings uses its own [API Dockerfile](src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile)
@@ -394,12 +396,15 @@ built-in non-root `app` user (UID/GID `1654`), and expose an opt-in EF `migratio
 bundle target for Kubernetes migration Jobs, including the patched .NET runtime for
 [GHSA-p3jp-9v83-76w9](https://github.com/dotnet/runtime/security/advisories/GHSA-p3jp-9v83-76w9).
 Local Linux/arm64 verification on 2026-11-06 rebuilt earlier images and passed Trivy 0.74.0;
-on 2026-11-18 Docker Desktop rebuilt all three updated Auth targets (`smartlost-auth-api:local`,
-`smartlost-auth-migrations:local` bundle and `smartlost-auth-worker:local`) and passed
-Trivy 0.74.0 (`vuln,secret` on all three images plus `fs vuln,misconfig`), Gitleaks v8.30.1
-(`git` and clean `HEAD` archive), all three PostgreSQL/RabbitMQ integration suites (`Auth` 19/19,
-`Listings` 7/7, `Matching` 2/2) and a live Kind `v0.33.0` (`v1.37.0`) rollout for Auth + Mailpit
-on `http://localhost:5080`. Hosted GitHub Actions CI validation remains separate.
+on 2026-11-20, after moving confirmation email delivery into `OutboxMessages` /
+`auth-outbox-worker` (`Worker:Mode=Email`) and updating `GET /api/auth/confirm-email` to
+render the safe HTML form, Docker Desktop rebuilt all three Auth targets (`smartlost-auth-api:local`,
+`smartlost-auth-migrations:local` and `smartlost-auth-worker:local`) and passed Trivy 0.74.0
+(`fs` + `image vuln,secret`), Gitleaks v8.30.1 (`git` 98 commits + clean `HEAD` export),
+all 399 unit tests / Coverlet gates (96.37% overall, 99.24% changed lines vs branch base),
+all 28 integration tests (`Auth` 19/19, `Listings` 7/7, `Matching` 2/2) and live Kind
+`v0.33.0` (`v1.37.0`) E2E checks (`auth-service` 3/3 + `auth-outbox-worker` 1/1 delivering
+via Mailpit on `http://localhost:5080`). Hosted GitHub Actions CI remains separate.
 
 Copy the JSON setup templates from the repository root:
 
@@ -556,16 +561,17 @@ logs and UI shortcuts (`./k8s.sh ui <rabbitmq|mailpit>`) are documented in the
 [runbook](deploy/kubernetes/README.md#short-local-commands). The helper uses only
 the explicit local Kind context; it is not invoked by CI or a deployment workflow.
 
-The [Kubernetes runbook](deploy/kubernetes/README.md) runs three Auth API replicas with
+The [Kubernetes runbook](deploy/kubernetes/README.md) runs three Auth API replicas,
+one Auth confirmation email worker (`auth-outbox-worker`, `Worker:Mode=Email`),
 PostgreSQL 16 and Mailpit (`v1.34.0`), plus three Listings API replicas, one Outbox Publish
 worker, PostgreSQL 16 and RabbitMQ 4.4. Each database and RabbitMQ StatefulSet has its own
 1 GiB PVC; Mailpit runs in-memory with a read-only rootfs and non-root UID/GID `65532`.
-ConfigMaps/Secrets supply configuration (including `auth-settings` with `mailpit:1025` and
-`http://localhost:5080/api/auth/confirm-email`, plus `auth-credentials` with `Jwt__SigningKey`);
+ConfigMaps/Secrets supply configuration (including `auth-settings` with `mailpit:1025`,
+`http://localhost:5080/api/auth/confirm-email` and `Worker:Mode=Email`, plus `auth-credentials`
+with `Jwt__SigningKey`);
 explicit `auth-migrate` and `listings-migrate` EF bundle Jobs run before the applications.
-Both Auth and Listings API Dockerfiles provide default `runtime` and opt-in `migrations`
-targets; the [Listings worker Dockerfile](src/Services/Listings/SmartLost.ListingsService.Worker/Dockerfile)
-and [patched broker Dockerfile](deploy/kubernetes/images/rabbitmq/Dockerfile) build separate images.
+Both Auth and Listings API/worker Dockerfiles build separate images (`runtime` and opt-in
+`migrations` targets) alongside the [patched broker Dockerfile](deploy/kubernetes/images/rabbitmq/Dockerfile).
 
 Auth is exposed at `http://localhost:5080/swagger` (NodePort `30080`) and Listings at
 `http://localhost:5082/swagger` (NodePort `30081`) through the Kind port mappings. PostgreSQL,
@@ -664,11 +670,11 @@ See [Matching tables and migration commands](src/Services/Matching/README.md#dat
 
 | Method | Route | Description |
 | --- | --- | --- |
-| `POST` | `/api/auth/register` | Creates a new user, sends an email confirmation link, and returns access/refresh tokens |
+| `POST` | `/api/auth/register` | Creates a new user, queues a confirmation email in `OutboxMessages`, and returns access/refresh tokens |
 | `POST` | `/api/auth/login` | Authenticates by email and password and creates a token session |
 | `POST` | `/api/auth/refresh` | Rotates a refresh token and returns a new access/refresh pair |
-| `GET` | `/api/auth/confirm-email?token=...` | Confirms an email address from a confirmation link query token |
-| `POST` | `/api/auth/confirm-email` | Confirms an email address from a `{ "token": "..." }` JSON payload |
+| `GET` | `/api/auth/confirm-email?token=...` | Renders a safe HTML confirmation page whose button submits `POST /api/auth/confirm-email` (never consumes the token on `GET`) |
+| `POST` | `/api/auth/confirm-email` | Confirms an email address from a `{ "token": "..." }` JSON payload and consumes the single-use token |
 | `GET` | `/api/auth/me` | Returns the bearer token's current identity |
 
 Login accepts `{ "email": "user@example.com", "password": "your-password" }`.
@@ -682,9 +688,13 @@ with local Kubernetes (`./k8s.sh up`), or `http://localhost:5048/swagger` with t
 profile to test endpoints using **Try it out**. Both documentation routes are disabled outside Development.
 Register/login/refresh success bodies include `userId`, `userName`, `email`, `accessToken`, `expiresAtUtc`,
 `refreshToken` and `refreshTokenExpiresAtUtc` (register: 201; login/refresh: 200).
-`GET` and `POST /api/auth/confirm-email` return 200 with `EmailConfirmationResponse`
-(`userId`, `email`, `emailConfirmed`, `confirmedAtUtc`), 400 for missing/invalid/expired tokens,
-and 409 when a confirmation token has already been consumed.
+`GET /api/auth/confirm-email?token=...` returns an HTML confirmation page (`200` with
+confirm button or `400` without button if `token` is blank) with `Referrer-Policy`,
+`X-Frame-Options`, `nosniff` and `Content-Security-Policy` headers so email link scanners
+never consume the token. Submitting the form sends `POST /api/auth/confirm-email`, returning
+200 with `EmailConfirmationResponse` (`userId`, `email`, `emailConfirmed`, `confirmedAtUtc`),
+400 for missing/invalid/expired tokens, and 409 when a confirmation token has already been consumed.
+(No email-change endpoint exists yet; future email-change support should invalidate prior tokens.)
 Refresh accepts `{ "refreshToken": "the-latest-issued-token" }` without a valid access token.
 Refresh sessions expire after seven days by default (`Jwt:RefreshTokenExpiryDays`, range 1–90);
 rotation preserves that absolute expiry. Reusing an old token revokes its whole session.

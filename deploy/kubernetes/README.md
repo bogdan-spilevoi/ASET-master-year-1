@@ -1,6 +1,7 @@
 # Local Kubernetes: Auth, Listings, Mailpit and RabbitMQ
 
-This setup runs three Auth API replicas with PostgreSQL 16 and Mailpit (`v1.34.0`), plus
+This setup runs three Auth API replicas, one Auth confirmation email worker (`Worker:Mode=Email`),
+PostgreSQL 16 and Mailpit (`v1.34.0`), plus
 three Listings API replicas, one Outbox Publish worker, PostgreSQL 16 and RabbitMQ 4.4
 in namespace `smartlost`. Each database and RabbitMQ StatefulSet has a separate 1 GiB PVC;
 Mailpit runs in-memory without a PVC. Explicit EF migration-bundle Jobs prepare each
@@ -15,20 +16,20 @@ Use the executable [root helper](../../k8s.sh) from the repository root (Bash on
 ./k8s.sh help
 ./k8s.sh config                  # First setup: create ignored files, then edit their placeholders
 ./k8s.sh up                      # Create/reuse Kind, build/load all images, infra, migrations, rollout
-./k8s.sh deploy auth             # Rebuild/load Auth API/bundle, migrate auth-db, roll out Auth + Mailpit
+./k8s.sh deploy auth             # Rebuild/load Auth API/worker/bundle, migrate auth-db, roll out Auth + Mailpit
 ./k8s.sh deploy listings         # Rebuild/load Listings API/worker/bundle, load, migrate, rollout
 ./k8s.sh deploy mailpit          # Apply/restart Mailpit Deployment in smartlost
 ./k8s.sh deploy rabbitmq         # Rebuild/load broker image and restart its StatefulSet
 ./k8s.sh migrate auth            # Rebuild/load Auth bundle and execute auth-migrate Job (or: listings / all)
 ./k8s.sh status
-./k8s.sh logs auth-api --follow  # Or: listings-api, worker, db, auth-db, mailpit, rabbitmq, auth-migrations
+./k8s.sh logs auth-api --follow  # Or: auth-worker, listings-api, worker, db, auth-db, mailpit, rabbitmq, auth-migrations
 ./k8s.sh ui mailpit              # Temporary Mailpit UI forwarding (8025); Ctrl+C stops it
 ./k8s.sh ui rabbitmq             # Temporary RabbitMQ UI forwarding (15672); Ctrl+C stops it
 ./k8s.sh stop                    # Scale workloads to zero; retain database and broker PVCs
 ```
 
 `build` and `load` accept `listings-api` (`api`), `listings-worker` (`worker`),
-`listings-migrations` (`migrations`), `auth-api`, `auth-migrations`, `rabbitmq`,
+`listings-migrations` (`migrations`), `auth-api`, `auth-worker`, `auth-migrations`, `rabbitmq`,
 `listings`, `auth` or `all`:
 
 ```sh
@@ -89,7 +90,7 @@ or GitHub workflow was changed by adding this helper; .NET suites were not rerun
 | [../../k8s.sh](../../k8s.sh) | Local build/load/migration/rollout and diagnostic shortcuts; no cloud/CI orchestration or volume deletion. |
 | [local/kind.yaml](local/kind.yaml) | One-node local Kind cluster; publishes `127.0.0.1:5080` (`30080`) for Auth and `127.0.0.1:5082` (`30081`) for Listings. |
 | [base/kustomization.yaml](base/kustomization.yaml) | Namespace and currently implemented modules (`auth`, `mailpit`, `listings`, `rabbitmq`). |
-| [base/auth/](base/auth/) | Auth API Deployment/Service, non-secret `auth-settings` ConfigMap (`mailpit:1025`, `localhost:5080` callback) and `auth-db` StatefulSet/headless Service. |
+| [base/auth/](base/auth/) | Auth API Deployment/Service, Email worker Deployment (`auth-outbox-worker`), shared `auth-settings` ConfigMap (`mailpit:1025`, `localhost:5080` callback, `Worker:Mode=Email`) and `auth-db` StatefulSet/headless Service. |
 | [base/mailpit/](base/mailpit/) | Internal Mailpit `v1.34.0` Deployment/Service (`smtp :1025`, `http :8025`), non-root read-only rootfs. |
 | [base/listings/](base/listings/) | Listings API Deployment/Service, configuration and PostgreSQL StatefulSet/headless Service. |
 | [base/listings/worker-deployment.yaml](base/listings/worker-deployment.yaml) | One Publish worker, no Service or published port; JSON/Secret shared with Listings. |
@@ -165,11 +166,12 @@ are pulled upstream by Kind on `IfNotPresent` when not already cached):
 ```sh
 docker build --provenance=false --file src/Services/Auth/SmartLost.AuthService.Api/Dockerfile --tag smartlost-auth-api:local .
 docker build --provenance=false --file src/Services/Auth/SmartLost.AuthService.Api/Dockerfile --target migrations --tag smartlost-auth-migrations:local .
+docker build --provenance=false --file src/Services/Auth/SmartLost.AuthService.Worker/Dockerfile --tag smartlost-auth-worker:local .
 docker build --provenance=false --file src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile --tag smartlost-listings-api:local .
 docker build --provenance=false --file src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile --target migrations --tag smartlost-listings-migrations:local .
 docker build --provenance=false --file src/Services/Listings/SmartLost.ListingsService.Worker/Dockerfile --tag smartlost-listings-worker:local .
 docker build --provenance=false --file deploy/kubernetes/images/rabbitmq/Dockerfile --tag smartlost-rabbitmq:local .
-kind load docker-image smartlost-auth-api:local smartlost-auth-migrations:local smartlost-listings-api:local smartlost-listings-migrations:local smartlost-listings-worker:local smartlost-rabbitmq:local --name smartlost-local
+kind load docker-image smartlost-auth-api:local smartlost-auth-worker:local smartlost-auth-migrations:local smartlost-listings-api:local smartlost-listings-migrations:local smartlost-listings-worker:local smartlost-rabbitmq:local --name smartlost-local
 ```
 
 `--provenance=false` avoids Docker Desktop attestation-index import failures when loading
@@ -274,6 +276,7 @@ kubectl -n smartlost wait --for=condition=complete job/listings-migrate --timeou
 kubectl -n smartlost logs job/listings-migrate
 kubectl apply -k deploy/kubernetes/overlays/local
 kubectl -n smartlost rollout status deployment/auth-service --timeout=180s
+kubectl -n smartlost rollout status deployment/auth-outbox-worker --timeout=180s
 kubectl -n smartlost rollout status deployment/listings-service --timeout=180s
 kubectl -n smartlost rollout status deployment/listings-outbox-worker --timeout=180s
 kubectl -n smartlost get pods,services,pvc
@@ -407,7 +410,7 @@ delete one API pod and wait for `rollout status deployment/listings-service`.
 Stop all services while retaining their configuration and database storage (`./k8s.sh stop`):
 
 ```sh
-kubectl -n smartlost scale deployment/auth-service deployment/listings-service deployment/listings-outbox-worker deployment/mailpit --replicas=0
+kubectl -n smartlost scale deployment/auth-service deployment/auth-outbox-worker deployment/listings-service deployment/listings-outbox-worker deployment/mailpit --replicas=0
 kubectl -n smartlost scale statefulset/rabbitmq statefulset/auth-db statefulset/listings-db --replicas=0
 ```
 
@@ -422,6 +425,7 @@ kubectl -n smartlost scale deployment/mailpit --replicas=1
 kubectl -n smartlost rollout status deployment/mailpit --timeout=180s
 kubectl apply -k deploy/kubernetes/overlays/local
 kubectl -n smartlost rollout status deployment/auth-service --timeout=180s
+kubectl -n smartlost rollout status deployment/auth-outbox-worker --timeout=180s
 kubectl -n smartlost rollout status deployment/listings-service --timeout=180s
 kubectl -n smartlost rollout status deployment/listings-outbox-worker --timeout=180s
 ```
@@ -457,6 +461,33 @@ See [Auth communication](../../src/Services/Auth/COMMUNICATION.md) and
 local Kubernetes flows, and [Auth documentation](../../docs/AUTHSERVICE.md) /
 [Listings documentation](../../src/Services/Listings/README.md) for current API and
 application boundaries.
+
+### Outbox email worker & safe confirmation page updates on 2026-11-20
+
+- Moved Auth confirmation email sending into transactional `OutboxMessages`
+  (`auth.email.confirmation_requested`) processed by `auth-outbox-worker` (`Worker:Mode=Email`,
+  `OutboxOptions.MessageTypes` filtering), and changed `GET /api/auth/confirm-email` to
+  render a safe HTML button form that submits `POST /api/auth/confirm-email`.
+- Verified locally on 2026-11-20:
+  - Manifests, Compose & .NET gates: `kubectl kustomize deploy/kubernetes/overlays/local`,
+    `kubectl apply --dry-run=server -k deploy/kubernetes/overlays/local`, `docker compose --env-file .env.example config --quiet`,
+    `bash -n k8s.sh`, solution/lockfile inventory (30/30), audited locked restore, Release
+    build (`0 warnings`), `dotnet format --verify-no-changes --severity info`, all 399 unit
+    tests (`Auth` 109, `BuildingBlocks` 108, `Listings` 85, `Matching` 97) with Coverlet
+    96.37% overall / 99.24% changed executable lines vs branch base, plus all 28 integration
+    tests (`Auth` 19/19, `Listings` 7/7, `Matching` 2/2).
+  - Containers & security: rebuilt `smartlost-auth-api:local`, `smartlost-auth-migrations:local`
+    and `smartlost-auth-worker:local`; Trivy 0.74.0 (`fs` excluding `.git`/`.tools`/`artifacts`/`AIModels`/`bin`/`obj`,
+    plus `image vuln,secret`) and Gitleaks v8.30.1 (`git` 98 commits + clean `HEAD` export)
+    passed with 0 `HIGH`/`CRITICAL` findings or leaks.
+  - Live Kind `v0.33.0` (`kindest/node:v1.37.0`, `smartlost-local`) E2E with Outbox worker:
+    `auth-db` `1/1 Ready`, `mailpit` `1/1 Ready`, `auth-migrate` `Complete 1/1`, `auth-service`
+    `3/3 Ready` and `auth-outbox-worker` `1/1 Ready` (`Worker:Mode=Email`). Verified `register`
+    (`201`) → asynchronous `auth-outbox-worker` delivery to Mailpit → safe `GET /api/auth/confirm-email`
+    HTML page (`200` with security headers, leaving `EmailConfirmed = false`, `400` on missing token)
+    → `POST /api/auth/confirm-email` (`200`, replay `409`) → `auth.email.confirmation_requested`
+    marked processed while `auth.user.created` remained untouched (`AttemptCount = 0`), followed
+    by DB and Mailpit cleanup. Hosted GitHub Actions CI remains separate.
 
 ### Auth and Mailpit manifests on 2026-11-18
 
