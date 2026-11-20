@@ -1,15 +1,18 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using SmartLost.AuthService.Application.Contracts;
+using SmartLost.AuthService.Application.IntegrationEvents;
 using SmartLost.AuthService.Application.Interfaces;
 using SmartLost.AuthService.Domain.Entities;
 using SmartLost.AuthService.Domain.Errors;
 using SmartLost.AuthService.Infrastructure.Persistence;
 using SmartLost.BuildingBlocks.Application.Emails;
+using SmartLost.BuildingBlocks.Application.Outbox;
 using SmartLost.BuildingBlocks.Core.Results;
 
 namespace SmartLost.AuthService.Infrastructure.Authentication;
@@ -17,10 +20,10 @@ namespace SmartLost.AuthService.Infrastructure.Authentication;
 public sealed class EmailConfirmationService(
     AuthDbContext dbContext,
     IUserAccountRepository userAccountRepository,
-    IEmailSender emailSender,
+    IOutboxWriter outboxWriter,
     IOptions<EmailConfirmationOptions> options) : IEmailConfirmationService
 {
-    public async Task SendConfirmationAsync(UserAccount user, CancellationToken cancellationToken)
+    public async Task EnqueueConfirmationAsync(UserAccount user, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(user);
         EmailConfirmationOptions settings = options.Value;
@@ -31,8 +34,6 @@ public sealed class EmailConfirmationService(
 
         var confirmationToken = EmailConfirmationToken.Create(user, tokenHash, nowUtc, expiresAtUtc);
         dbContext.EmailConfirmationTokens.Add(confirmationToken);
-        // Flush pending user, session, token and outbox changes before dispatching the email.
-        await userAccountRepository.SaveChangesAsync(cancellationToken);
 
         string baseUrl = settings.ConfirmationBaseUrl.Trim();
         string separator = baseUrl.Contains('?', StringComparison.Ordinal) ? "&" : "?";
@@ -49,9 +50,19 @@ public sealed class EmailConfirmationService(
             $"<p>If the link does not open, copy this URL into your browser: {encodedUrl}</p>" +
             $"<p>This link expires in {settings.TokenExpiryHours} hours.</p>";
 
-        await emailSender.SendAsync(
-            new EmailMessage(user.Email, "Confirm your SmartLost email address", textBody, htmlBody),
-            cancellationToken);
+        var emailMessage = new EmailMessage(user.Email, "Confirm your SmartLost email address", textBody, htmlBody);
+        string payload = JsonSerializer.Serialize(emailMessage, JsonSerializerOptions.Web);
+        outboxWriter.Enqueue(new OutboxEnvelope(
+            confirmationToken.Id,
+            AuthOutboxMessageTypes.ConfirmationEmailRequested,
+            1,
+            payload,
+            nowUtc));
+
+        if (!dbContext.HasManagedTransaction)
+        {
+            await userAccountRepository.SaveChangesAsync(cancellationToken);
+        }
     }
 
     public async Task<Result<EmailConfirmationResponse>> ConfirmAsync(string token, CancellationToken cancellationToken)

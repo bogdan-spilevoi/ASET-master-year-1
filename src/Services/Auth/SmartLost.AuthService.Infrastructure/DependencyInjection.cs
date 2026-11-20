@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SmartLost.AuthService.Application.IntegrationEvents;
 using SmartLost.AuthService.Application.Interfaces;
 using SmartLost.AuthService.Domain.Entities;
 using SmartLost.AuthService.Infrastructure.Authentication;
@@ -12,7 +13,6 @@ using SmartLost.BuildingBlocks.Application.Outbox;
 using SmartLost.BuildingBlocks.Application.Transactions;
 using SmartLost.BuildingBlocks.Infrastructure;
 using SmartLost.BuildingBlocks.Infrastructure.Emails;
-using SmartLost.BuildingBlocks.Infrastructure.Outbox;
 
 namespace SmartLost.AuthService.Infrastructure;
 
@@ -33,7 +33,6 @@ public static class DependencyInjection
             .ValidateDataAnnotations()
             .Validate(options => options.IsValid(), "Configure a valid HTTP/HTTPS EmailConfirmation:ConfirmationBaseUrl and TokenExpiryHours between 1 and 168.")
             .ValidateOnStart();
-        services.AddBuildingBlocksSmtpEmailSender(options => configuration.GetSection(SmtpEmailOptions.SectionName).Bind(options));
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
         services.AddScoped<IUnitOfWork, AuthUnitOfWork>();
         services.AddScoped<IPasswordHasher<UserAccount>, PasswordHasher<UserAccount>>();
@@ -51,10 +50,28 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(AuthOutboxDeliveryOptions.SectionName))
             .Validate(settings => settings.IsValid(), "Configure real Auth Outbox routes and a service key of at least 32 characters.")
             .ValidateOnStart();
-        services.AddBuildingBlocksOutboxProcessor<AuthDbContext>();
-        services.Configure<OutboxOptions>(configuration.GetSection("Outbox"));
+        services.AddBuildingBlocksOutboxProcessor<AuthDbContext>(options =>
+        {
+            configuration.GetSection("Outbox").Bind(options);
+            options.MessageTypes = [AuthIntegrationEventTypes.UserCreated, AuthIntegrationEventTypes.UserIdentityChanged];
+        });
         services.AddHttpClient<IOutboxMessagePublisher, AuthOutboxHttpPublisher>(client => client.Timeout = Timeout.InfiniteTimeSpan)
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+        return services;
+    }
+
+    public static IServiceCollection AddAuthEmailOutboxWorker(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddAuthPersistence(configuration);
+        services.AddBuildingBlocksSmtpEmailSender(options => configuration.GetSection(SmtpEmailOptions.SectionName).Bind(options));
+        services.AddBuildingBlocksOutboxDelivery<AuthDbContext>(
+            options =>
+            {
+                configuration.GetSection("Outbox").Bind(options);
+                options.MessageTypes = [AuthOutboxMessageTypes.ConfirmationEmailRequested];
+            },
+            delivery => configuration.GetSection("OutboxDelivery").Bind(delivery));
+        services.AddScoped<IOutboxMessagePublisher, AuthOutboxEmailPublisher>();
         return services;
     }
 

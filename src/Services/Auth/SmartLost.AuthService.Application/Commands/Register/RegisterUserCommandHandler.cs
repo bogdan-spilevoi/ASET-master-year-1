@@ -27,7 +27,7 @@ public sealed class RegisterUserCommandHandler(
         userAccount.SetPasswordHash(passwordService.Hash(userAccount, request.Password));
         userAccountRepository.Add(userAccount);
         AuthResponse response = await sessionService.CreateAsync(userAccount, cancellationToken);
-        await emailConfirmationService.SendConfirmationAsync(userAccount, cancellationToken);
+        await emailConfirmationService.EnqueueConfirmationAsync(userAccount, cancellationToken);
         return Result<AuthResponse>.Success(response);
     }
 }

@@ -3,11 +3,18 @@
     "AuthDatabase": "Host=localhost;Port=5432;Database=authservice;Username=authservice;Password=change-me-dev-db-password"
   },
   "OutboxDelivery": {
+    "PollInterval": "00:00:02",
     "ServiceKey": "replace-with-random-service-key-of-at-least-32-characters",
     "Routes": {
       "auth.user.created": "https://consumer.invalid/",
       "auth.user.identity_changed": "https://consumer.invalid/"
     }
+  },
+  "Smtp": {
+    "Host": "localhost",
+    "Port": 1025,
+    "FromAddress": "noreply@smartlost.local",
+    "FromDisplayName": "SmartLost"
   },
   "Outbox": {
     "BatchSize": 20,
@@ -18,6 +25,7 @@
     "LeaseDuration": "00:02:00"
   },
   "Worker": {
+    "Mode": "Batch",
     "MaximumBatches": 10
   },
   "Logging": {

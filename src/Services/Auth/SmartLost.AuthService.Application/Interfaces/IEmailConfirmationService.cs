@@ -6,7 +6,7 @@ namespace SmartLost.AuthService.Application.Interfaces;
 
 public interface IEmailConfirmationService
 {
-    Task SendConfirmationAsync(UserAccount user, CancellationToken cancellationToken);
+    Task EnqueueConfirmationAsync(UserAccount user, CancellationToken cancellationToken);
 
     Task<Result<EmailConfirmationResponse>> ConfirmAsync(string token, CancellationToken cancellationToken);
 }

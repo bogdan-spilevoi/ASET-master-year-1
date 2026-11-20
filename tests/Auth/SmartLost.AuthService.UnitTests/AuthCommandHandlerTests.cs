@@ -164,7 +164,7 @@ public sealed class AuthCommandHandlerTests
     {
         public List<UserAccount> SentUsers { get; } = [];
 
-        public Task SendConfirmationAsync(UserAccount user, CancellationToken cancellationToken)
+        public Task EnqueueConfirmationAsync(UserAccount user, CancellationToken cancellationToken)
         {
             SentUsers.Add(user);
             return Task.CompletedTask;
