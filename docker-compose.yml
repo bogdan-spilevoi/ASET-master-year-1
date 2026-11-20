@@ -36,8 +36,6 @@ services:
     depends_on:
       auth-db:
         condition: service_healthy
-      mailpit:
-        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
@@ -50,6 +48,29 @@ services:
           create_host_path: false
     ports:
       - "8080:8080"
+
+  auth-email-worker:
+    container_name: aset-auth-email-worker
+    build:
+      context: .
+      dockerfile: src/Services/Auth/SmartLost.AuthService.Worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      Worker__Mode: Email
+      OutboxDelivery__PollInterval: "00:00:02"
+    volumes:
+      - type: bind
+        source: ./src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.json
+        target: /app/outboxsettings.json
+        read_only: true
+        bind:
+          create_host_path: false
 
   auth-outbox-worker:
     profiles: [workers]

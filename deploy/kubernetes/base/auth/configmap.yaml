@@ -21,6 +21,9 @@ data:
         "ConfirmationBaseUrl": "http://localhost:5080/api/auth/confirm-email",
         "TokenExpiryHours": 24
       },
+      "Worker": { "Mode": "Email" },
+      "OutboxDelivery": { "PollInterval": "00:00:02" },
+      "Outbox": { "BatchSize": 20, "MaximumAttempts": 8 },
       "Logging": {
         "LogLevel": {
           "Default": "Information",

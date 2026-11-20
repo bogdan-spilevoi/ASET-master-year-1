@@ -12,6 +12,7 @@ LISTINGS_API_DOCKERFILE=src/Services/Listings/SmartLost.ListingsService.Api/Dock
 LISTINGS_WORKER_DOCKERFILE=src/Services/Listings/SmartLost.ListingsService.Worker/Dockerfile
 LISTINGS_INFRA_PROJECT=src/Services/Listings/SmartLost.ListingsService.Infrastructure
 AUTH_API_DOCKERFILE=src/Services/Auth/SmartLost.AuthService.Api/Dockerfile
+AUTH_WORKER_DOCKERFILE=src/Services/Auth/SmartLost.AuthService.Worker/Dockerfile
 AUTH_INFRA_PROJECT=src/Services/Auth/SmartLost.AuthService.Infrastructure
 
 fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
@@ -35,17 +36,17 @@ Usage: ./k8s.sh COMMAND [TARGET]
                             Build/load EF bundle(s); recreate finished Job(s); wait and show logs
   migration-add [SERVICE] NAME
                             Generate a local EF migration (SERVICE: listings or auth, default: listings)
-  restart [TARGET]          Restart auth-api/listings-api/listings-worker/auth/listings/mailpit/rabbitmq/all
+  restart [TARGET]          Restart auth-api/auth-worker/listings-api/listings-worker/auth/listings/mailpit/rabbitmq/all
   stop                      Stop workloads, Mailpit, RabbitMQ and PostgreSQL; retain PVCs
   status                    Show local workloads, Services, Jobs and PVCs
-  logs [TARGET] [--follow]  Show api/worker/db/rabbitmq/mailpit/auth-api/auth-db/migrations logs
+  logs [TARGET] [--follow]  Show api/worker/db/rabbitmq/mailpit/auth-api/auth-worker/auth-db/migrations logs
   ui [rabbitmq|mailpit]     Forward RabbitMQ (15672) or Mailpit (8025) UI; Ctrl+C stops (default: rabbitmq)
   config                    Create missing ignored .env files from examples; edit placeholders
   validate                  Render/check the local Kustomize overlay without applying it
   help                      Show this help
 
 Build/load targets: listings-api (api), listings-worker (worker), listings-migrations (migrations),
-auth-api, auth-migrations, rabbitmq, listings, auth, all.
+auth-api, auth-worker, auth-migrations, rabbitmq, listings, auth, all.
 All cluster commands explicitly use kind-smartlost-local / namespace smartlost.
 No command deletes database volumes, the namespace, or the cluster. No seed runs automatically.
 HELP
@@ -110,12 +111,13 @@ targets() {
         worker|listings-worker) printf '%s\n' listings-worker ;;
         migrations|listings-migrations) printf '%s\n' listings-migrations ;;
         auth-api) printf '%s\n' auth-api ;;
+        auth-worker) printf '%s\n' auth-worker ;;
         auth-migrations) printf '%s\n' auth-migrations ;;
         rabbitmq) printf '%s\n' rabbitmq ;;
         listings) printf '%s\n' listings-api listings-worker listings-migrations ;;
-        auth) printf '%s\n' auth-api auth-migrations ;;
-        all) printf '%s\n' listings-api listings-worker listings-migrations auth-api auth-migrations rabbitmq ;;
-        *) fail "Unknown image target '$1'. Use listings-api, listings-worker, listings-migrations, auth-api, auth-migrations, rabbitmq, listings, auth or all." ;;
+        auth) printf '%s\n' auth-api auth-worker auth-migrations ;;
+        all) printf '%s\n' listings-api listings-worker listings-migrations auth-api auth-worker auth-migrations rabbitmq ;;
+        *) fail "Unknown image target '$1'. Use listings-api, listings-worker, listings-migrations, auth-api, auth-worker, auth-migrations, rabbitmq, listings, auth or all." ;;
     esac
 }
 
@@ -125,6 +127,7 @@ image_for_target() {
         listings-worker) printf '%s\n' smartlost-listings-worker:local ;;
         listings-migrations) printf '%s\n' smartlost-listings-migrations:local ;;
         auth-api) printf '%s\n' smartlost-auth-api:local ;;
+        auth-worker) printf '%s\n' smartlost-auth-worker:local ;;
         auth-migrations) printf '%s\n' smartlost-auth-migrations:local ;;
         rabbitmq) printf '%s\n' smartlost-rabbitmq:local ;;
         *) fail "Unknown image target '$1'." ;;
@@ -146,6 +149,8 @@ build_images() {
                 docker build --provenance=false --file "$LISTINGS_WORKER_DOCKERFILE" --tag "$image" . ;;
             auth-api)
                 docker build --provenance=false --file "$AUTH_API_DOCKERFILE" --tag "$image" . ;;
+            auth-worker)
+                docker build --provenance=false --file "$AUTH_WORKER_DOCKERFILE" --tag "$image" . ;;
             auth-migrations)
                 docker build --provenance=false --file "$AUTH_API_DOCKERFILE" --target migrations --tag "$image" . ;;
             rabbitmq)
@@ -251,12 +256,13 @@ restart_target() {
         api|listings-api) kube rollout restart deployment/listings-service; kube rollout status deployment/listings-service --timeout=180s ;;
         worker|listings-worker) kube rollout restart deployment/listings-outbox-worker; kube rollout status deployment/listings-outbox-worker --timeout=180s ;;
         auth-api) kube rollout restart deployment/auth-service; kube rollout status deployment/auth-service --timeout=180s ;;
+        auth-worker) kube rollout restart deployment/auth-outbox-worker; kube rollout status deployment/auth-outbox-worker --timeout=180s ;;
         rabbitmq) kube rollout restart statefulset/rabbitmq; kube rollout status statefulset/rabbitmq --timeout=300s ;;
         mailpit) kube rollout restart deployment/mailpit; kube rollout status deployment/mailpit --timeout=180s ;;
         listings) restart_target listings-api; restart_target listings-worker ;;
-        auth) restart_target auth-api ;;
+        auth) restart_target auth-api; restart_target auth-worker ;;
         all) restart_target rabbitmq; restart_target mailpit; restart_target listings; restart_target auth ;;
-        *) fail "Unknown restart target '$1'. Use listings-api (api), listings-worker (worker), auth-api, listings, auth, rabbitmq, mailpit or all." ;;
+        *) fail "Unknown restart target '$1'. Use listings-api (api), listings-worker (worker), auth-api, auth-worker, listings, auth, rabbitmq, mailpit or all." ;;
     esac
 }
 
@@ -325,11 +331,12 @@ logs_target() {
         db|listings-db) resource=statefulset/listings-db ;;
         migrations|listings-migrations) resource=job/listings-migrate ;;
         auth|auth-api) resource=deployment/auth-service ;;
+        auth-worker) resource=deployment/auth-outbox-worker ;;
         auth-db) resource=statefulset/auth-db ;;
         auth-migrations) resource=job/auth-migrate ;;
         mailpit) resource=deployment/mailpit ;;
         rabbitmq) resource=statefulset/rabbitmq ;;
-        *) fail "Unknown log target '$1'. Use listings-api (api), listings-worker (worker), listings-db (db), listings-migrations (migrations), auth-api (auth), auth-db, auth-migrations, mailpit or rabbitmq." ;;
+        *) fail "Unknown log target '$1'. Use listings-api (api), listings-worker (worker), listings-db (db), listings-migrations (migrations), auth-api (auth), auth-worker, auth-db, auth-migrations, mailpit or rabbitmq." ;;
     esac
     case "$2" in
         '') kube logs "$resource" --tail=100 ;;
@@ -375,9 +382,11 @@ case "$command_name" in
         [[ $# -eq 0 ]] || fail 'stop takes no arguments.'
         check_cluster
         scale_if_exists deployment/auth-service 0
+        scale_if_exists deployment/auth-outbox-worker 0
         scale_if_exists deployment/listings-service 0
         scale_if_exists deployment/listings-outbox-worker 0
         kube wait --for=delete pod -l app.kubernetes.io/name=auth-service --timeout=180s
+        kube wait --for=delete pod -l app.kubernetes.io/name=auth-outbox-worker --timeout=180s
         kube wait --for=delete pod -l app.kubernetes.io/name=listings-service --timeout=180s
         kube wait --for=delete pod -l app.kubernetes.io/name=listings-outbox-worker --timeout=180s
         scale_if_exists deployment/mailpit 0

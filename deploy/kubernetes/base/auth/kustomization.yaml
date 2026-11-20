@@ -6,3 +6,4 @@ resources:
   - configmap.yaml
   - db-statefulset.yaml
   - db-service.yaml
+  - worker-deployment.yaml
