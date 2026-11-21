@@ -13,6 +13,7 @@ using SmartLost.BuildingBlocks.Application.Outbox;
 using SmartLost.BuildingBlocks.Application.Transactions;
 using SmartLost.BuildingBlocks.Infrastructure;
 using SmartLost.BuildingBlocks.Infrastructure.Emails;
+using SmartLost.BuildingBlocks.Infrastructure.Outbox;
 
 namespace SmartLost.AuthService.Infrastructure;
 
@@ -46,14 +47,25 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(AuthOutboxDeliveryOptions.SectionName))
             .Validate(settings => settings.IsValid(), "Configure real Auth Outbox routes and a service key of at least 32 characters.")
             .ValidateOnStart();
-        services.AddBuildingBlocksOutboxProcessor<AuthDbContext>(options =>
-        {
-            configuration.GetSection("Outbox").Bind(options);
-            options.MessageTypes = [AuthIntegrationEventTypes.UserCreated, AuthIntegrationEventTypes.UserIdentityChanged];
-        });
+        services.AddBuildingBlocksOutboxProcessor<AuthDbContext>(options => ConfigureIdentityOutbox(options, configuration));
         services.AddHttpClient<IOutboxMessagePublisher, AuthOutboxHttpPublisher>(client => client.Timeout = Timeout.InfiniteTimeSpan)
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
         return services;
+    }
+
+    public static IServiceCollection AddAuthIdentityOutboxDelivery(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddAuthPersistence(configuration);
+        services.AddBuildingBlocksOutboxDelivery<AuthDbContext>(
+            options => ConfigureIdentityOutbox(options, configuration),
+            delivery => configuration.GetSection("OutboxDelivery").Bind(delivery));
+        return services;
+    }
+
+    private static void ConfigureIdentityOutbox(OutboxOptions options, IConfiguration configuration)
+    {
+        configuration.GetSection("Outbox").Bind(options);
+        options.MessageTypes = [AuthIntegrationEventTypes.UserCreated, AuthIntegrationEventTypes.UserIdentityChanged];
     }
 
     public static IServiceCollection AddAuthEmailOutboxWorker(this IServiceCollection services, IConfiguration configuration)

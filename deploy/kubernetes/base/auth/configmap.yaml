@@ -23,6 +23,14 @@ data:
       },
       "Worker": { "Mode": "Email" },
       "OutboxDelivery": { "PollInterval": "00:00:02" },
+      "RabbitMq": {
+        "HostName": "rabbitmq",
+        "Port": 5672,
+        "VirtualHost": "smartlost",
+        "Exchange": "smartlost.events",
+        "ConnectionName": "smartlost-auth-identity",
+        "Bindings": { "smartlost.auth.identity": ["auth.user.created", "auth.user.identity_changed"] }
+      },
       "Outbox": { "BatchSize": 20, "MaximumAttempts": 8 },
       "Logging": {
         "LogLevel": {

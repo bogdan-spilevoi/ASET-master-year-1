@@ -236,7 +236,7 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | --- | --- | --- |
 | [`.github/`](.github/) | GitHub Actions workflows, PR/main validation, Coverlet gates, security and container checks | [CI guide](.github/README.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh/confirm-email API, JWT issuance, rotating refresh sessions, safe confirmation page and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
-| [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Dual-mode Auth Outbox worker: `Batch` (finite HTTP profile events) and `Email` (continuous confirmation SMTP delivery with retry) | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
+| [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Auth Outbox worker with RabbitMQ profile publication (`Publish`), confirmation delivery over SMTP (`Email`), and an alternative bounded HTTP transport (`Batch`) | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
 | [`src/Services/Listings/`](src/Services/Listings/) | Manually maintained Domain aggregates/entities with guarded listing, decision, recovery and credibility behavior; separate NMF/XMI models; EF migrations and atomic Outbox persistence; public GET categories/listings/details through CQRS | [Module README](src/Services/Listings/README.md), [API](src/Services/Listings/SmartLost.ListingsService.Api/README.md), [Application](src/Services/Listings/SmartLost.ListingsService.Application/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md), [Domain and behavior](src/Services/Listings/SmartLost.ListingsService.Domain/README.md), [Infrastructure](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md) |
 | [`src/Services/Listings/SmartLost.ListingsService.Worker/`](src/Services/Listings/SmartLost.ListingsService.Worker/) | Inspect/Publish host for service-owned Outbox; Kubernetes uses persistent RabbitMQ publishing with confirms and retries | [Worker README](src/Services/Listings/SmartLost.ListingsService.Worker/README.md) |
 | [`src/Services/Matching/`](src/Services/Matching/) | Suggestion ranking, embedding preparation and photo-analysis use cases with `ProfilingBehavior` and AI-call profiling decorators, a Matching-only PostgreSQL database, mock photo/AI adapters and development-only test endpoints; real Listings/AI integration and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
@@ -269,8 +269,8 @@ user/token claims. Auth already calls this registration; register/login/refresh 
 while `/api/auth/me` requires a bearer access token and dispatches an attribute-protected query.
 See [current-user usage and claim mapping](docs/BUILDING_BLOCKS.md#current-user-identity).
 Auth now uses the shared Outbox library: its EF context saves profile messages atomically
-with business changes, and the separate worker performs bounded HTTP delivery. Receiver
-routes and a service key must be configured before running the worker. Unit tests cover
+with business changes. The Kubernetes identity worker publishes these messages to RabbitMQ.
+The alternative HTTP batch worker requires receiver routes and a service key. Unit tests cover
 profile mapping, the HTTP publisher with a fake handler, bounded worker runs, domain guards
 and current-user claims. PostgreSQL integration tests cover atomic Outbox rollback,
 identity-version conflicts and competing delivery claims; CI coverage requirements remain unchanged.
@@ -566,7 +566,7 @@ logs and UI shortcuts (`./k8s.sh ui <rabbitmq|mailpit>`) are documented in the
 the explicit local Kind context; it is not invoked by CI or a deployment workflow.
 
 The [Kubernetes runbook](deploy/kubernetes/README.md) runs three Auth API replicas,
-one Auth confirmation email worker (`auth-outbox-worker`, `Worker:Mode=Email`),
+two Auth workers from one image (`auth-outbox-worker` for SMTP and `auth-identity-worker` for RabbitMQ),
 PostgreSQL 16 and Mailpit (`v1.34.0`), plus three Listings API replicas, one Outbox Publish
 worker, PostgreSQL 16 and RabbitMQ 4.4. Each database and RabbitMQ StatefulSet has its own
 1 GiB PVC; Mailpit runs in-memory with a read-only rootfs and non-root UID/GID `65532`.
@@ -576,6 +576,7 @@ with `Jwt__SigningKey` and the separate `auth-email-protection` Secret for API a
 explicit `auth-migrate` and `listings-migrate` EF bundle Jobs run before the applications.
 Both Auth and Listings API/worker Dockerfiles build separate images (`runtime` and opt-in
 `migrations` targets) alongside the [patched broker Dockerfile](deploy/kubernetes/images/rabbitmq/Dockerfile).
+The broker image runs RabbitMQ directly and removes the unused Pebble executable affected by CVE-2026-97054.
 
 Auth is exposed at `http://localhost:5080/swagger` (NodePort `30080`) and Listings at
 `http://localhost:5082/swagger` (NodePort `30081`) through the Kind port mappings. PostgreSQL,
@@ -585,7 +586,11 @@ neither RabbitMQ nor Kubernetes Jobs. Matching, Redis, public ingress and Azure 
 not included in Kubernetes; no deployment workflow is activated. The category cache remains
 per API process.
 
-The worker polls due Outbox rows in bounded batches, publishes persistent mandatory
+Auth publishes `auth.user.created` and `auth.user.identity_changed` to the shared
+`smartlost.events` exchange with exact bindings to `smartlost.auth.identity`. Confirmation
+requests go directly from the email worker to Mailpit.
+
+The Listings worker polls due Outbox rows in bounded batches, publishes persistent mandatory
 messages to topic exchange `smartlost.events` / durable queue
 `smartlost.listings.notifications`, and marks them processed only after broker confirms.
 Failures use existing retry/lease/dead-letter fields. `ProcessedOn` means broker acceptance;
@@ -606,7 +611,7 @@ Apply the latest migration before starting either updated Auth process.
 The entity mappings live in [UserAccountConfiguration](src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Configurations/UserAccountConfiguration.cs)
 and [EmailConfirmationTokenConfiguration](src/Services/Auth/SmartLost.AuthService.Infrastructure/Persistence/Configurations/EmailConfirmationTokenConfiguration.cs);
 `AuthDbContext` applies service entity configurations and the shared Outbox mapping.
-The API and worker share only this Auth-owned database; they are two processes of the same service.
+The Auth API and its workers share the Auth-owned database.
 Migrations are applied explicitly through `dotnet ef database update` before starting the
 API, including with Compose. API startup does not create or migrate the schema in any environment.
 Each future service must own its context, migrations and database; there are no cross-service

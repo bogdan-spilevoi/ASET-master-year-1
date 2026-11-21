@@ -71,7 +71,7 @@ flowchart LR
 
 `OutboxProcessor` filters by `OutboxOptions.MessageTypes`: Email mode processes only
 `auth.email.confirmation_requested` (`auth.user.created` and `auth.user.identity_changed` remain
-untouched for the separate HTTP batch worker). Failed SMTP deliveries record `outbox.delivery_failed`
+available for the identity worker). Failed SMTP deliveries record `outbox.delivery_failed`
 and retry with exponential backoff up to `MaximumAttempts` (default 8) before dead-lettering.
 
 ## Email confirmation
@@ -170,7 +170,9 @@ flowchart LR
     Context["AuthDbContext"]
     Mapper["AuthOutboxEventMapper / OutboxWriter"]
     DB[("Auth PostgreSQL: Users + OutboxMessages")]
-    Worker["Separate finite AuthOutboxJob / OutboxProcessor"]
+    Identity["Kubernetes auth-identity-worker / RabbitMqOutboxPublisher"]
+    Rabbit["RabbitMQ: smartlost.events / smartlost.auth.identity"]
+    Worker["Alternative HTTP Batch job / OutboxProcessor"]
     Publisher["AuthOutboxHttpPublisher"]
     Receiver["Configured HTTP receiver: not implemented in this repository"]
 
@@ -178,6 +180,10 @@ flowchart LR
     Context -->|"1.1 Map selected domain events and stage messages"| Mapper
     Mapper -->|"1.2 Add OutboxMessage to the same context"| Context
     Context -->|"1.3 Commit user change and outbox row atomically"| DB
+    Identity -->|"1.4 Poll and lease either profile event type"| DB
+    Identity -->|"1.5 Publish persistent envelope with event type as routing key"| Rabbit
+    Rabbit -->|"1.6 Confirm acceptance or return unroutable message"| Identity
+    Identity -->|"1.7 Record success after confirmation or retry / dead-letter on failure"| DB
     Worker -->|"2. Read pending rows and claim with expiring lease"| DB
     DB -->|"2.1 Claimed message envelope"| Worker
     Worker -->|"2.2 PublishAsync"| Publisher
@@ -187,15 +193,15 @@ flowchart LR
     Worker -->|"2.6 Set ProcessedOn, or retry / dead-letter state"| DB
 ```
 
-Flow 2 runs separately from flow 1. The API does not wait for receiver delivery.
+The API returns after commit. Kubernetes uses steps 1.4–1.7. Flow 2 is an alternative
+HTTP transport for the same rows. Run one identity transport per Auth database.
 Only `auth.user.created` and `auth.user.identity_changed` are exported, containing
 `userId`, `userName` and `identityVersion`. Identity mutation exists in the domain;
 there is no public profile-update endpoint currently.
 
 Delivery can happen more than once. Receivers must durably deduplicate message IDs
 and ignore older/equal identity versions before acknowledging. Leases limit competing
-workers; failures use bounded retries and eventually dead-letter state. The worker
-does not poll continuously: it runs a bounded number of batches and exits, including
+workers; failures use bounded retries and eventually dead-letter state. The HTTP Batch worker is finite: it runs a bounded number of batches and exits, including
 when a batch acknowledges zero messages. Later retries require another invocation.
 No cloud schedule or receiver is configured by the repository examples.
 
@@ -206,6 +212,8 @@ flowchart LR
     Dev["Developer / HTTP client"]
     K8sApi["auth-service Deployment (3 replicas, NodePort 30080 -> localhost:5080)"]
     EmailWorker["auth-outbox-worker Deployment (Worker:Mode=Email)"]
+    IdentityWorker["auth-identity-worker Deployment (Worker:Mode=Publish)"]
+    Rabbit["Shared RabbitMQ StatefulSet"]
     MigrateJob["auth-migrate Job (efbundle)"]
     AuthDb[("auth-db StatefulSet (:5432, PVC)")]
     Mailpit["mailpit Deployment (SMTP :1025, UI :8025)"]
@@ -216,6 +224,8 @@ flowchart LR
     K8sApi -->|"2.1 ConnectionStrings__AuthDatabase (users, tokens, OutboxMessages)"| AuthDb
     EmailWorker -->|"3. Claim auth.email.confirmation_requested rows every 2s"| AuthDb
     EmailWorker -->|"3.1 Deliver confirmation email over SMTP (:1025)"| Mailpit
+    IdentityWorker -->|"3.2 Claim profile events from the same Outbox"| AuthDb
+    IdentityWorker -->|"3.3 Publish to smartlost.events with exact identity routing keys"| Rabbit
     Dev -.->|"4. ./k8s.sh ui mailpit -> kubectl port-forward (:8025)"| Mailpit
 ```
 

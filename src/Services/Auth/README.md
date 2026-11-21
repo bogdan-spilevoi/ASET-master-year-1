@@ -6,8 +6,9 @@ hashed single-use email confirmation tokens queued atomically into the PostgreSQ
 (`auth.email.confirmation_requested`) and delivered after commit with retry via SMTP
 (Mailpit in local dev) by `SmartLost.AuthService.Worker` (`Worker:Mode=Email`). Opening
 `GET /api/auth/confirm-email` renders an HTML confirmation page without consuming the
-token; submitting its button calls `POST /api/auth/confirm-email`. Its finite worker
-mode (`Worker:Mode=Batch`) delivers profile integration events over HTTP.
+token; submitting its button calls `POST /api/auth/confirm-email`. A separate worker in
+`Publish` mode sends profile creation and identity changes to RabbitMQ. The alternative
+`Batch` mode delivers those same profile events over HTTP. Use one profile transport per database.
 
 The API registers the shared Profiling → ExceptionToResult → Authorization → Validation
 → Caching → Transaction pipeline. Only attributed requests enforce Application authorization; no Auth

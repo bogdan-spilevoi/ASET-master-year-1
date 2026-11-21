@@ -20,6 +20,16 @@
     "FromAddress": "noreply@smartlost.local",
     "FromDisplayName": "SmartLost"
   },
+  "RabbitMq": {
+    "HostName": "localhost",
+    "UserName": "replace-with-broker-username",
+    "Password": "replace-with-broker-password",
+    "Port": 5672,
+    "VirtualHost": "smartlost",
+    "Exchange": "smartlost.events",
+    "ConnectionName": "smartlost-auth-identity",
+    "Bindings": { "smartlost.auth.identity": ["auth.user.created", "auth.user.identity_changed"] }
+  },
   "Outbox": {
     "BatchSize": 20,
     "MaximumAttempts": 8,

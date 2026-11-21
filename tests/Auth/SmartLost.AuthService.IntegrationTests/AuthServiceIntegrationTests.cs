@@ -7,6 +7,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,6 +18,7 @@ using SmartLost.AuthService.Application.IntegrationEvents;
 using SmartLost.AuthService.Application.Interfaces;
 using SmartLost.AuthService.Domain.Entities;
 using SmartLost.AuthService.Domain.Errors;
+using SmartLost.AuthService.Infrastructure;
 using SmartLost.AuthService.Infrastructure.Authentication;
 using SmartLost.AuthService.Infrastructure.Outbox;
 using SmartLost.AuthService.Infrastructure.Persistence;
@@ -190,6 +192,39 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
         AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
         Assert.Equal(1, await context.Users.CountAsync());
         Assert.Equal(1, await context.RefreshSessions.CountAsync());
+    }
+
+    [Fact]
+    public async Task IdentityDeliveryProcessesBothProfileEventsAndLeavesConfirmationForEmailWorker()
+    {
+        await RegisterAsync();
+        await using AsyncServiceScope api = _factory.Services.CreateAsyncScope();
+        AuthDbContext db = api.ServiceProvider.GetRequiredService<AuthDbContext>();
+        UserAccount user = await db.Users.SingleAsync();
+        user.ChangeIdentity("updated-name", user.Email);
+        await db.SaveChangesAsync();
+
+        ServiceCollection worker = [];
+        worker.AddLogging();
+        worker.AddAuthIdentityOutboxDelivery(_factory.Services.GetRequiredService<IConfiguration>());
+        RecordingPublisher publisher = new();
+        worker.AddSingleton<IOutboxMessagePublisher>(publisher);
+        await using ServiceProvider provider = worker.BuildServiceProvider();
+        await using AsyncServiceScope scope = provider.CreateAsyncScope();
+        IOutboxProcessor processor = scope.ServiceProvider.GetRequiredService<IOutboxProcessor>();
+        Assert.Equal(2, await processor.ProcessBatchAsync(CancellationToken.None));
+
+        OutboxMessage[] rows = await db.OutboxMessages.AsNoTracking().ToArrayAsync();
+        foreach (string type in new[] { AuthIntegrationEventTypes.UserCreated, AuthIntegrationEventTypes.UserIdentityChanged })
+        {
+            OutboxMessage row = Assert.Single(rows, row => row.Type == type);
+            Assert.NotNull(row.ProcessedOn);
+            Assert.Equal(1, publisher.Deliveries[row.Id]);
+        }
+
+        OutboxMessage email = Assert.Single(rows, row => row.Type == AuthOutboxMessageTypes.ConfirmationEmailRequested);
+        Assert.Null(email.ProcessedOn);
+        Assert.Equal(0, email.AttemptCount);
     }
 
     [Fact]

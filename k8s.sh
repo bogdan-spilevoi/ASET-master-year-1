@@ -36,10 +36,10 @@ Usage: ./k8s.sh COMMAND [TARGET]
                             Build/load EF bundle(s); recreate finished Job(s); wait and show logs
   migration-add [SERVICE] NAME
                             Generate a local EF migration (SERVICE: listings or auth, default: listings)
-  restart [TARGET]          Restart auth-api/auth-worker/listings-api/listings-worker/auth/listings/mailpit/rabbitmq/all
+  restart [TARGET]          Restart auth-api/auth-worker/auth-identity/listings-api/listings-worker/auth/listings/mailpit/rabbitmq/all
   stop                      Stop workloads, Mailpit, RabbitMQ and PostgreSQL; retain PVCs
   status                    Show local workloads, Services, Jobs and PVCs
-  logs [TARGET] [--follow]  Show api/worker/db/rabbitmq/mailpit/auth-api/auth-worker/auth-db/migrations logs
+  logs [TARGET] [--follow]  Show api/worker/db/rabbitmq/mailpit/auth-api/auth-worker/auth-identity/auth-db/migrations logs
   ui [rabbitmq|mailpit]     Forward RabbitMQ (15672) or Mailpit (8025) UI; Ctrl+C stops (default: rabbitmq)
   config                    Create missing ignored .env files from examples; edit placeholders
   validate                  Render/check the local Kustomize overlay without applying it
@@ -170,7 +170,13 @@ load_images() {
 
 start_broker() {
     local restart=$1 existing
+    kube apply -f "$KUBE_DIR/base/namespace.yaml"
+    ensure_secret rabbitmq-credentials "$KUBE_DIR/local/rabbitmq/.env"
     existing=$(kube get statefulset rabbitmq --ignore-not-found -o name)
+    if [[ "$restart" == no && -z "$existing" ]]; then
+        build_images rabbitmq
+        load_images rabbitmq
+    fi
     kube apply -k "$KUBE_DIR/base/rabbitmq"
     if [[ "$restart" == yes && -n "$existing" ]]; then
         kube rollout restart statefulset/rabbitmq
@@ -191,10 +197,8 @@ start_mailpit() {
 start_listings_infrastructure() {
     kube apply -f "$KUBE_DIR/base/namespace.yaml"
     ensure_secret listings-credentials "$KUBE_DIR/local/.env"
-    ensure_secret rabbitmq-credentials "$KUBE_DIR/local/rabbitmq/.env"
     kube apply -f "$KUBE_DIR/base/listings/db-service.yaml" -f "$KUBE_DIR/base/listings/db-statefulset.yaml"
     kube rollout status statefulset/listings-db --timeout=180s
-    start_broker "$1"
 }
 
 start_auth_infrastructure() {
@@ -262,13 +266,14 @@ restart_target() {
         api|listings-api) kube rollout restart deployment/listings-service; kube rollout status deployment/listings-service --timeout=180s ;;
         worker|listings-worker) kube rollout restart deployment/listings-outbox-worker; kube rollout status deployment/listings-outbox-worker --timeout=180s ;;
         auth-api) kube rollout restart deployment/auth-service; kube rollout status deployment/auth-service --timeout=180s ;;
+        auth-identity) kube rollout restart deployment/auth-identity-worker; kube rollout status deployment/auth-identity-worker --timeout=180s ;;
         auth-worker) kube rollout restart deployment/auth-outbox-worker; kube rollout status deployment/auth-outbox-worker --timeout=180s ;;
         rabbitmq) kube rollout restart statefulset/rabbitmq; kube rollout status statefulset/rabbitmq --timeout=300s ;;
         mailpit) kube rollout restart deployment/mailpit; kube rollout status deployment/mailpit --timeout=180s ;;
         listings) restart_target listings-api; restart_target listings-worker ;;
-        auth) restart_target auth-api; restart_target auth-worker ;;
+        auth) restart_target auth-api; restart_target auth-worker; restart_target auth-identity ;;
         all) restart_target rabbitmq; restart_target mailpit; restart_target listings; restart_target auth ;;
-        *) fail "Unknown restart target '$1'. Use listings-api (api), listings-worker (worker), auth-api, auth-worker, listings, auth, rabbitmq, mailpit or all." ;;
+        *) fail "Unknown restart target '$1'. Use listings-api (api), listings-worker (worker), auth-api, auth-worker, auth-identity, listings, auth, rabbitmq, mailpit or all." ;;
     esac
 }
 
@@ -283,14 +288,13 @@ deploy_target() {
     fi
     build_images "$target"
     load_images "$target"
-    if [[ "$target" == rabbitmq ]]; then
-        kube apply -f "$KUBE_DIR/base/namespace.yaml"
-        ensure_secret rabbitmq-credentials "$KUBE_DIR/local/rabbitmq/.env"
-        start_broker yes
-        return
-    fi
+    case "$target" in
+        rabbitmq) start_broker yes; return ;;
+        all) start_broker yes ;;
+        listings|auth) start_broker no ;;
+    esac
     if [[ "$target" == listings ]]; then
-        start_listings_infrastructure no
+        start_listings_infrastructure
         run_migration listings
         kube apply -k "$KUBE_DIR/base/listings"
         kube patch service listings-service --type=merge --patch-file "$KUBE_DIR/overlays/local/listings-nodeport.yaml"
@@ -311,7 +315,7 @@ deploy_target() {
         printf 'Auth Swagger: http://localhost:5080/swagger\nMailpit UI: ./k8s.sh ui mailpit\n'
         return
     fi
-    start_listings_infrastructure yes
+    start_listings_infrastructure
     start_auth_infrastructure yes
     run_migration listings
     run_migration auth
@@ -337,6 +341,7 @@ logs_target() {
         db|listings-db) resource=statefulset/listings-db ;;
         migrations|listings-migrations) resource=job/listings-migrate ;;
         auth|auth-api) resource=deployment/auth-service ;;
+        auth-identity) resource=deployment/auth-identity-worker ;;
         auth-worker) resource=deployment/auth-outbox-worker ;;
         auth-db) resource=statefulset/auth-db ;;
         auth-migrations) resource=job/auth-migrate ;;
@@ -388,10 +393,12 @@ case "$command_name" in
         [[ $# -eq 0 ]] || fail 'stop takes no arguments.'
         check_cluster
         scale_if_exists deployment/auth-service 0
+        scale_if_exists deployment/auth-identity-worker 0
         scale_if_exists deployment/auth-outbox-worker 0
         scale_if_exists deployment/listings-service 0
         scale_if_exists deployment/listings-outbox-worker 0
         kube wait --for=delete pod -l app.kubernetes.io/name=auth-service --timeout=180s
+        kube wait --for=delete pod -l app.kubernetes.io/name=auth-identity-worker --timeout=180s
         kube wait --for=delete pod -l app.kubernetes.io/name=auth-outbox-worker --timeout=180s
         kube wait --for=delete pod -l app.kubernetes.io/name=listings-service --timeout=180s
         kube wait --for=delete pod -l app.kubernetes.io/name=listings-outbox-worker --timeout=180s

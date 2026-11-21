@@ -7,3 +7,4 @@ resources:
   - db-statefulset.yaml
   - db-service.yaml
   - worker-deployment.yaml
+  - identity-worker-deployment.yaml

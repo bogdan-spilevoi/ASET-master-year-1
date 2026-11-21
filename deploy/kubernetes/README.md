@@ -1,6 +1,6 @@
 # Local Kubernetes: Auth, Listings, Mailpit and RabbitMQ
 
-This setup runs three Auth API replicas, one Auth confirmation email worker (`Worker:Mode=Email`),
+This setup runs three Auth API replicas, two Auth workers (`Email` for SMTP and `Publish` for RabbitMQ),
 PostgreSQL 16 and Mailpit (`v1.34.0`), plus
 three Listings API replicas, one Outbox Publish worker, PostgreSQL 16 and RabbitMQ 4.4
 in namespace `smartlost`. Each database and RabbitMQ StatefulSet has a separate 1 GiB PVC;
@@ -16,12 +16,13 @@ Use the executable [root helper](../../k8s.sh) from the repository root (Bash on
 ./k8s.sh help
 ./k8s.sh config                  # First setup: create ignored files, then edit their placeholders
 ./k8s.sh up                      # Create/reuse Kind, build/load all images, infra, migrations, rollout
-./k8s.sh deploy auth             # Rebuild/load Auth API/worker/bundle, migrate auth-db, roll out Auth + Mailpit
+./k8s.sh deploy auth             # Rebuild/load Auth API/worker/bundle, migrate auth-db, start Mailpit and ensure the shared broker is running
 ./k8s.sh deploy listings         # Rebuild/load Listings API/worker/bundle, load, migrate, rollout
 ./k8s.sh deploy mailpit          # Apply/restart Mailpit Deployment in smartlost
 ./k8s.sh deploy rabbitmq         # Rebuild/load broker image and restart its StatefulSet
 ./k8s.sh migrate auth            # Rebuild/load Auth bundle and execute auth-migrate Job (or: listings / all)
 ./k8s.sh status
+./k8s.sh logs auth-identity --follow  # Auth profile publisher to smartlost.events / smartlost.auth.identity
 ./k8s.sh logs auth-api --follow  # Or: auth-worker, listings-api, worker, db, auth-db, mailpit, rabbitmq, auth-migrations
 ./k8s.sh ui mailpit              # Temporary Mailpit UI forwarding (8025); Ctrl+C stops it
 ./k8s.sh ui rabbitmq             # Temporary RabbitMQ UI forwarding (15672); Ctrl+C stops it
@@ -90,12 +91,12 @@ or GitHub workflow was changed by adding this helper; .NET suites were not rerun
 | [../../k8s.sh](../../k8s.sh) | Local build/load/migration/rollout and diagnostic shortcuts; no cloud/CI orchestration or volume deletion. |
 | [local/kind.yaml](local/kind.yaml) | One-node local Kind cluster; publishes `127.0.0.1:5080` (`30080`) for Auth and `127.0.0.1:5082` (`30081`) for Listings. |
 | [base/kustomization.yaml](base/kustomization.yaml) | Namespace and currently implemented modules (`auth`, `mailpit`, `listings`, `rabbitmq`). |
-| [base/auth/](base/auth/) | Auth API Deployment/Service, Email worker Deployment (`auth-outbox-worker`), shared `auth-settings` ConfigMap (`mailpit:1025`, `localhost:5080` callback, `Worker:Mode=Email`) and `auth-db` StatefulSet/headless Service. |
+| [base/auth/](base/auth/) | Auth API Deployment/Service, email and RabbitMQ publisher Deployments (`auth-outbox-worker`, `auth-identity-worker`), shared `auth-settings` ConfigMap (`mailpit:1025`, `localhost:5080` callback, `Worker:Mode=Email`) and `auth-db` StatefulSet/headless Service. |
 | [base/mailpit/](base/mailpit/) | Internal Mailpit `v1.34.0` Deployment/Service (`smtp :1025`, `http :8025`), non-root read-only rootfs. |
 | [base/listings/](base/listings/) | Listings API Deployment/Service, configuration and PostgreSQL StatefulSet/headless Service. |
 | [base/listings/worker-deployment.yaml](base/listings/worker-deployment.yaml) | One Publish worker, no Service or published port; JSON/Secret shared with Listings. |
 | [base/rabbitmq/](base/rabbitmq/) | Internal headless Service and broker StatefulSet/PVC; AMQP 5672, management 15672. |
-| [images/rabbitmq/Dockerfile](images/rabbitmq/Dockerfile) | Digest-pinned broker base with patched Ubuntu apt libraries; non-root runtime. |
+| [images/rabbitmq/Dockerfile](images/rabbitmq/Dockerfile) | Digest-pinned broker with patched Ubuntu apt libraries. The upstream entrypoint starts RabbitMQ directly as the `rabbitmq` user. The image omits the unused Pebble supervisor. |
 | [local/auth/.env.example](local/auth/.env.example) | Placeholder Auth DB password, connection string and 32+ char `jwt-signing-key`; never a checked-in Secret. |
 | [local/rabbitmq/.env.example](local/rabbitmq/.env.example) | Separate ignored broker credentials/cookie file. |
 | [overlays/local/kustomization.yaml](overlays/local/kustomization.yaml) | `smartlost` namespace, three replicas each for Auth and Listings, and local NodePort patches. |
@@ -286,6 +287,7 @@ kubectl -n smartlost logs job/listings-migrate
 kubectl apply -k deploy/kubernetes/overlays/local
 kubectl -n smartlost rollout status deployment/auth-service --timeout=180s
 kubectl -n smartlost rollout status deployment/auth-outbox-worker --timeout=180s
+kubectl -n smartlost rollout status deployment/auth-identity-worker --timeout=180s
 kubectl -n smartlost rollout status deployment/listings-service --timeout=180s
 kubectl -n smartlost rollout status deployment/listings-outbox-worker --timeout=180s
 kubectl -n smartlost get pods,services,pvc
@@ -419,7 +421,7 @@ delete one API pod and wait for `rollout status deployment/listings-service`.
 Stop all services while retaining their configuration and database storage (`./k8s.sh stop`):
 
 ```sh
-kubectl -n smartlost scale deployment/auth-service deployment/auth-outbox-worker deployment/listings-service deployment/listings-outbox-worker deployment/mailpit --replicas=0
+kubectl -n smartlost scale deployment/auth-service deployment/auth-outbox-worker deployment/auth-identity-worker deployment/listings-service deployment/listings-outbox-worker deployment/mailpit --replicas=0
 kubectl -n smartlost scale statefulset/rabbitmq statefulset/auth-db statefulset/listings-db --replicas=0
 ```
 
@@ -435,6 +437,7 @@ kubectl -n smartlost rollout status deployment/mailpit --timeout=180s
 kubectl apply -k deploy/kubernetes/overlays/local
 kubectl -n smartlost rollout status deployment/auth-service --timeout=180s
 kubectl -n smartlost rollout status deployment/auth-outbox-worker --timeout=180s
+kubectl -n smartlost rollout status deployment/auth-identity-worker --timeout=180s
 kubectl -n smartlost rollout status deployment/listings-service --timeout=180s
 kubectl -n smartlost rollout status deployment/listings-outbox-worker --timeout=180s
 ```

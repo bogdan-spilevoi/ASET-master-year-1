@@ -64,7 +64,7 @@ protect model invariants when the model is called through other paths.
 Auth now uses these primitives for its user/session aggregate roots, entity invariants
 and local domain events. See [Auth's domain guide](AUTHSERVICE.md#domain-aggregates-guards-and-events).
 Auth also stages selected profile events into its Outbox and has a separately executable
-HTTP delivery worker; receiver configuration and deployment remain application concerns.
+worker with RabbitMQ and HTTP delivery modes.
 
 ## Opt-in relational Outbox
 
@@ -72,7 +72,7 @@ The [Infrastructure module](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infra
 contains reusable persistence, delivery and opt-in inspection-host code. It owns no
 database and starts no worker unless the corresponding host registration is requested.
 Auth now consumes this library through its Infrastructure project, a service-owned migration
-and [finite worker](../src/Services/Auth/SmartLost.AuthService.Worker/README.md).
+and [Auth worker](../src/Services/Auth/SmartLost.AuthService.Worker/README.md).
 Listings owns its separate Outbox table and
 [Inspect/Publish worker](../src/Services/Listings/SmartLost.ListingsService.Worker/README.md).
 
@@ -161,7 +161,7 @@ not a cross-worker or per-aggregate ordering guarantee. Dead-letter replay, rece
 retention cleanup, metrics and transport-specific routing remain service responsibilities.
 
 The shared library itself adds no deployment or migration. Auth provides its own migration
-and finite worker host; Azure scale-to-zero consumers still require an external schedule.
+and worker host; Azure scale-to-zero consumers still require an external schedule.
 
 ## Application pipeline
 
@@ -228,7 +228,7 @@ exhaustive backlog viewer. Listings defaults to Inspect locally and selects Publ
 `AddBuildingBlocksOutboxDelivery<TContext>` adds the existing leased processor plus a
 continuous host with a fresh scope per batch and validated `OutboxDelivery:PollInterval`
 (default 2 seconds). Empty batches do not stop it; transient batch failures retry later.
-Register a transport separately. Listings uses the opt-in
+Register a transport separately. The Listings and Auth profile workers use the opt-in
 [Messaging.RabbitMq project](../src/BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/README.md):
 durable topic exchange/queues, persistent mandatory messages and publisher confirms.
 Only broker acknowledgement marks a row processed; returns/disconnects/timeouts follow

@@ -1,10 +1,10 @@
 # AuthService
 
-A .NET 10 authentication microservice for the ASET solution. It exposes register, login, refresh, current-user and email confirmation endpoints, issues JWTs, queues compact encrypted-token confirmation requests atomically into the PostgreSQL Outbox (`auth.email.confirmation_requested`) for post-commit SMTP delivery with retry (`SmartLost.AuthService.Worker` in `Email` mode targeting `Mailpit` in local dev), and delivers profile messages in finite `Batch` mode.
+A .NET 10 authentication microservice for the ASET solution. It exposes register, login, refresh, current-user and email confirmation endpoints, issues JWTs, queues compact encrypted-token confirmation requests atomically into the PostgreSQL Outbox (`auth.email.confirmation_requested`) for post-commit SMTP delivery with retry (`SmartLost.AuthService.Worker` in `Email` mode targeting `Mailpit` in local dev), and publishes profile events to RabbitMQ in `Publish` mode. An alternative finite HTTP transport is available in `Batch` mode.
 
 ## Architecture
 
-The service has five projects under `src/Services/Auth/`. Its unit and integration
+The Auth solution groups its runtime and modeling projects under `src/Services/Auth/`. Its unit and integration
 test projects live under `tests/Auth/`. The solution uses the same Auth grouping:
 
 - `SmartLost.AuthService.Api`: HTTP contracts/controllers, safe confirmation HTML page renderer,
@@ -20,10 +20,10 @@ test projects live under `tests/Auth/`. The solution uses the same Auth grouping
   SMTP Outbox publisher (`AuthOutboxEmailPublisher`) via shared `IEmailSender`, atomic
   Outbox staging and profile HTTP delivery.
 - [`SmartLost.AuthService.Worker`](../src/Services/Auth/SmartLost.AuthService.Worker/README.md):
-  dual-mode Auth Outbox host (`Batch` finite profile HTTP delivery job; `Email` continuous
-  confirmation email delivery host filtered by `OutboxOptions.MessageTypes`).
+  Auth Outbox host for profile publication to RabbitMQ (`Publish`), confirmation delivery
+  over SMTP (`Email`) or bounded profile delivery over HTTP (`Batch`).
 
-Open [Auth.slnx](../src/Services/Auth/Auth.slnx) for this service, its four shared
+Open [Auth.slnx](../src/Services/Auth/Auth.slnx) for this service, its shared
 BuildingBlocks dependencies and its unit/integration test projects. These are the
 same projects listed in [Aset.slnx](../Aset.slnx); the focused solution creates no
 new code dependency or copy. Tests remain physically under `tests/Auth/`.
@@ -146,10 +146,9 @@ security/session data are excluded. Receivers must atomically deduplicate IDs an
 older/equal identity versions. No consumer endpoint has been implemented.
 
 The [Auth Worker guide](../src/Services/Auth/SmartLost.AuthService.Worker/README.md) documents
-real-route/service-key configuration, finite runs, retry/dead-letter behavior, the receiver
-acknowledgement contract and the opt-in Compose worker. API startup does not contact a
-consumer. Worker startup refuses missing/placeholder routes/keys; messages can remain
-pending until a real receiver is configured. No cloud schedule/deployment is enabled.
+RabbitMQ bindings, SMTP delivery, the alternate HTTP batch configuration and the shared
+retry/dead-letter policy. The API commits to its database independently of transport
+availability. The Publish worker completes profile rows after broker confirmation. No cloud schedule/deployment is enabled.
 
 See the [Member 3 authentication diagrams](diagrams/member-3/README.md) for a UML
 sign-in/session sequence and a C4 component view. They distinguish the current
@@ -292,7 +291,8 @@ additional local configuration loader or user-secrets setup.
 | `Jwt` | Issuer, audience, signing key and token lifetime |
 | `Smtp` | Used by `SmartLost.AuthService.Worker` (`Worker:Mode=Email`): SMTP host (`localhost` / `mailpit`), port (`1025`), sender address/name and optional credentials/TLS |
 | `EmailConfirmation` | API and email worker share a dedicated 32-byte Base64 encryption key. The API sets token expiry (24 hours by default) and the worker uses the public base URL to compose confirmation links |
-| `Worker`, `Outbox`, `OutboxDelivery` | Worker mode (`Batch` or `Email`), poll interval, batch size, retry attempts and batch delivery limits |
+| `Worker`, `Outbox`, `OutboxDelivery` | Worker mode (`Batch`, `Email` or `Publish`), poll interval, batch size, retry attempts and batch delivery limits |
+| `RabbitMq` | Publish worker broker connection, topic exchange and exact queue bindings |
 | `Logging`, `AllowedHosts` | Logging and host configuration |
 
 Use `appsettings.json` for local API/EF processes and `appsettings.Docker.json` for Compose

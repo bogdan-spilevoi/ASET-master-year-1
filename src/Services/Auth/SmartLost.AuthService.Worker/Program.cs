@@ -2,16 +2,18 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using SmartLost.AuthService.Infrastructure;
+using SmartLost.BuildingBlocks.Messaging.RabbitMq;
 
 namespace SmartLost.AuthService.Worker;
 
-/// <summary>Auth Outbox host supporting finite HTTP Batch mode or continuous Email delivery mode.</summary>
+/// <summary>Auth Outbox host supporting finite HTTP Batch mode or continuous Email and RabbitMQ Publish modes.</summary>
 public static class WorkerProgram
 {
     public static async Task Main(string[] args)
     {
         using IHost host = BuildHost(args);
-        if (IsEmailMode(host.Services.GetRequiredService<IConfiguration>()))
+        AuthOutboxJob? batch = host.Services.GetService<AuthOutboxJob>();
+        if (batch is null)
         {
             await host.RunAsync();
             return;
@@ -21,7 +23,7 @@ public static class WorkerProgram
         try
         {
             IHostApplicationLifetime lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
-            await host.Services.GetRequiredService<AuthOutboxJob>().RunAsync(lifetime.ApplicationStopping);
+            await batch.RunAsync(lifetime.ApplicationStopping);
         }
         finally
         {
@@ -47,18 +49,17 @@ public static class WorkerProgram
                     .ValidateOnStart();
                 builder.Services.AddSingleton<AuthOutboxJob>();
                 break;
+            case "Publish":
+                builder.Services.AddAuthIdentityOutboxDelivery(builder.Configuration);
+                builder.Services.AddRabbitMqOutboxPublisher(builder.Configuration);
+                break;
             case "Email":
                 builder.Services.AddAuthEmailOutboxWorker(builder.Configuration);
                 break;
             default:
-                throw new InvalidOperationException("Worker:Mode must be Batch or Email.");
+                throw new InvalidOperationException("Worker:Mode must be Batch, Publish or Email.");
         }
 
         return builder.Build();
-    }
-
-    private static bool IsEmailMode(IConfiguration configuration)
-    {
-        return string.Equals(configuration["Worker:Mode"], "Email", StringComparison.Ordinal);
     }
 }
