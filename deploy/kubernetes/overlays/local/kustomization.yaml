@@ -5,6 +5,7 @@ resources:
   - ../../base
 patches:
   - path: listings-nodeport.yaml
+  - path: matching-development.yaml
 replicas:
   - name: listings-service
     count: 3

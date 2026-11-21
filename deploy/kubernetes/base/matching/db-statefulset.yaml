@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: matching-db
+  labels:
+    smartlost/service: matching
+spec:
+  serviceName: matching-db
+  replicas: 1
+  revisionHistoryLimit: 2
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: matching-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: matching-db
+        app.kubernetes.io/part-of: smartlost
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: matchingservice
+            - name: POSTGRES_USER
+              value: matchingservice
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: matching-credentials
+                  key: postgres-password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            exec:
+              command: [pg_isready, -h, 127.0.0.1, -U, matchingservice, -d, matchingservice]
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: [pg_isready, -h, 127.0.0.1, -U, matchingservice, -d, matchingservice]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: [pg_isready, -h, 127.0.0.1, -U, matchingservice, -d, matchingservice]
+            periodSeconds: 15
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: database-data
+              mountPath: /var/lib/postgresql/data
+            - name: temporary
+              mountPath: /tmp
+            - name: socket
+              mountPath: /var/run/postgresql
+      volumes:
+        - name: temporary
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: socket
+          emptyDir:
+            sizeLimit: 16Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: database-data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 1Gi

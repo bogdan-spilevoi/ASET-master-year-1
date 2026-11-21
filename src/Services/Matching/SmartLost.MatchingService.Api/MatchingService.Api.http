@@ -1,5 +1,6 @@
 # Development test flow for SmartLost.MatchingService.Api (mock photo and AI adapters).
 # Compose: http://localhost:8081   Local dotnet run: http://localhost:5049
+# Local Kubernetes (./k8s.sh ui matching port-forward): http://localhost:5083
 @host = http://localhost:8081
 @source = 10000000-0000-0000-0000-000000000001
 

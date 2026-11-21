@@ -1,9 +1,11 @@
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using SmartLost.BuildingBlocks.AspNetCore;
 using SmartLost.MatchingService.Api.Diagnostics;
 using SmartLost.MatchingService.Application;
 using SmartLost.MatchingService.Application.Profiling;
 using SmartLost.MatchingService.Infrastructure;
+using SmartLost.MatchingService.Infrastructure.Persistence;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -44,5 +46,12 @@ else
 }
 
 app.MapControllers();
+// Liveness runs no checks, so a database outage never restarts the process.
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+// Readiness only reads connectivity and EF migration history.
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains(MatchingDatabaseHealthCheck.ReadinessTag)
+});
 
 app.Run();

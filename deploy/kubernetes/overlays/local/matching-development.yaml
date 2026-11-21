@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: matching-environment
+# Development enables Swagger and the Development-only test endpoints; the API refuses to
+# start unless the mock photo/AI adapters are explicitly enabled.
+data:
+  ASPNETCORE_ENVIRONMENT: Development
+  MockAdapters__Enabled: "true"

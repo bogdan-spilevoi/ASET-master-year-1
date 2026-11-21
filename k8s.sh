@@ -10,10 +10,17 @@ NAMESPACE=smartlost
 KUBE_DIR=deploy/kubernetes
 API_DOCKERFILE=src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile
 INFRA_PROJECT=src/Services/Listings/SmartLost.ListingsService.Infrastructure
+MATCHING_DOCKERFILE=src/Services/Matching/SmartLost.MatchingService.Api/Dockerfile
+MATCHING_INFRA_PROJECT=src/Services/Matching/SmartLost.MatchingService.Infrastructure
+MATCHING_LOCAL_PORT=5083
+# Rendered overlay objects carry this metadata label only when they belong to Matching.
+MATCHING_SELECTOR=smartlost/service=matching
+NOT_MATCHING_SELECTOR=smartlost/service!=matching
 
 fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"; }
 kube() { kubectl --context "$CONTEXT" --namespace "$NAMESPACE" "$@"; }
+exists() { [[ -n "$(kube get "$1" --ignore-not-found -o name)" ]]; }
 kind_local() {
     if [[ -x "$ROOT/.tools/kind" ]]; then "$ROOT/.tools/kind" "$@";
     else need kind; kind "$@"; fi
@@ -24,22 +31,27 @@ help_text() {
 Usage: ./k8s.sh COMMAND [TARGET]
 
   up                        Create/reuse local Kind; build/load all; infra, migrate, rollout
-  deploy [listings|rabbitmq|all]
+  deploy [listings|matching|rabbitmq|all]
                             Rebuild/load and update an existing local cluster (default: listings)
   build [TARGET]            Build images only (default: all)
   load [TARGET]             Load existing Docker images into Kind (default: all)
-  migrate                   Build/load latest EF bundle; recreate finished Job; wait and show logs
-  migration-add NAME        Generate a local Listings EF migration; no database connection
-  restart [TARGET]          Restart api/worker/listings/rabbitmq/all (default: listings)
-  stop                      Stop API, worker, RabbitMQ and PostgreSQL; retain PVCs
+  migrate [listings|matching]
+                            Build/load latest EF bundle; recreate finished Job; wait and show logs
+  migration-add NAME [listings|matching]
+                            Generate a local EF migration (default: listings); no database connection
+  restart [TARGET]          Restart api/worker/listings/matching/rabbitmq/all (default: listings)
+  stop                      Stop deployed APIs, worker, RabbitMQ and PostgreSQL; retain PVCs
   status                    Show local workloads, Services, Jobs and PVCs
-  logs [TARGET] [--follow]   Show api/worker/db/rabbitmq/migrations logs (default: worker)
-  ui                        Forward RabbitMQ management to http://localhost:15672; Ctrl+C stops
+  logs [TARGET] [--follow]  Show api/worker/db/rabbitmq/migrations or
+                            matching-api/matching-db/matching-migrations logs (default: worker)
+  ui [rabbitmq|matching]    Forward RabbitMQ management to http://localhost:15672 (default) or
+                            the Matching API to http://localhost:5083; Ctrl+C stops
   config                    Create missing ignored .env files from examples; edit placeholders
   validate                  Render/check the local Kustomize overlay without applying it
   help                      Show this help
 
-Build/load targets: api, worker, migrations, rabbitmq, listings (= first three), all.
+Build/load targets: api, worker, migrations, rabbitmq, listings (= first three),
+matching-api, matching-migrations, matching (= both Matching images), all.
 All cluster commands explicitly use kind-smartlost-local / namespace smartlost.
 No command deletes database volumes, the namespace, or the cluster. No seed runs automatically.
 HELP
@@ -63,7 +75,7 @@ create_cluster() {
 
 config_files() {
     local file
-    for file in "$KUBE_DIR/local/.env" "$KUBE_DIR/local/rabbitmq/.env"; do
+    for file in "$KUBE_DIR/local/.env" "$KUBE_DIR/local/rabbitmq/.env" "$KUBE_DIR/local/matching/.env"; do
         if [[ ! -e "$file" ]]; then
             (umask 077; cp "$file.example" "$file")
             printf 'Created %s; replace its placeholders before first startup.\n' "$file"
@@ -82,7 +94,7 @@ ensure_secret() {
         fail "Replace the placeholders in $file before creating $name."
     fi
     case "$name" in
-        listings-credentials) keys='postgres-password connection-string' ;;
+        listings-credentials|matching-credentials) keys='postgres-password connection-string' ;;
         rabbitmq-credentials) keys='username password erlang-cookie' ;;
         *) fail "No local credential schema is configured for $name." ;;
     esac
@@ -96,39 +108,49 @@ ensure_secret() {
 
 targets() {
     case "$1" in
-        api|worker|migrations|rabbitmq) printf '%s\n' "$1" ;;
+        api|worker|migrations|rabbitmq|matching-api|matching-migrations) printf '%s\n' "$1" ;;
         listings) printf '%s\n' api worker migrations ;;
-        all) printf '%s\n' api worker migrations rabbitmq ;;
-        *) fail "Unknown image target '$1'. Use api, worker, migrations, rabbitmq, listings or all." ;;
+        matching) printf '%s\n' matching-api matching-migrations ;;
+        all) printf '%s\n' api worker migrations rabbitmq matching-api matching-migrations ;;
+        *) fail "Unknown image target '$1'. Use api, worker, migrations, rabbitmq, listings, matching-api, matching-migrations, matching or all." ;;
+    esac
+}
+
+image_name() {
+    case "$1" in
+        rabbitmq) printf 'smartlost-rabbitmq:local\n' ;;
+        matching-*) printf 'smartlost-%s:local\n' "$1" ;;
+        *) printf 'smartlost-listings-%s:local\n' "$1" ;;
     esac
 }
 
 build_images() {
-    local selected target dockerfile
+    local selected target dockerfile image
     selected=$(targets "$1")
     need docker
     while IFS= read -r target; do
+        image=$(image_name "$target")
         case "$target" in
             api) dockerfile=$API_DOCKERFILE ;;
             migrations)
-                docker build --provenance=false --file "$API_DOCKERFILE" --target migrations --tag smartlost-listings-migrations:local .
+                docker build --provenance=false --file "$API_DOCKERFILE" --target migrations --tag "$image" .
                 continue ;;
             worker) dockerfile=src/Services/Listings/SmartLost.ListingsService.Worker/Dockerfile ;;
             rabbitmq) dockerfile=$KUBE_DIR/images/rabbitmq/Dockerfile ;;
+            matching-api) dockerfile=$MATCHING_DOCKERFILE ;;
+            matching-migrations)
+                docker build --provenance=false --file "$MATCHING_DOCKERFILE" --target migrations --tag "$image" .
+                continue ;;
         esac
-        local image="smartlost-listings-$target:local"
-        [[ "$target" != rabbitmq ]] || image=smartlost-rabbitmq:local
         docker build --provenance=false --file "$dockerfile" --tag "$image" .
     done <<< "$selected"
 }
 
 load_images() {
-    local selected target image
+    local selected target
     selected=$(targets "$1")
     while IFS= read -r target; do
-        image="smartlost-listings-$target:local"
-        [[ "$target" != rabbitmq ]] || image=smartlost-rabbitmq:local
-        kind_local load docker-image "$image" --name "$CLUSTER"
+        kind_local load docker-image "$(image_name "$target")" --name "$CLUSTER"
     done <<< "$selected"
 }
 
@@ -151,22 +173,34 @@ start_infrastructure() {
     start_broker "$1"
 }
 
+start_matching_database() {
+    kube apply -f "$KUBE_DIR/base/namespace.yaml"
+    ensure_secret matching-credentials "$KUBE_DIR/local/matching/.env"
+    kube apply -f "$KUBE_DIR/base/matching/db-service.yaml" -f "$KUBE_DIR/base/matching/db-statefulset.yaml"
+    kube rollout status statefulset/matching-db --timeout=180s
+}
+
 run_migration() {
-    local previous name complete failed
-    previous=$(kube get job listings-migrate --ignore-not-found -o 'jsonpath={.metadata.name}|{.status.conditions[?(@.type=="Complete")].status}|{.status.conditions[?(@.type=="Failed")].status}')
+    local service=${1:-listings} job manifest log_target previous name complete failed
+    case "$service" in
+        listings) job=listings-migrate; manifest=$KUBE_DIR/migrations/listings-job.yaml; log_target=migrations ;;
+        matching) job=matching-migrate; manifest=$KUBE_DIR/migrations/matching-job.yaml; log_target=matching-migrations ;;
+        *) fail "Migration target must be listings or matching." ;;
+    esac
+    previous=$(kube get job "$job" --ignore-not-found -o 'jsonpath={.metadata.name}|{.status.conditions[?(@.type=="Complete")].status}|{.status.conditions[?(@.type=="Failed")].status}')
     IFS='|' read -r name complete failed <<< "$previous"
     if [[ -n "$name" ]]; then
         if [[ "$complete" != True && "$failed" != True ]]; then
-            fail "listings-migrate is still running. Use ./k8s.sh logs migrations; it will not be replaced."
+            fail "$job is still running. Use ./k8s.sh logs $log_target; it will not be replaced."
         fi
-        kube delete job listings-migrate --wait=true
+        kube delete job "$job" --wait=true
     fi
-    kube apply -f "$KUBE_DIR/migrations/listings-job.yaml"
-    if ! kube wait --for=condition=complete job/listings-migrate --timeout=300s; then
-        kube logs job/listings-migrate --tail=100 || true
+    kube apply -f "$manifest"
+    if ! kube wait --for=condition=complete "job/$job" --timeout=300s; then
+        kube logs "job/$job" --tail=100 || true
         fail "Migration did not complete. Application rollout was not started; inspect the retained Job."
     fi
-    kube logs job/listings-migrate --tail=100
+    kube logs "job/$job" --tail=100
 }
 
 restart_target() {
@@ -175,14 +209,26 @@ restart_target() {
         worker) kube rollout restart deployment/listings-outbox-worker; kube rollout status deployment/listings-outbox-worker --timeout=180s ;;
         rabbitmq) kube rollout restart statefulset/rabbitmq; kube rollout status statefulset/rabbitmq --timeout=300s ;;
         listings) restart_target api; restart_target worker ;;
-        all) restart_target rabbitmq; restart_target listings ;;
-        *) fail "Unknown restart target '$1'. Use api, worker, listings, rabbitmq or all." ;;
+        matching) kube rollout restart deployment/matching-service; kube rollout status deployment/matching-service --timeout=180s ;;
+        all)
+            restart_target rabbitmq; restart_target listings
+            if exists deployment/matching-service; then restart_target matching; fi ;;
+        *) fail "Unknown restart target '$1'. Use api, worker, listings, matching, rabbitmq or all." ;;
     esac
+}
+
+deploy_matching() {
+    start_matching_database
+    run_migration matching
+    # Applied only after the migration Job succeeded; Listings objects are not touched.
+    kube apply -k "$KUBE_DIR/overlays/local" --selector "$MATCHING_SELECTOR"
+    # Local tags and subPath ConfigMap mounts require replacing existing pods.
+    restart_target matching
 }
 
 deploy_target() {
     local target=$1
-    case "$target" in listings|rabbitmq|all) ;; *) fail "Deploy target must be listings, rabbitmq or all." ;; esac
+    case "$target" in listings|matching|rabbitmq|all) ;; *) fail "Deploy target must be listings, matching, rabbitmq or all." ;; esac
     check_cluster
     build_images "$target"
     load_images "$target"
@@ -192,14 +238,25 @@ deploy_target() {
         start_broker yes
         return
     fi
+    if [[ "$target" == matching ]]; then
+        deploy_matching
+        printf 'Matching Swagger: ./k8s.sh ui matching, then http://localhost:%s/swagger\n' "$MATCHING_LOCAL_PORT"
+        return
+    fi
     local refresh_broker=no
     [[ "$target" != all ]] || refresh_broker=yes
     start_infrastructure "$refresh_broker"
-    run_migration
-    kube apply -k "$KUBE_DIR/overlays/local"
+    run_migration listings
+    kube apply -k "$KUBE_DIR/overlays/local" --selector "$NOT_MATCHING_SELECTOR"
     # Local tags and subPath ConfigMap mounts require replacing existing pods.
     restart_target listings
+    if [[ "$target" == all ]]; then
+        deploy_matching
+    fi
     printf 'Listings Swagger: http://localhost:5082/swagger\nRabbitMQ UI: ./k8s.sh ui\n'
+    if [[ "$target" == all ]]; then
+        printf 'Matching Swagger: ./k8s.sh ui matching, then http://localhost:%s/swagger\n' "$MATCHING_LOCAL_PORT"
+    fi
 }
 
 logs_target() {
@@ -210,7 +267,10 @@ logs_target() {
         db) resource=statefulset/listings-db ;;
         rabbitmq) resource=statefulset/rabbitmq ;;
         migrations) resource=job/listings-migrate ;;
-        *) fail "Unknown log target '$1'. Use api, worker, db, rabbitmq or migrations." ;;
+        matching-api) resource=deployment/matching-service ;;
+        matching-db) resource=statefulset/matching-db ;;
+        matching-migrations) resource=job/matching-migrate ;;
+        *) fail "Unknown log target '$1'. Use api, worker, db, rabbitmq, migrations, matching-api, matching-db or matching-migrations." ;;
     esac
     case "$2" in
         '') kube logs "$resource" --tail=100 ;;
@@ -219,10 +279,31 @@ logs_target() {
     esac
 }
 
+stop_workloads() {
+    local stopped=no
+    if exists deployment/matching-service; then
+        kube scale deployment/matching-service --replicas=0
+        kube wait --for=delete pod -l app.kubernetes.io/name=matching-service --timeout=180s
+        stopped=yes
+    fi
+    if exists statefulset/matching-db; then
+        kube scale statefulset/matching-db --replicas=0
+        stopped=yes
+    fi
+    if exists deployment/listings-service; then
+        kube scale deployment/listings-service deployment/listings-outbox-worker --replicas=0
+        kube wait --for=delete pod -l app.kubernetes.io/name=listings-service --timeout=180s
+        kube wait --for=delete pod -l app.kubernetes.io/name=listings-outbox-worker --timeout=180s
+        kube scale statefulset/rabbitmq statefulset/listings-db --replicas=0
+        stopped=yes
+    fi
+    [[ "$stopped" == yes ]] || printf 'No Listings or Matching workloads exist; nothing to stop.\n'
+}
+
 command_name=${1:-help}
 [[ $# -eq 0 ]] || shift
-if [[ "$command_name" == logs ]]; then
-    [[ $# -le 2 ]] || fail 'Usage: ./k8s.sh logs [TARGET] [--follow]'
+if [[ "$command_name" == logs || "$command_name" == migration-add ]]; then
+    [[ $# -le 2 ]] || fail "Too many arguments for $command_name. Run ./k8s.sh help."
 else
     [[ $# -le 1 ]] || fail 'Too many arguments. Run ./k8s.sh help.'
 fi
@@ -234,31 +315,45 @@ case "$command_name" in
     build) build_images "${1:-all}" ;;
     load) check_cluster; load_images "${1:-all}" ;;
     migrate)
-        [[ $# -eq 0 ]] || fail 'migrate takes no arguments.'
-        check_cluster; build_images migrations; load_images migrations
-        kube rollout status statefulset/listings-db --timeout=180s
-        run_migration ;;
+        case "${1:-listings}" in
+            listings)
+                check_cluster; build_images migrations; load_images migrations
+                kube rollout status statefulset/listings-db --timeout=180s
+                run_migration listings ;;
+            matching)
+                check_cluster; build_images matching-migrations; load_images matching-migrations
+                kube rollout status statefulset/matching-db --timeout=180s
+                run_migration matching ;;
+            *) fail 'Migration target must be listings or matching.' ;;
+        esac ;;
     migration-add)
-        [[ $# -eq 1 && "$1" =~ ^[A-Za-z][A-Za-z0-9_]*$ ]] || fail 'Provide a migration name, e.g. ./k8s.sh migration-add AddListingLocation'
+        [[ $# -ge 1 && "$1" =~ ^[A-Za-z][A-Za-z0-9_]*$ ]] || fail 'Provide a migration name, e.g. ./k8s.sh migration-add AddListingLocation'
         need dotnet; dotnet tool restore
-        dotnet ef migrations add "$1" --project "$INFRA_PROJECT" --startup-project "$INFRA_PROJECT" --context ListingsDbContext --output-dir Persistence/Migrations ;;
+        case "${2:-listings}" in
+            listings) dotnet ef migrations add "$1" --project "$INFRA_PROJECT" --startup-project "$INFRA_PROJECT" --context ListingsDbContext --output-dir Persistence/Migrations ;;
+            matching) dotnet ef migrations add "$1" --project "$MATCHING_INFRA_PROJECT" --startup-project "$MATCHING_INFRA_PROJECT" --context MatchingDbContext --output-dir Persistence/Migrations ;;
+            *) fail 'Migration project must be listings or matching.' ;;
+        esac ;;
     restart) check_cluster; restart_target "${1:-listings}" ;;
     stop)
         [[ $# -eq 0 ]] || fail 'stop takes no arguments.'
         check_cluster
-        kube scale deployment/listings-service deployment/listings-outbox-worker --replicas=0
-        kube wait --for=delete pod -l app.kubernetes.io/name=listings-service --timeout=180s
-        kube wait --for=delete pod -l app.kubernetes.io/name=listings-outbox-worker --timeout=180s
-        kube scale statefulset/rabbitmq statefulset/listings-db --replicas=0 ;;
+        stop_workloads ;;
     status)
         [[ $# -eq 0 ]] || fail 'status takes no arguments.'
         check_cluster; kube get deployments,statefulsets,pods,services,jobs,pvc ;;
     logs) check_cluster; logs_target "${1:-worker}" "${2:-}" ;;
     ui)
-        [[ $# -eq 0 ]] || fail 'ui takes no arguments.'
         check_cluster
-        printf 'RabbitMQ: http://localhost:15672 (credentials in deploy/kubernetes/local/rabbitmq/.env). Ctrl+C stops forwarding.\n'
-        kube port-forward service/rabbitmq 15672:15672 ;;
+        case "${1:-rabbitmq}" in
+            rabbitmq)
+                printf 'RabbitMQ: http://localhost:15672 (credentials in deploy/kubernetes/local/rabbitmq/.env). Ctrl+C stops forwarding.\n'
+                kube port-forward service/rabbitmq 15672:15672 ;;
+            matching)
+                printf 'Matching Swagger: http://localhost:%s/swagger (Development-only routes). Ctrl+C stops forwarding.\n' "$MATCHING_LOCAL_PORT"
+                kube port-forward service/matching-service "$MATCHING_LOCAL_PORT:80" ;;
+            *) fail 'UI target must be rabbitmq or matching.' ;;
+        esac ;;
     validate)
         [[ $# -eq 0 ]] || fail 'validate takes no arguments.'
         need kubectl; kubectl kustomize "$KUBE_DIR/overlays/local" >/dev/null

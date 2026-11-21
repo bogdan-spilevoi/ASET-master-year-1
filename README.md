@@ -239,7 +239,7 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Finite Auth Outbox job delivering versioned public-profile snapshots to configured HTTP receivers | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
 | [`src/Services/Listings/`](src/Services/Listings/) | Manually maintained Domain aggregates/entities with guarded listing, decision, recovery and credibility behavior; separate NMF/XMI models; EF migrations and atomic Outbox persistence; public GET categories/listings/details through CQRS | [Module README](src/Services/Listings/README.md), [API](src/Services/Listings/SmartLost.ListingsService.Api/README.md), [Application](src/Services/Listings/SmartLost.ListingsService.Application/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md), [Domain and behavior](src/Services/Listings/SmartLost.ListingsService.Domain/README.md), [Infrastructure](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md) |
 | [`src/Services/Listings/SmartLost.ListingsService.Worker/`](src/Services/Listings/SmartLost.ListingsService.Worker/) | Inspect/Publish host for service-owned Outbox; Kubernetes uses persistent RabbitMQ publishing with confirms and retries | [Worker README](src/Services/Listings/SmartLost.ListingsService.Worker/README.md) |
-| [`src/Services/Matching/`](src/Services/Matching/) | Suggestion ranking, embedding preparation and photo-analysis use cases with `ProfilingBehavior` and AI-call profiling decorators, a Matching-only PostgreSQL database, mock photo/AI adapters and development-only test endpoints; real Listings/AI integration and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
+| [`src/Services/Matching/`](src/Services/Matching/) | Suggestion ranking, embedding preparation and photo-analysis use cases with `ProfilingBehavior` and AI-call profiling decorators, a Matching-only PostgreSQL database, mock photo/AI adapters, development-only test endpoints and liveness/readiness endpoints; real Listings/AI integration and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md), [Communication](src/Services/Matching/COMMUNICATION.md), [Kubernetes](deploy/kubernetes/README.md#matching-api-and-postgresql) |
 | [`SmartLost.BuildingBlocks.*`](src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | Reusable domain/event/result/pagination primitives, application behaviors, HTTP adapters and opt-in EF Core Outbox | [Building blocks guide](docs/BUILDING_BLOCKS.md) |
 | [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen CPU/NVIDIA CUDA label extraction and DINOv3 CPU/NVIDIA CUDA normalized image embeddings | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
 
@@ -369,7 +369,9 @@ The default `aset-master-year-1` stack has Auth, Listings and Matching: three AP
 containers, each with its own PostgreSQL container, image and data volume. The optional `workers` profile adds a finite
 Auth Outbox job without an exposed port. Matching setup, migration and test-flow commands are in the
 [Matching README](src/Services/Matching/README.md#local-development); copy its two
-`appsettings*.example.json` files before starting `matching-service`.
+`appsettings*.example.json` files before starting `matching-service`. The Matching
+Dockerfile's default `runtime` target is the Compose image; its opt-in `migrations`
+target builds an EF bundle used only by the local Kubernetes Job.
 Listings uses its own [API Dockerfile](src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile)
 and the same root Compose file. There is no separate Listings Compose stack.
 The API image uses locked restore and excludes local settings from its build context.
@@ -524,7 +526,7 @@ categories and six listings on sequential runs, including hidden Draft/Closed ex
 it is off by default, Development-only and never applies migrations. See the
 [API setup and seed guide](src/Services/Listings/SmartLost.ListingsService.Api/README.md).
 
-### Local Kubernetes alternative: Listings
+### Local Kubernetes alternative: Listings and Matching
 
 Use the [local helper](k8s.sh) to avoid repeating Docker/Kind/kubectl commands:
 
@@ -532,12 +534,17 @@ Use the [local helper](k8s.sh) to avoid repeating Docker/Kind/kubectl commands:
 ./k8s.sh help
 ./k8s.sh up               # First setup/resume: build/load all, migrate, start
 ./k8s.sh deploy listings  # Update API + worker + migration bundle
-./k8s.sh migrate          # Rebuild/load/apply migrations only
+./k8s.sh deploy matching  # Update Matching API + bundle: DB ready, migrate, then roll out
+./k8s.sh migrate          # Rebuild/load/apply Listings migrations only
+./k8s.sh migrate matching # Rebuild/load/apply Matching migrations only
+./k8s.sh ui matching      # Port-forward Matching to http://localhost:5083; Ctrl+C stops
 ./k8s.sh status
-./k8s.sh stop             # Retain both PVCs; no volume deletion
+./k8s.sh stop             # Retain all PVCs; no volume deletion
 ```
 
-For first setup, run `./k8s.sh config` and edit placeholders before `up`. Separate image
+For first setup, run `./k8s.sh config` and edit the placeholders in the three ignored
+files it creates from `.env.example` templates (`deploy/kubernetes/local/.env`,
+`local/rabbitmq/.env` and `local/matching/.env`) before `up`. Separate image
 build/load, local migration generation, logs and RabbitMQ UI shortcuts are documented
 in the [runbook](deploy/kubernetes/README.md#short-local-commands). The helper uses only
 the explicit local Kind context; it is not invoked by CI or a deployment workflow.
@@ -549,10 +556,21 @@ the applications. The Listings Dockerfile has API and optional `migrations` targ
 the [worker Dockerfile](src/Services/Listings/SmartLost.ListingsService.Worker/Dockerfile)
 and [patched broker Dockerfile](deploy/kubernetes/images/rabbitmq/Dockerfile) build separate images.
 
+Matching runs [one API pod and its own PostgreSQL StatefulSet](deploy/kubernetes/README.md#matching-api-and-postgresql)
+in the same `smartlost-local` cluster and `smartlost` namespace. The API has an internal
+ClusterIP Service (port 80 to container port 8080). PostgreSQL is internal at
+`matching-db:5432`, with PVC `database-data-matching-db-0`. A `matching-migrate` Job must
+succeed before the API rolls out. The local overlay enables `Development` and
+`MockAdapters__Enabled=true`. Readiness uses `/health/ready` and liveness uses
+`/health/live`. Swagger and the Development-only routes are reached through the
+port-forward at `http://localhost:5083/swagger`, so Kind port mappings are unchanged. The
+photo-analysis cache remains process-local. Matching's demo seed deletes all Matching
+rows; use it only on a disposable Kubernetes database.
+
 Only Listings is exposed at `http://localhost:5082/swagger` through the local NodePort/Kind
 mapping. PostgreSQL and RabbitMQ remain internal; management UI access uses an optional
 port-forward. Root Compose remains independent and starts neither this worker nor broker.
-Auth/Matching, Redis, public ingress and Azure deployment are not included in Kubernetes;
+Auth, Redis, public ingress and Azure deployment are not included in Kubernetes;
 no deployment workflow is activated. The category cache remains per API process.
 
 The worker polls due Outbox rows in bounded batches, publishes persistent mandatory
@@ -633,6 +651,10 @@ starting `matching-db`:
 dotnet ef database update --project src/Services/Matching/SmartLost.MatchingService.Infrastructure --startup-project src/Services/Matching/SmartLost.MatchingService.Infrastructure --context MatchingDbContext
 ```
 
+In local Kubernetes, Matching owns a separate `matchingservice` database in the
+`matching-db` StatefulSet. It is not the Compose volume. `./k8s.sh migrate matching` applies the
+same checked-in migrations through the `matching-migrate` bundle Job.
+
 See [Matching tables and migration commands](src/Services/Matching/README.md#data-and-integration-ownership).
 
 ## API surface
@@ -697,7 +719,14 @@ Development and have no service authentication. They are not the final Listings-
 | `POST` | `/api/matching/photo-analysis` | Mock Qwen labels for a listing photo |
 | `GET` | `/api/matching/demo/logs?count=10` | Last Matching log entries (in-memory, newest first) |
 
-Photo and AI calls use mock adapters. Swagger is available at `http://localhost:8081/swagger` in Development.
+Photo and AI calls use mock adapters. Swagger is available at `http://localhost:8081/swagger` in Development
+with Compose, or at `http://localhost:5083/swagger` while `./k8s.sh ui matching` forwards the local Kubernetes Service.
+Matching also exposes health endpoints in every environment:
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `GET` | `/health/live` | Process liveness; runs no checks |
+| `GET` | `/health/ready` | Read-only database connectivity and applied-migration check; 200 or 503 |
 See the [Matching README](src/Services/Matching/README.md#test-endpoints-development-only) and
 [test requests](src/Services/Matching/SmartLost.MatchingService.Api/MatchingService.Api.http).
 
@@ -845,7 +874,7 @@ change as code/configuration, using relative links and verified, secret-safe exa
 ## Further reading
 
 - [Attribute-driven query cache: implementation, flow, AOP explanation and observation commands](docs/QUERY_CACHING.md)
-- [Local Kubernetes Listings/PostgreSQL setup, migration Job and lifecycle](deploy/kubernetes/README.md)
+- [Local Kubernetes Listings/Matching/PostgreSQL setup, migration Jobs and lifecycle](deploy/kubernetes/README.md)
 
 - [Listings Domain / EF Core verification and historical NMF findings](docs/LISTINGS_EF_COMPATIBILITY.md)
 - [BPMN process models for three teams of two: editable diagrams, previews and responsibilities](docs/bpmn/README.md)

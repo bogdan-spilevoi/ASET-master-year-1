@@ -1,9 +1,11 @@
-# Local Kubernetes: Listings, PostgreSQL and RabbitMQ
+# Local Kubernetes: Listings, Matching, PostgreSQL and RabbitMQ
 
-This setup runs three Listings API replicas, one Outbox Publish worker, PostgreSQL 16
-and RabbitMQ 4.4 in namespace `smartlost`. Each StatefulSet has a separate 1 GiB PVC.
-An explicit EF migration-bundle Job prepares the database. Auth, Matching, Redis, Ingress
-and Azure deployment are not included. Root Compose remains independent.
+This setup runs three Listings API replicas, one Outbox Publish worker, one Matching API
+replica, a separate PostgreSQL 16 StatefulSet for each service and RabbitMQ 4.4 in
+namespace `smartlost`. Each StatefulSet has a separate 1 GiB PVC. Explicit EF
+migration-bundle Jobs prepare each database. Auth, Redis, Ingress and Azure deployment
+are not included. Root Compose remains independent. Matching has its own section:
+[Matching API and PostgreSQL](#matching-api-and-postgresql).
 
 ## Short local commands
 
@@ -12,17 +14,22 @@ Use the executable [root helper](../../k8s.sh) from the repository root (Bash on
 ```sh
 ./k8s.sh help
 ./k8s.sh config           # First setup: create ignored files, then edit their placeholders
-./k8s.sh up               # Create/reuse Kind, build/load all images, infra, migration, rollout
+./k8s.sh up               # Create/reuse Kind, build/load all images, infra, migrations, rollout
 ./k8s.sh deploy listings  # Existing setup: rebuild API/worker/bundle, load, migrate, rollout
+./k8s.sh deploy matching  # Rebuild/load Matching API + bundle; DB, migrate, then rollout
 ./k8s.sh deploy rabbitmq  # Rebuild/load broker image and restart its StatefulSet
-./k8s.sh migrate          # Rebuild/load only the bundle and execute the migration Job
+./k8s.sh migrate          # Rebuild/load only the Listings bundle and execute its Job
+./k8s.sh migrate matching # Same for the Matching bundle and matching-migrate Job
 ./k8s.sh status
 ./k8s.sh logs worker --follow
+./k8s.sh logs matching-api --follow
 ./k8s.sh ui               # Temporary RabbitMQ UI forwarding; Ctrl+C stops it
-./k8s.sh stop             # Scale workloads to zero; retain database and broker PVCs
+./k8s.sh ui matching      # Temporary Matching forwarding to localhost:5083; Ctrl+C stops it
+./k8s.sh stop             # Scale deployed workloads to zero; retain database and broker PVCs
 ```
 
-`build` and `load` accept `api`, `worker`, `migrations`, `rabbitmq`, `listings` or `all`:
+`build` and `load` accept `api`, `worker`, `migrations`, `rabbitmq`, `listings`,
+`matching-api`, `matching-migrations`, `matching` or `all`:
 
 ```sh
 ./k8s.sh build worker
@@ -32,22 +39,27 @@ Use the executable [root helper](../../k8s.sh) from the repository root (Bash on
 ```
 
 These separate commands do exactly their named step: build does not load, load does not
-restart, and restart does not build or migrate. Prefer `deploy listings` for a complete
-application update. `deploy all` rebuilds/restarts the broker too; `up` additionally creates
-the cluster if missing. First installation requires `up`, so the broker image is loaded.
-To resume after `stop`, use `up`; `restart` does not scale stopped workloads back up.
+restart, and restart does not build or migrate. Prefer `deploy listings` or
+`deploy matching` for a complete application update. `deploy listings` applies only overlay
+objects without the `smartlost/service=matching` label; `deploy matching` applies only
+objects with it. `deploy all` runs both and rebuilds/restarts the broker too; `up`
+additionally creates the cluster if missing. First installation requires `up`, so the
+broker image is loaded. To resume after `stop`, use `up`; `restart` does not scale
+stopped workloads back up.
 
 To **generate** a migration locally after changing entities/EF mappings:
 
 ```sh
 ./k8s.sh migration-add DescribeYourChange
+./k8s.sh migration-add DescribeYourChange matching
 ```
 
-Review/commit the generated Infrastructure migration and snapshot, then use `migrate` or
-`deploy listings` to **apply** it. Migration generation requires the pinned .NET SDK but
-no running database. The helper rebuilds the bundle before applying, refuses to replace
-an unfinished Job, waits for completion and stops before application rollout on failure.
-Finished Jobs are replaced; their deletion does not remove database data.
+Review/commit the generated Infrastructure migration and snapshot, then use `migrate`
+(`migrate matching`) or `deploy listings` (`deploy matching`) to **apply** it. Migration
+generation requires the pinned .NET SDK but no running database. The helper rebuilds the
+bundle before applying, refuses to replace an unfinished Job, waits for completion and
+stops before application rollout on failure. Finished Jobs are replaced; their deletion
+does not remove database data.
 
 Cluster commands explicitly target `kind-smartlost-local` and namespace `smartlost`;
 they never use the currently selected context implicitly. Existing Kubernetes Secrets
@@ -80,15 +92,20 @@ or GitHub workflow was changed by adding this helper; .NET suites were not rerun
 | [local/kind.yaml](local/kind.yaml) | One-node local Kind cluster; publishes only `127.0.0.1:5082` to node port 30081. |
 | [base/kustomization.yaml](base/kustomization.yaml) | Namespace and currently implemented modules. |
 | [base/listings/](base/listings/) | API Deployment/Service, configuration and PostgreSQL StatefulSet/headless Service. |
+| [base/matching/](base/matching/) | Matching API Deployment/ClusterIP Service, settings and environment ConfigMaps, and its own PostgreSQL StatefulSet/headless Service; every object is labeled `smartlost/service=matching`. |
 | [base/listings/worker-deployment.yaml](base/listings/worker-deployment.yaml) | One Publish worker, no Service or published port; JSON/Secret shared with Listings. |
 | [base/rabbitmq/](base/rabbitmq/) | Internal headless Service and broker StatefulSet/PVC; AMQP 5672, management 15672. |
 | [images/rabbitmq/Dockerfile](images/rabbitmq/Dockerfile) | Digest-pinned broker base with patched Ubuntu apt libraries; non-root runtime. |
 | [local/rabbitmq/.env.example](local/rabbitmq/.env.example) | Separate ignored broker credentials/cookie file. |
-| [overlays/local/kustomization.yaml](overlays/local/kustomization.yaml) | `smartlost` namespace, three API replicas and the Listings-only NodePort patch. |
+| [overlays/local/kustomization.yaml](overlays/local/kustomization.yaml) | `smartlost` namespace, three Listings API replicas, the Listings-only NodePort patch and the Matching Development patch. |
 | [overlays/local/listings-nodeport.yaml](overlays/local/listings-nodeport.yaml) | Local Service override: NodePort 30081; the base Service remains ClusterIP. |
+| [overlays/local/matching-development.yaml](overlays/local/matching-development.yaml) | Patches ConfigMap `matching-environment` to `Development` and `MockAdapters__Enabled=true`. |
 | [migrations/listings-job.yaml](migrations/listings-job.yaml) | Explicit migration bundle; one attempt, five-minute deadline. |
+| [migrations/matching-job.yaml](migrations/matching-job.yaml) | Matching migration bundle Job `matching-migrate`; same attempt/deadline policy. |
 | [local/.env.example](local/.env.example) | Placeholder credentials for the ignored local `.env`; never a checked-in Secret. |
+| [local/matching/.env.example](local/matching/.env.example) | Placeholder Matching credentials for the ignored `local/matching/.env`. |
 | [Listings Dockerfile](../../src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile) | Default `runtime` API target and opt-in `migrations` target, sharing the patched runtime base. |
+| [Matching Dockerfile](../../src/Services/Matching/SmartLost.MatchingService.Api/Dockerfile) | Default `runtime` API target (also used by Compose) and opt-in `migrations` target. |
 
 The base API Service uses ClusterIP port 80 and selects pods listening on 8080. The local
 overlay adds NodePort 30081, mapped by Kind to `127.0.0.1:5082`. PostgreSQL is reachable
@@ -138,7 +155,8 @@ mapping. Preserve its database first using [backup and restore](#backup-and-rest
 
 ## Images
 
-Build all four images and load them into the local cluster; a host Docker image alone is
+Build the four Listings and broker images and load them into the local cluster (Matching
+images: see [Matching API and PostgreSQL](#matching-api-and-postgresql)); a host Docker image alone is
 not sufficient for Kind's container runtime:
 
 ```sh
@@ -306,6 +324,129 @@ kubectl -n smartlost rollout status deployment/listings-service --timeout=180s
 The fixed URL continues working after rollout; no forwarding process needs restarting.
 No Redis or cache invalidation is added by Kubernetes.
 
+## Matching API and PostgreSQL
+
+Matching reuses the `smartlost-local` cluster and `smartlost` namespace. It adds one
+`matching-service` API pod (container port 8080) behind an internal ClusterIP Service on
+port 80, and its own `matching-db` PostgreSQL 16 StatefulSet with PVC
+`database-data-matching-db-0`. PostgreSQL is reachable only inside the namespace at
+`matching-db:5432`; it has no NodePort, host mapping or port-forward command. Only
+Matching uses this database. Matching does not call Listings or RabbitMQ.
+
+The ConfigMap `matching-settings` mounts non-secret JSON (mock slow delay, profiling
+thresholds, logging) at `/app/appsettings.json`. The ConfigMap `matching-environment`
+is loaded through `envFrom`. The Secret `matching-credentials` supplies
+`postgres-password` and `connection-string`; the latter becomes
+`ConnectionStrings__MatchingDatabase` in the API and migration Job. In the base,
+`matching-environment` sets `Production` and `MockAdapters__Enabled=false`, so the API
+refuses to start on its own (no real photo/AI adapters exist). The local overlay patches it
+to `ASPNETCORE_ENVIRONMENT=Development` and `MockAdapters__Enabled=true`, which enables
+Swagger and the Development-only test endpoints. The photo-analysis cache is unchanged:
+the existing process-local `IQueryCache`, one per pod, emptied on restart.
+
+Create the ignored credentials file (or run `./k8s.sh config`) and replace **both**
+password placeholders with the same local alphanumeric/hex value:
+
+```sh
+cp -n deploy/kubernetes/local/matching/.env.example deploy/kubernetes/local/matching/.env
+chmod 600 deploy/kubernetes/local/matching/.env
+```
+
+Then deploy into the existing cluster:
+
+```sh
+./k8s.sh deploy matching
+```
+
+The helper builds `smartlost-matching-api:local` (default Dockerfile target) and
+`smartlost-matching-migrations:local` (`--target migrations`), loads both into Kind,
+creates the Secret if missing, applies the database Service/StatefulSet and waits until
+`pg_isready` passes. It then recreates a finished `matching-migrate` Job, waits for it to
+complete and only then applies the overlay objects labeled `smartlost/service=matching`
+and restarts the API. It refuses to replace an unfinished Job. A failed Job is retained
+for its logs, the API rollout is not started and the helper exits nonzero.
+Equivalent manual steps:
+
+```sh
+docker build --provenance=false --file src/Services/Matching/SmartLost.MatchingService.Api/Dockerfile --tag smartlost-matching-api:local .
+docker build --provenance=false --file src/Services/Matching/SmartLost.MatchingService.Api/Dockerfile --target migrations --tag smartlost-matching-migrations:local .
+kind load docker-image smartlost-matching-api:local smartlost-matching-migrations:local --name smartlost-local
+kubectl -n smartlost create secret generic matching-credentials --from-env-file=deploy/kubernetes/local/matching/.env --dry-run=client -o yaml | kubectl -n smartlost apply -f -
+kubectl -n smartlost apply -f deploy/kubernetes/base/matching/db-service.yaml -f deploy/kubernetes/base/matching/db-statefulset.yaml
+kubectl -n smartlost rollout status statefulset/matching-db --timeout=180s
+kubectl -n smartlost apply -f deploy/kubernetes/migrations/matching-job.yaml
+kubectl -n smartlost wait --for=condition=complete job/matching-migrate --timeout=300s
+kubectl -n smartlost logs job/matching-migrate
+kubectl -n smartlost apply -k deploy/kubernetes/overlays/local --selector smartlost/service=matching
+kubectl -n smartlost rollout status deployment/matching-service --timeout=180s
+```
+
+Rerun only the migration with `./k8s.sh migrate matching`. On a current database the Job
+logs `No migrations were applied. The database is already up to date.` Like Listings, the
+bundle also prints a harmless `libgssapi_krb5.so.2` message because the image has no
+Kerberos library; password authentication is unaffected.
+
+Probes: startup and liveness call `GET /health/live`, which runs no checks, so a database
+outage never restarts the API. Readiness calls `GET /health/ready`, which opens a
+connection and compares EF migration history with the checked-in migrations. It returns
+503 until the schema is current and never writes, migrates or seeds. The database probes
+use `pg_isready`. The API runs as the Dockerfile's non-root `appuser` (UID/GID 1001) and
+the database as UID/GID 70; both use read-only root filesystems, drop all capabilities
+and disable service-account token mounts.
+
+Swagger and the test endpoints use a temporary localhost port-forward, so existing Kind
+clusters keep their port mappings:
+
+```sh
+./k8s.sh ui matching      # or: kubectl -n smartlost port-forward service/matching-service 5083:80
+```
+
+While it runs, open <http://localhost:5083/swagger>. Port 5083 does not collide with
+Compose (8081) or the Listings mapping (5082). Ctrl+C stops forwarding; reopen it after
+the API pod is replaced. In another terminal:
+
+```sh
+curl --fail http://localhost:5083/health/ready
+curl --fail -H 'Content-Type: application/json' -d '{"listingId":"10000000-0000-0000-0000-000000000001","expectedSourceRevision":1}' http://localhost:5083/api/matching/suggestions
+```
+
+Without demo data the suggestions request returns HTTP 200 with `"status":"Pending"`.
+`POST /api/matching/demo/seed` **deletes every Matching row** before inserting the demo
+scenario. Run it only against a disposable Matching database, such as a freshly created
+cluster database. Check the row count first:
+
+```sh
+kubectl -n smartlost exec matching-db-0 -- psql -U matchingservice -d matchingservice -tAc 'SELECT COUNT(*) FROM "SearchListings";'
+curl --fail -X POST http://localhost:5083/api/matching/demo/seed
+```
+
+After seeding, the same suggestions request returns `"status":"Ready"` with three
+candidates. For the rest of the flow, set `@host` to `http://localhost:5083` in the
+[test requests](../../src/Services/Matching/SmartLost.MatchingService.Api/MatchingService.Api.http).
+
+Persistence check: record the row count, replace the database pod and compare. The API
+pod becomes unready while PostgreSQL is unavailable and ready again afterwards without
+restarting:
+
+```sh
+kubectl -n smartlost delete pod matching-db-0
+kubectl -n smartlost rollout status statefulset/matching-db --timeout=180s
+kubectl -n smartlost exec matching-db-0 -- psql -U matchingservice -d matchingservice -tAc 'SELECT COUNT(*) FROM "SearchListings";'
+```
+
+Stop only Matching while keeping its PVC, and start it again:
+
+```sh
+kubectl -n smartlost scale deployment/matching-service --replicas=0
+kubectl -n smartlost scale statefulset/matching-db --replicas=0
+./k8s.sh deploy matching
+```
+
+To back up Matching before recreating the cluster, use the
+[backup procedure](#backup-and-restore-before-cluster-recreation) with
+`deployment/matching-service`, `matching-db-0`, user/database `matchingservice` and a
+separate `matching.dump` file. Keep the ignored `local/matching/.env` as well.
+
 ## Backup and restore before cluster recreation
 
 For an existing local database, stop API writers and save the **whole database**, including
@@ -396,7 +537,8 @@ Use `kubectl kustomize deploy/kubernetes/overlays/local` to render without a clu
 and `kubectl apply --dry-run=server -k deploy/kubernetes/overlays/local` against the local
 cluster to check API validation/admission. The repository's existing Trivy filesystem
 scan covers Kubernetes configuration; the existing container CI builds/scans the default
-API/worker targets and the broker Dockerfile, not the opt-in migration target. No deployment workflow is activated.
+API/worker targets and the broker Dockerfile, not the opt-in Listings or Matching migration
+targets. No deployment workflow is activated.
 
 See [Listings communication](../../src/Services/Listings/COMMUNICATION.md) for the numbered
 local Kubernetes flow and [module documentation](../../src/Services/Listings/README.md)
@@ -471,3 +613,53 @@ and `git diff --check` were checked locally.
   checks, not the whole-repository CI result.
 - No Matching consumer, new schema migration or deployment workflow was added. Existing
   Auth AutoMapper audit findings remain outside this change; hosted CI was not run.
+
+### Matching verification on 2026-11-20
+
+Executed locally on Apple Silicon with Docker Desktop 29.8.1, Kind 0.33.0 (`.tools/kind`),
+Kubernetes 1.37.0 and kubectl 1.36.1. No `smartlost-local` cluster existed on this machine,
+so `./k8s.sh up` created it from `local/kind.yaml`; its only published ports remain the
+Kubernetes API and `127.0.0.1:5082`.
+
+- `./k8s.sh validate`, `kubectl kustomize` and server-side dry-run of the whole overlay
+  passed. The `smartlost/service!=matching` selector applied only Listings, broker and
+  namespace objects; `smartlost/service=matching` applied only the Matching objects.
+- Built both Matching targets; the default image runs `dotnet SmartLost.MatchingService.Api.dll`
+  and the opt-in image runs `./efbundle`, both as `appuser`. The Compose build of
+  `matching-service` and `docker compose config --quiet` (with a temporary
+  `LISTINGS_POSTGRES_PASSWORD`) still passed.
+- The first `matching-migrate` Job ran while the host throttled background processes and
+  exceeded its five-minute deadline; its pod was removed before logs could be read. The
+  next `./k8s.sh deploy matching` recreated the failed Job, which reported the schema as
+  already up to date (history: `20261105130215_InitialCreate`). Six further reruns through
+  `deploy matching`, `migrate matching` and `up` each completed with the same message.
+- A suspended `matching-migrate` Job made `./k8s.sh migrate matching` exit 1 with
+  `matching-migrate is still running ...` without replacing it.
+- The API pod became Ready (UID 1001, 0 restarts). Through `./k8s.sh ui matching`,
+  `/swagger/index.html`, `/openapi/v1.json`, `/health/live` and `/health/ready` returned 200.
+  Suggestions for `10000000-…-0001` returned 200 `Pending` before seeding.
+- The Matching database had been created in this session and contained 0 rows, so it was
+  disposable. After `POST /api/matching/demo/seed`, suggestions returned 200 `Ready` with
+  three candidates. After processing three embeddings, visual similarities were 1.0 and ≈0.41.
+- Deleting `matching-db-0` recreated it on the same PVC with 10/3/7 SearchListings/
+  ImageEmbeddings/EmbeddingPreparationTasks rows before and after. Scaling the database to
+  zero made the API pod unready (`Readiness probe failed ... 503`) with 0 restarts after
+  more than two liveness periods; restoring it made the pod Ready again.
+- `./k8s.sh stop` scaled every Listings/Matching workload to zero and kept all three PVCs.
+  `./k8s.sh up` restored them. Scaling only Matching to zero and running `deploy matching`
+  also restored it. Both kept the seeded rows. `./k8s.sh deploy listings` left the
+  Matching pod unchanged, and Listings Swagger/categories still returned 200 on 5082.
+  Deleting the API pod recreated a Ready replacement.
+- Trivy 0.74.0 `config` reported no HIGH/CRITICAL findings in `deploy/kubernetes`. The
+  repository `fs` vuln/misconfig scan passed when ignored local `bin/`, `obj/`, `.tools/`
+  and `artifacts/` outputs were excluded. Without that exclusion it failed only on stale
+  untracked Auth build outputs that still contain AutoMapper 16.2.0. Trivy image scans
+  of `smartlost-matching-api:local` and `smartlost-matching-migrations:local` found no
+  HIGH/CRITICAL vulnerabilities or secrets.
+- The CI restore (locked, NuGet audit), Release build and format verification passed for
+  `Aset.slnx`. The Matching unit suite passed 100/100 and the PostgreSQL integration suite
+  3/3, including the new readiness test. The focused Coverlet report covers 17/17 changed
+  executable production lines.
+
+Not executed: a Job that fails against a reachable database (the helper code path is shared
+with Listings), Linux/amd64 images and hosted GitHub Actions.

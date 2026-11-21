@@ -28,6 +28,8 @@ public static class DependencyInjection
         services.AddScoped<IImageEmbeddingRepository, ImageEmbeddingRepository>();
         services.AddScoped<IEmbeddingPreparationTaskRepository, EmbeddingPreparationTaskRepository>();
         services.AddScoped<IUnitOfWork, MatchingUnitOfWork>();
+        services.AddHealthChecks().AddCheck<MatchingDatabaseHealthCheck>(MatchingDatabaseHealthCheck.Name,
+            tags: [MatchingDatabaseHealthCheck.ReadinessTag]);
 
         // Only mock photo/AI adapters exist; require an explicit opt-in so they are never enabled silently.
         IConfigurationSection mockSection = configuration.GetSection(MockAdapterOptions.SectionName);

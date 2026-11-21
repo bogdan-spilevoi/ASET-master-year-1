@@ -90,6 +90,55 @@ Failure and retry paths that are implemented:
   retain the bounded AI call and error mapping. Successful nested label lists are frozen;
   absolute expiry is 300 seconds. Current adapters are mocks, with no outgoing network call.
 
+## Local Kubernetes alternative
+
+The [local Kubernetes runbook](../../../deploy/kubernetes/README.md#matching-api-and-postgresql)
+runs one Matching API pod and a Matching-only PostgreSQL StatefulSet in the shared
+`smartlost-local` Kind cluster and `smartlost` namespace. Root Compose remains available;
+its `matching-db-data` volume is not adopted. Solid arrows are implemented and were
+exercised on the local Kind cluster.
+
+```mermaid
+flowchart LR
+    Operator["Developer / k8s.sh in explicit kind-smartlost-local context"]
+    Build["Matching Dockerfile: default runtime + opt-in migrations target"]
+    Images["Kind node image store"]
+    Config["ConfigMaps matching-settings + matching-environment; Secret matching-credentials"]
+    Database["Headless matching-db:5432 / one PostgreSQL pod"]
+    Storage[("PVC: database-data-matching-db-0")]
+    Migration["Job matching-migrate: EF bundle"]
+    Pod["Deployment matching-service: 1 API pod on :8080 (Development, mocks on)"]
+    Service["ClusterIP matching-service:80"]
+    Forward["kubectl port-forward: localhost:5083"]
+    Client["Browser / HTTP client"]
+    Operator -->|"1. Build API and migration images"| Build
+    Build -->|"2. Load both images into Kind"| Images
+    Operator -->|"3. Create namespace, Secret, DB Service and StatefulSet; wait for pg_isready"| Database
+    Database -->|"3.1 Initialize or reopen PostgreSQL data"| Storage
+    Config -->|"3.2 PostgreSQL password"| Database
+    Operator -->|"4. Recreate finished Job; refuse while one is active"| Migration
+    Config -->|"4.1 ConnectionStrings__MatchingDatabase"| Migration
+    Migration -->|"4.2 Apply checked-in migrations; exit success or failure"| Database
+    Operator -->|"5. Apply Matching overlay objects only after Job success; restart pod"| Pod
+    Config -->|"5.1 JSON at /app/appsettings.json, envFrom environment, connection Secret"| Pod
+    Pod -->|"6. Readiness /health/ready: connect + read migration history"| Database
+    Pod -->|"6.1 Use-case reads/writes (numbered flow above)"| Database
+    Client -->|"7. HTTP localhost:5083 (Swagger, Development-only routes)"| Forward
+    Forward -->|"7.1 Tunnel through the Kubernetes API"| Service
+    Service -->|"8. Select the ready API endpoint on 8080"| Pod
+```
+
+Failure paths: a failed migration Job exits nonzero, is retained for its logs and stops the
+helper before arrow 5; `backoffLimit: 0` means it is not retried automatically. Startup
+and liveness call `/health/live`, which runs no checks, so a PostgreSQL outage marks the
+pod unready (arrow 6 returns 503) without restarting it. Readiness never runs a mutating
+endpoint, the demo seed or a migration. Kubernetes restarts crashed containers and recreates
+deleted pods; the PVC survives database pod replacement but not namespace or cluster
+deletion. Swagger and the test endpoints exist only because the local overlay patches
+`matching-environment` to `Development` and `MockAdapters__Enabled=true`. The photo-analysis cache stays the existing
+process-local `IQueryCache`, so it is per pod and empty after each restart. Matching
+still has no NodePort, Kind host mapping, RabbitMQ connection or calls to Listings.
+
 ## Current model-test interactions
 
 The NMF model tests are unchanged. They construct generated model objects and
@@ -130,10 +179,19 @@ category synonym normalization are not implemented.
   and [profiler](SmartLost.MatchingService.Application/Profiling/MatchingProfiler.cs)
 - [Persistence](SmartLost.MatchingService.Infrastructure/Persistence/MatchingDbContext.cs)
   and [migration](SmartLost.MatchingService.Infrastructure/Persistence/Migrations/)
+- [Readiness check](SmartLost.MatchingService.Infrastructure/Persistence/MatchingDatabaseHealthCheck.cs),
+  [Kubernetes manifests](../../../deploy/kubernetes/base/matching/),
+  [migration Job](../../../deploy/kubernetes/migrations/matching-job.yaml) and [helper](../../../k8s.sh)
 - [Proposed matching sequence](../../../docs/diagrams/member-5/smartlost-matching-sequence.puml)
 - [Proposed matching components](../../../docs/diagrams/member-5/smartlost-matching-components.puml)
 
 ## Review notes
+
+- 2026-11-20: Added the local Kubernetes flow (arrows 1-8 in "Local Kubernetes
+  alternative"): Matching API Deployment/ClusterIP Service, its own PostgreSQL
+  StatefulSet/PVC, migration-bundle Job and localhost port-forward. Added
+  `/health/live` (no checks) and `/health/ready` (read-only connectivity and migration
+  history). Existing use-case, mock-adapter, cache and Compose arrows are unchanged.
 
 - 2026-11-17: Reviewed shared continuous Outbox host and opt-in RabbitMQ transport. Matching does not register this transport and has no RabbitMQ consumer. Listings notifications currently wait in a broker queue; Matching API/AI/database arrows are unchanged.
 

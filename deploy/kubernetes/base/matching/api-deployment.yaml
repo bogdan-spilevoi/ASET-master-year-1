@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: matching-service
+  labels:
+    smartlost/service: matching
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: matching-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: matching-service
+        app.kubernetes.io/part-of: smartlost
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        # Matching's Dockerfile creates appuser with UID 1001.
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: smartlost-matching-api:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          # Environment name and mock opt-in come from matching-environment (patched locally).
+          envFrom:
+            - configMapRef:
+                name: matching-environment
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: ConnectionStrings__MatchingDatabase
+              valueFrom:
+                secretKeyRef:
+                  name: matching-credentials
+                  key: connection-string
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+          # Startup/liveness run no health checks, so a database outage never restarts the API.
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 2
+            failureThreshold: 60
+          # Readiness reads connectivity and EF migration history; it never writes.
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 15
+          volumeMounts:
+            - name: settings
+              mountPath: /app/appsettings.json
+              subPath: appsettings.json
+              readOnly: true
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: settings
+          configMap:
+            name: matching-settings
+        - name: temporary
+          emptyDir:
+            sizeLimit: 128Mi

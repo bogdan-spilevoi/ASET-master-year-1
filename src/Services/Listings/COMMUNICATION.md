@@ -46,7 +46,8 @@ Cloud deployment remains inactive.
 ## Local Kubernetes alternative
 
 The checked-in [local Kubernetes runbook](../../../deploy/kubernetes/README.md) covers
-Listings only. Root Compose remains an alternative; its PostgreSQL volume is not adopted.
+Listings and, separately, Matching. This diagram shows only Listings. Root Compose remains
+an alternative; its PostgreSQL volume is not adopted.
 
 ```mermaid
 flowchart LR
@@ -405,6 +406,11 @@ publishes metadata to RabbitMQ; full snapshot production/consumption remains pla
 - [Proposed publication activity](../../../docs/diagrams/member-4/smartlost-publication-activity.puml)
 
 ## Review notes
+
+- 2026-11-20: The shared local overlay now also renders Matching. `./k8s.sh deploy listings`
+  applies only overlay objects without the `smartlost/service=matching` label, so Listings
+  rollout, migration, NodePort 5082 and AMQP arrows are unchanged. Matching runs in its own
+  objects and database and adds no Listings call, queue consumer or host mapping.
 
 - 2026-11-17: Split Program construction and execution so seed-only tests can own the
   application's lifetime without WebApplicationFactory's deferred-start/disposal race.

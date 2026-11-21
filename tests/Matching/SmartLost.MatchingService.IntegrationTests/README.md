@@ -14,6 +14,8 @@ No real Listings, AI or external receiver is contacted.
 - An active final lease returns 409. Once its clock advances past expiry, the task becomes
   Failed with `matching.attempts_exhausted`, retains its attempt count and stores no vector.
   Repeating the request preserves the terminal state.
+- `MatchingReadinessTests` uses a separate empty database. The readiness check reports one
+  pending migration and leaves the `public` schema empty; after `MigrateAsync` it is Healthy.
 
 From the repository root:
 

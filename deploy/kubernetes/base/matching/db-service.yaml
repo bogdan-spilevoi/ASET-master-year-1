@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: matching-db
+  labels:
+    smartlost/service: matching
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: matching-db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

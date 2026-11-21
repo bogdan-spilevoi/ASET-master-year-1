@@ -152,6 +152,22 @@ public sealed class MatchingApiTests
     }
 
     [Fact]
+    public async Task LivenessIgnoresTheDatabaseWhileReadinessRequiresMigrationHistory()
+    {
+        using MatchingApiFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+
+        using HttpResponseMessage live = await client.GetAsync("/health/live");
+        Assert.Equal(HttpStatusCode.OK, live.StatusCode);
+        Assert.Equal("Healthy", await live.Content.ReadAsStringAsync());
+
+        // EF InMemory has no relational migration history, so readiness must fail closed.
+        using HttpResponseMessage ready = await client.GetAsync("/health/ready");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, ready.StatusCode);
+        Assert.Equal("Unhealthy", await ready.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task RecentLogsEndpointReturnsNewestProfilingEntries()
     {
         using MatchingApiFactory factory = new();
