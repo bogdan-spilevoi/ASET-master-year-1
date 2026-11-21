@@ -16,6 +16,12 @@ No real Listings, AI or external receiver is contacted.
   Repeating the request preserves the terminal state.
 - `MatchingReadinessTests` uses a separate empty database. The readiness check reports one
   pending migration and leaves the `public` schema empty; after `MigrateAsync` it is Healthy.
+- `PhotoAnalysisRedisCacheTests` starts a disposable `redis:8.8.4-alpine` container and two
+  API instances with shared fake photo reader/analyzer. No database is needed. The second
+  instance returns the first instance's nested labels from Redis without calling the
+  analyzer, but it still reads the photo. After access is revoked, it returns 404 although
+  the entry remains. The key `smartlost:matching:development:matching:photo-analysis:v1:...`
+  has a 290–300 second TTL.
 
 From the repository root:
 

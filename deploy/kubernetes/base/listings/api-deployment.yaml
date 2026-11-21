@@ -39,6 +39,12 @@ spec:
                 secretKeyRef:
                   name: listings-credentials
                   key: connection-string
+            # Shared query cache; keys are scoped to smartlost:listings:<environment>:.
+            - name: ConnectionStrings__Redis
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: connection-string
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

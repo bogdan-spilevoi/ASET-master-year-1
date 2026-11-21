@@ -137,8 +137,8 @@ provider metadata and does not provision or connect to a database.
 Future application hosts can call `services.AddListingsPersistence(configuration)`;
 it requires a nonblank ListingsDatabase connection and registers a scoped context.
 The API invokes it when composing the three public read endpoints. It also registers
-IListingsReadStore, the opt-in development seeder and shared in-memory IQueryCache; registration itself does not connect
-to the database or execute seeding.
+IListingsReadStore, the opt-in development seeder and the shared IQueryCache; registration itself does not connect
+to the database or Redis, or execute seeding.
 
 `AddListingsOutboxInspection(configuration)` registers the same service-owned database,
 event mapper and shared unit of work, then opts into the shared read-only reader/host.
@@ -163,9 +163,10 @@ fixtures on sequential reruns. See [seed commands and data](../SmartLost.Listing
 
 ## Query cache backend
 
-Listings calls AddBuildingBlocksQueryCache for a singleton MemoryQueryCache. Only the
-Application category query is annotated; no Redis, new table or schema migration is
-required. See [cache policy and limitations](../../../../docs/QUERY_CACHING.md).
+Listings calls `AddBuildingBlocksQueryCache(configuration, "listings")`. With
+`ConnectionStrings:Redis` the shared `DistributedQueryCache` stores entries in Redis;
+otherwise it uses a process-local store. Only the Application category query is
+annotated; no new table or schema migration is required. See [cache policy and limitations](../../../../docs/QUERY_CACHING.md).
 
 ### Continuous delivery composition
 

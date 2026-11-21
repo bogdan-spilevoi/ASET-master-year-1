@@ -29,7 +29,7 @@ public sealed class PhotoAnalysisCachingTests
         var query = new AnalyzeListingPhotoQuery(Guid.NewGuid(), Guid.NewGuid(), 1, "first");
 
         PhotoAnalysis first = (await sender.Send(query)).Value;
-        Assert.Same(first, (await sender.Send(query with
+        AssertEquivalent(first, (await sender.Send(query with
         {
             CorrelationId = "second"
         })).Value);
@@ -142,7 +142,8 @@ public sealed class PhotoAnalysisCachingTests
         objects.Clear();
 
         PhotoAnalysis cached = (await sender.Send(query)).Value;
-        Assert.Same(first, cached);
+        // Hits are deserialized snapshots, so compare content rather than references.
+        AssertEquivalent(first, cached);
         DetectedObject item = Assert.Single(cached.Objects);
         Assert.Equal("black", Assert.Single(item.Colors));
         Assert.Equal("label", Assert.Single(item.VisibleText));
@@ -156,13 +157,19 @@ public sealed class PhotoAnalysisCachingTests
         }
     }
 
+    private static void AssertEquivalent(PhotoAnalysis expected, PhotoAnalysis actual)
+    {
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(expected), System.Text.Json.JsonSerializer.Serialize(actual));
+    }
+
     private static ServiceProvider Create(CountingPhotos photos, IPhotoAnalyzer analyzer, TimeProvider? clock = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(clock ?? TimeProvider.System);
         SmartLost.BuildingBlocks.AspNetCore.DependencyInjection.AddBuildingBlocksApi(services);
-        SmartLost.BuildingBlocks.Infrastructure.DependencyInjection.AddBuildingBlocksQueryCache(services);
+        SmartLost.BuildingBlocks.Infrastructure.DependencyInjection.AddBuildingBlocksQueryCache(services,
+            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(), "matching");
         services.AddApplication();
         services.AddSingleton<IListingPhotoReader>(photos);
         services.AddSingleton(analyzer);

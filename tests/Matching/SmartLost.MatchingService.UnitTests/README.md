@@ -12,6 +12,8 @@ The suite covers the NMF model and the runtime Matching code. Runtime tests live
 - `PhotoAnalysisCachingTests`: real MediatR cache hits, photo-access rechecks, validation
   before reads, photo/version/content/media-type isolation, absolute expiration,
   correlation-ID reuse, retry after inference failures and immutable nested snapshots.
+  They run through the serialized process-local store, so hits are compared by content;
+  real Redis is covered by the integration suite.
 - `MatchingProfilingTests`: stage and AI decorators, timeouts, cancellations, failures,
   slow-call warnings, correlation-ID sanitization and the MediatR pipeline order.
 - `MatchingInfrastructureTests`: the `InitialCreate` migration against the PostgreSQL model

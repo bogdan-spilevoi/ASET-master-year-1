@@ -49,9 +49,10 @@ flowchart LR
     Handler -->|"7.1 Read photo revision"| MockPhotos
     Handler -->|"7.2 Embedding call on pending task"| AiDecorators
     Handler -->|"8.1 Analysis: recheck requested photo access every time"| MockPhotos
-    Handler -->|"8.2 After photo read succeeds, dispatch AnalyzePhotoContentQuery"| AnalysisCache["MediatR CachingBehavior / process-local IQueryCache"]
-    AnalysisCache -->|"8.3 Cache miss: analyze permitted photo bytes"| AiDecorators
-    AnalysisCache -->|"8.4 Success: reuse immutable labels for 300 seconds"| Handler
+    Handler -->|"8.2 After photo read succeeds, dispatch AnalyzePhotoContentQuery"| AnalysisCache["MediatR CachingBehavior / DistributedQueryCache"]
+    AnalysisCache -->|"8.2.1 Read/write smartlost:matching:<env>:... (300-second absolute TTL)"| Redis[("Redis (Compose/Kind; process-local store without ConnectionStrings:Redis)")]
+    AnalysisCache -->|"8.3 Miss, unreadable entry or Redis unavailable: analyze permitted photo bytes"| AiDecorators
+    AnalysisCache -->|"8.4 Success: deserialized read-only labels, also on other replicas"| Handler
     AiDecorators -->|"7.3 Bounded call with AI timeout"| MockAi
     AiDecorators -->|"7.4 Record duration, timeout, cancellation or failure"| Profiler
     Handler -->|"7.5 Commit vector + Ready, or retry/exhausted Failed with sanitized code"| DB
@@ -87,8 +88,11 @@ Failure and retry paths that are implemented:
   lookup. Missing/no-longer-permitted photos return 404; AI failures return 503 and are
   not cached. Only input-only inference is cached: photo identifiers/revision, bytes and
   media type form the key, excluding correlation ID. Hits skip inference, while misses
-  retain the bounded AI call and error mapping. Successful nested label lists are frozen;
-  absolute expiry is 300 seconds. Current adapters are mocks, with no outgoing network call.
+  retain the bounded AI call and error mapping. Successful nested label lists are frozen
+  and come back from Redis as read-only lists; absolute expiry is 300 seconds. If Redis is
+  unavailable or an entry is unreadable, inference runs once and the request still
+  succeeds; write failures are only logged (warning 2103/2104). Current adapters are mocks;
+  the only outgoing network call is the Redis cache connection.
 
 ## Local Kubernetes alternative
 
@@ -126,6 +130,9 @@ flowchart LR
     Client -->|"7. HTTP localhost:5083 (Swagger, Development-only routes)"| Forward
     Forward -->|"7.1 Tunnel through the Kubernetes API"| Service
     Service -->|"8. Select the ready API endpoint on 8080"| Pod
+    Redis["Shared redis:6379 Deployment (with Listings); no PVC or host port"]
+    Operator -->|"9. Before the DB: ensure redis-credentials Secret and Redis rollout"| Redis
+    Pod -->|"9.1 Photo-analysis cache via ConnectionStrings__Redis"| Redis
 ```
 
 Failure paths: a failed migration Job exits nonzero, is retained for its logs and stops the
@@ -135,8 +142,9 @@ pod unready (arrow 6 returns 503) without restarting it. Readiness never runs a 
 endpoint, the demo seed or a migration. Kubernetes restarts crashed containers and recreates
 deleted pods; the PVC survives database pod replacement but not namespace or cluster
 deletion. Swagger and the test endpoints exist only because the local overlay patches
-`matching-environment` to `Development` and `MockAdapters__Enabled=true`. The photo-analysis cache stays the existing
-process-local `IQueryCache`, so it is per pod and empty after each restart. Matching
+`matching-environment` to `Development` and `MockAdapters__Enabled=true`. The photo-analysis cache is the shared Redis
+(arrow 9.1), so entries survive API pod replacement. Redis readiness is not part of the
+API readiness probe, and a Redis outage only reruns inference. Matching
 still has no NodePort, Kind host mapping, RabbitMQ connection or calls to Listings.
 
 ## Current model-test interactions
@@ -186,6 +194,13 @@ category synonym normalization are not implemented.
 - [Proposed matching components](../../../docs/diagrams/member-5/smartlost-matching-components.puml)
 
 ## Review notes
+
+- 2026-11-21: Replaced the process-local photo-analysis cache with the shared Redis-backed
+  `DistributedQueryCache` (arrows 8.2.1–8.4 and Kubernetes 9–9.1; Compose passes
+  `ConnectionStrings__Redis`). The outer photo-access check, cache key inputs,
+  300-second TTL, success-only storage and uncached suggestions are unchanged. Reviewed
+  together with the Auth and Listings diagrams because shared BuildingBlocks and root
+  Compose changed.
 
 - 2026-11-20: Added the local Kubernetes flow (arrows 1-8 in "Local Kubernetes
   alternative"): Matching API Deployment/ClusterIP Service, its own PostgreSQL

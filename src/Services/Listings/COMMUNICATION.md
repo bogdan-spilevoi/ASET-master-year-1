@@ -18,6 +18,7 @@ flowchart LR
     Client["Host browser / HTTP client"]
     Tools["Host EF CLI / optional seed.sh"]
     Seed["One-off API image: SeedData:Only=true"]
+    Redis[("redis:6379 (internal, shared with Matching; no host port)")]
     Compose -->|"1. Build with repository-root context; exclude local settings"| Build
     Settings -->|"2. Supply PostgreSQL container password"| Compose
     ApiSettings -->|"2.1 Read-only bind at /app/appsettings.json; API connection and seed settings"| API
@@ -28,6 +29,8 @@ flowchart LR
     Tools -->|"7. Explicit migration / optional seed through localhost:5433"| DB
     Compose -->|"8. Optional run --rm --no-deps with seed-only argument"| Seed
     Seed -->|"9. Transactional idempotent fixtures, then exit without HTTP"| DB
+    Settings -->|"10. REDIS_PASSWORD: Redis requirepass and ConnectionStrings__Redis"| Compose
+    API -->|"10.1 Category cache read/write, TTL 300 s, keys smartlost:listings:development:"| Redis
 ```
 
 The root Compose file groups Auth, Listings and Matching and their own databases.
@@ -38,8 +41,10 @@ API and the container cannot bind that port simultaneously. No Auth/Matching net
 calls are introduced. API/Compose startup never applies migrations; database health is
 not schema readiness. Database read errors follow the existing HTTP 500 path, without a
 new query retry policy. Both services use `restart: unless-stopped` for process exits;
-one-off seed failures exit nonzero for manual correction/retry. Cache remains per API
-process and is cleared on API restart. Stop/down preserve database data unless volume
+one-off seed failures exit nonzero for manual correction/retry. The category cache lives
+in the internal `redis` service (arrow 10.1). The API starts without waiting for Redis
+health, and while Redis is unavailable each request reads PostgreSQL once. Restarting the
+API keeps cached entries; restarting Redis clears them. Stop/down preserve database data unless volume
 removal is explicitly requested; adopted external volumes survive even `down --volumes`.
 Cloud deployment remains inactive.
 
@@ -86,6 +91,9 @@ flowchart LR
     Inspector -->|"10.2 Every 2 seconds: claim due rows, persist outcomes"| Database
     Inspector -->|"11. Persistent mandatory publish; wait for confirm"| Broker
     Broker -->|"11.1 Store durable queue/messages; no consumer yet"| BrokerStorage
+    Redis["Shared redis:6379 Deployment; no PVC or host port"]
+    Operator -->|"12. Before migration: ensure redis-credentials Secret and Redis rollout"| Redis
+    Pods -->|"12.1 Category cache read/write via ConnectionStrings__Redis, shared by all 3 pods"| Redis
 ```
 
 Migration Job failures exit nonzero and require explicit correction/recreation (no
@@ -95,8 +103,10 @@ is unavailable, removing that pod from normal Service traffic; TCP liveness does
 restart the API merely because the database is down. Application query retry behavior
 is unchanged. The singleton database is unavailable during pod replacement and is not HA.
 The PVC survives database pod replacement/StatefulSet deletion, but namespace or Kind
-cluster deletion destroys this local data. Category cache remains per process; restart
-API pods or wait for TTL after optional seeding if an empty category result was cached.
+cluster deletion destroys this local data. The category cache is the shared Redis
+(arrow 12): after optional seeding, wait for the TTL or delete the `smartlost:listings:*`
+keys if an empty category result was cached. A Redis outage only costs one database read
+per request.
 The Publish worker adds an outgoing AMQP connection and retries failed deliveries through
 the shared processor. No HTTP route or cloud workflow is added. Worker readiness indicates
 a running host, not successful DB/broker delivery. Startup does not migrate or seed
@@ -137,7 +147,8 @@ flowchart LR
     API["Categories / Listings controller"]
     Validation["MediatR: Profiling + ExceptionToResult + Authorization + Validation"]
     Aspect["CachingBehavior: inspect CacheableQueryAttribute"]
-    Cache["Singleton IQueryCache / MemoryQueryCache"]
+    Cache["Singleton IQueryCache / DistributedQueryCache"]
+    Redis[("Redis: smartlost:listings:<env>:... (process-local store without ConnectionStrings:Redis)")]
     Handler["Query handler"]
     Port["IListingsReadStore / EF projection"]
     DB[("Listings PostgreSQL")]
@@ -148,12 +159,15 @@ flowchart LR
     Validation -->|"3.1 Invalid query: HTTP 400"| Result
     Aspect -->|"4. Categories: typed/parameter key, TTL 300 seconds"| Cache
     Aspect -->|"4.1 Unmarked list/detail: call next directly"| Handler
-    Cache -->|"5. Unexpired hit: immutable successful snapshot"| Result
-    Cache -->|"5.1 Miss: await stripe, recheck, invoke next"| Handler
+    Cache -->|"4.2 Read scoped key"| Redis
+    Cache -->|"5. Readable unexpired hit: deserialized read-only snapshot"| Result
+    Cache -->|"5.1 Miss, expired or unreadable: await stripe, reread, invoke next"| Handler
+    Cache -->|"5.2 Redis unavailable: invoke next once; skip write"| Handler
     Handler -->|"6. Read DTOs / filtered page / Open detail"| Port
     Port -->|"7. SELECT AsNoTracking; filter/sort/project/paginate"| DB
     DB -->|"8. Selected values"| Handler
-    Handler -->|"9. Categories: freeze DTO list; store only non-cancelled success"| Cache
+    Handler -->|"9. Categories: freeze DTO list; return to cache"| Cache
+    Cache -->|"9.2 Store only non-cancelled success; 300-second absolute expiry; failures logged, not thrown"| Redis
     Handler -->|"9.1 Return Result; missing/hidden detail maps to 404"| Result
     Result -->|"10. HTTP 200 DTOs or ProblemDetails"| Client
 ```
@@ -163,11 +177,14 @@ lookups, including hits. Only GetCategoriesQuery is annotated; unmarked listing/
 queries always query current Open-only data. Missing, Draft and Closed details remain
 indistinguishable (404). Read DTOs exclude private BlobKey and mutable Domain entities.
 
-MemoryQueryCache uses absolute TTL, process-local storage, a 1024-entry capacity and
-32 bounded miss-lock stripes. Same-key concurrent misses populate once; hits skip the
-handler/read store. Failure Results, thrown exceptions and cancellation are not stored.
-Cancelled waiters do not cancel another request's population. GetCategoriesQueryHandler
-returns a read-only snapshot of immutable CategoryDto records. Direct catalog changes
+DistributedQueryCache stores versioned JSON envelopes with an absolute TTL in Redis when
+`ConnectionStrings:Redis` is set, and in a process-local store otherwise. Within one
+process, same-key concurrent misses populate once, and 32 bounded miss-lock stripes
+coordinate them. Replicas are not coordinated with each other. Hits skip the handler/read
+store. Failure Results, thrown exceptions and cancellation are not stored. Cancelled
+waiters do not cancel another request's population. Unreadable entries and Redis outages
+run the handler once and never fail the request. GetCategoriesQueryHandler returns a
+read-only snapshot of immutable CategoryDto records, and hits come back as read-only lists. Direct catalog changes
 can remain stale until expiry; mutation invalidation is not implemented in this phase.
 
 Read requests do not write, start an application transaction or call Auth/Matching/Blob
@@ -406,6 +423,13 @@ publishes metadata to RabbitMQ; full snapshot production/consumption remains pla
 - [Proposed publication activity](../../../docs/diagrams/member-4/smartlost-publication-activity.puml)
 
 ## Review notes
+
+- 2026-11-21: Replaced the in-memory query cache with the shared Redis-backed
+  `DistributedQueryCache`. Added Redis arrows to the Compose (10, 10.1), Kubernetes
+  (12, 12.1) and category-cache (4.2, 5–5.2, 9.2) flows. Cached query, TTL, key inputs,
+  success-only storage and validation-before-cache are unchanged. The worker and migration
+  Job do not use Redis. Reviewed together with the Auth and Matching diagrams because
+  shared BuildingBlocks and root Compose changed.
 
 - 2026-11-20: The shared local overlay now also renders Matching. `./k8s.sh deploy listings`
   applies only overlay objects without the `smartlost/service=matching` label, so Listings

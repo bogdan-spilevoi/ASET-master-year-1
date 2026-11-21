@@ -237,16 +237,20 @@ sequences. No Matching consumer/full snapshot integration is implemented.
 
 `AddBuildingBlocksApplication(..., useCaching: true)` inserts CachingBehavior after
 Validation and before the optional transaction behavior. A service must also register
-`AddBuildingBlocksQueryCache()` from Infrastructure. Defaults stay uncached; Auth has
-not opted in. Requests without CacheableQueryAttribute bypass cache handling.
+`AddBuildingBlocksQueryCache(configuration, "<service>")` from Infrastructure. Defaults
+stay uncached; Auth registers the backend but has no attributed request. Requests without
+CacheableQueryAttribute bypass cache handling.
 
 The attribute declares a prefix and positive TTL. Keys include request/response types
 and a hash of serialized query properties. Only successful, non-cancelled immutable
-snapshots are retained. The initial active query is GetCategoriesQuery in Listings,
-with a read-only category DTO collection and 300-second absolute lifetime. The backend
-uses process-local MemoryCache, bounded entry count and striped miss coordination.
-See [complete policy, tests and AOP explanation](QUERY_CACHING.md). No mutation
-invalidation or distributed cache is implemented in this phase.
+snapshots are retained. The active queries are Listings GetCategoriesQuery and Matching
+AnalyzePhotoContentQuery, each with a 300-second absolute lifetime. The backend,
+`DistributedQueryCache`, serializes Results into a versioned JSON envelope. It stores them
+in Redis when `ConnectionStrings:Redis` is configured, or in a process-local store
+otherwise. Keys are scoped as `smartlost:<service>:<environment>:`. Same-key misses are
+coordinated within a process. Store outages and unreadable entries run the handler once
+instead of failing the request. See [complete policy, tests and AOP explanation](QUERY_CACHING.md).
+No mutation invalidation is implemented.
 
 ## Pagination
 
@@ -437,7 +441,7 @@ combined. Their order is Profiling -> ExceptionToResult -> Authorization -> Vali
 -> Caching -> optional Transaction -> Handler. Authorization and validation therefore
 run before a cached result can be returned. Profiling remains outermost and records
 short-circuited operations too. Auth, Listings and Matching enable all three switches and
-register the process-local query-cache backend. Authorization and caching are still
+register the query-cache backend (Redis in Compose/Kind). Authorization and caching are still
 request-attribute opt-ins: Auth identity is protected, Listings categories are cached,
 and Matching caches input-only photo analysis after checking photo access on every outer
 request. Matching demo requests remain unmarked for authorization. No identity or

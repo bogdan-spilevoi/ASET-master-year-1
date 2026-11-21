@@ -1,6 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SmartLost.BuildingBlocks.Application.Caching;
 using SmartLost.BuildingBlocks.Application.Outbox;
 using SmartLost.BuildingBlocks.Infrastructure.Caching;
@@ -10,11 +16,30 @@ namespace SmartLost.BuildingBlocks.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddBuildingBlocksQueryCache(this IServiceCollection services)
+    /// <summary>
+    /// Registers the shared query cache. With <c>ConnectionStrings:Redis</c> it stores entries in Redis;
+    /// without it (unit tests, plain local runs) the same serialized cache uses a process-local store.
+    /// Keys are scoped by <paramref name="serviceName"/> and the host environment.
+    /// </summary>
+    public static IServiceCollection AddBuildingBlocksQueryCache(this IServiceCollection services,
+        IConfiguration configuration, string serviceName)
     {
         ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceName);
+        string? redis = configuration.GetConnectionString(RedisQueryCacheStore.ConnectionStringName);
         services.TryAddSingleton(TimeProvider.System);
-        services.TryAddSingleton<IQueryCache, MemoryQueryCache>();
+        services.TryAddSingleton<IQueryCache>(provider =>
+        {
+            var scope = QueryCacheScope.For(serviceName,
+                provider.GetService<IHostEnvironment>()?.EnvironmentName ?? Environments.Production);
+            bool useRedis = !string.IsNullOrWhiteSpace(redis);
+            IDistributedCache store = useRedis
+                ? RedisQueryCacheStore.Create(redis!)
+                : new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions { SizeLimit = 16 * 1024 * 1024 }));
+            return new DistributedQueryCache(store, scope, provider.GetRequiredService<TimeProvider>(),
+                provider.GetRequiredService<ILogger<DistributedQueryCache>>(), useRedis ? "Redis" : "process-local", ownsStore: true);
+        });
         return services;
     }
 

@@ -41,3 +41,22 @@ and durable queue survival/reconnection after broker Stop/Start. The same messag
 retained on republish, demonstrating why future consumers require deduplication. Broker
 containers use random host ports/test-only credentials and are removed by the fixture.
 These are protocol integration tests, not a security scan of the deployable broker image.
+
+## Redis query cache
+
+RedisQueryCacheIntegrationTests starts disposable `redis:8.8.4-alpine` containers through
+Testcontainers.Redis, and PostgreSQL 16 where an API is needed. A command interceptor
+counts category SELECTs per API instance.
+- **Two API instances share Redis.** The second returns the first instance's empty
+  category list without a SELECT. The stored key `smartlost:listings:development:...` has
+  a 290–300 second TTL. After categories are inserted directly, the cached empty list
+  stays authoritative. A corrupt entry makes the next request run the handler once and
+  replace it, and the second instance then reads the populated list from Redis.
+- **Redis expiry.** With a frozen clock, a 1-second entry still disappears from Redis
+  and is repopulated, which proves the expiry is set in Redis.
+- **Unavailable Redis.** Both an unreachable port and a Redis stopped after population
+  return HTTP 200 with exactly one category SELECT per request.
+
+```sh
+dotnet test tests/Listings/SmartLost.ListingsService.IntegrationTests/SmartLost.ListingsService.IntegrationTests.csproj --no-build --no-restore --configuration Release --filter "FullyQualifiedName~RedisQueryCacheIntegrationTests"
+```

@@ -114,7 +114,8 @@ Use [the local helper](../../../k8s.sh): `./k8s.sh deploy listings` rebuilds/loa
 worker and migration images, runs the migration Job, then updates both Deployments.
 `./k8s.sh migrate` applies the latest rebuilt bundle alone; `migration-add <Name>`
 generates a new local migration. See the [command guide](../../../deploy/kubernetes/README.md#short-local-commands).
-Kubernetes also retains the current per-process category cache.
+`deploy listings` also ensures the shared internal Redis query cache; all three API
+replicas read the same cached categories.
 Its local overlay exposes only Listings at `http://localhost:5082` through NodePort
 30081 and a loopback Kind host mapping; no port-forward process is required.
 
@@ -134,5 +135,9 @@ See [container setup, seed and lifecycle commands](SmartLost.ListingsService.Api
 ## Category query caching
 
 GetCategoriesQuery uses the shared attribute-driven MediatR cache with a 300-second
-absolute TTL and process-local memory backend. List/detail reads still execute their
+absolute TTL. Compose and Kind store it in the internal Redis (`ConnectionStrings__Redis`),
+shared by all replicas under keys `smartlost:listings:<environment>:...`. Without that
+setting, for example in unit tests or a plain `dotnet run`, a process-local store is used.
+Only successful results are cached, and a Redis outage falls back to the database read.
+List/detail reads still execute their
 Open-only SQL queries. See [flow, policy and AOP explanation](../../../docs/QUERY_CACHING.md).

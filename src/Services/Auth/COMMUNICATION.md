@@ -143,6 +143,14 @@ No cloud schedule or receiver is configured by the repository examples.
 
 ## Review notes
 
+- 2026-11-21: Reviewed the shared Redis-backed query cache and the new root Compose
+  `redis` service. Auth now calls `AddBuildingBlocksQueryCache(configuration, "auth")`
+  because the registration requires a service name. No Auth request has
+  CacheableQueryAttribute, and Compose gives Auth no `ConnectionStrings__Redis`, so its
+  process-local store stays empty. Auth makes no Redis connection, and no identity, token
+  or credential result is cached. HTTP, database, Outbox worker and receiver arrows are
+  unchanged.
+
 - 2026-11-17: Upgraded API AutoMapper from 16.2.0 to 16.3.0 and refreshed API/unit/integration
   dependency locks to fix GHSA-6vhm-j9h7-f9gh and GHSA-gpwp-5797-mjff. Existing request-to-command
   maps, API routes, JWT claims and database/worker communications are unchanged; no arrow changes.

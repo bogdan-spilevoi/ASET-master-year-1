@@ -94,6 +94,11 @@ then dispatches an input-only cacheable query. Successful labels are immutable s
 with a five-minute absolute TTL. The key covers photo identifiers/revision, bytes and
 media type; correlation IDs do not create separate entries. Missing/no-longer-permitted
 photos and inference failures are not cached. The current adapters remain mocks.
+Compose and Kind store entries in the shared internal Redis under
+`smartlost:matching:<environment>:...`, so a cached analysis survives API restarts and is
+shared by replicas. Every hit is deserialized into new read-only lists, and photo access
+is still checked first. Without `ConnectionStrings:Redis` (unit tests, plain `dotnet run`)
+a process-local store is used. A Redis outage only means the analyzer runs again.
 See [cache policy and limitations](../../../docs/QUERY_CACHING.md#matching-photo-analysis).
 
 ## Projects and dependency direction
@@ -184,7 +189,7 @@ first deploy. The helper creates Secret `matching-credentials` from it. The imag
 from this service's Dockerfile, and `--target migrations` builds an EF bundle for
 `MatchingDbContext`. The API rolls out only after the migration Job succeeds. The local
 overlay sets `Development` and `MockAdapters__Enabled=true`. PostgreSQL stays internal at
-`matching-db:5432`. The photo-analysis cache keeps the process-local `IQueryCache`.
+`matching-db:5432`. `deploy matching` also ensures the shared internal Redis query cache.
 `POST /api/matching/demo/seed` deletes every Matching row. Run it only against a
 disposable Kubernetes database.
 

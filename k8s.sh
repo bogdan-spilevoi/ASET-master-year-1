@@ -15,7 +15,8 @@ MATCHING_INFRA_PROJECT=src/Services/Matching/SmartLost.MatchingService.Infrastru
 MATCHING_LOCAL_PORT=5083
 # Rendered overlay objects carry this metadata label only when they belong to Matching.
 MATCHING_SELECTOR=smartlost/service=matching
-NOT_MATCHING_SELECTOR=smartlost/service!=matching
+# Listings rollouts skip Matching and the shared Redis cache, which have their own apply steps.
+LISTINGS_SELECTOR='smartlost/service notin (matching,redis)'
 
 fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"; }
@@ -39,11 +40,11 @@ Usage: ./k8s.sh COMMAND [TARGET]
                             Build/load latest EF bundle; recreate finished Job; wait and show logs
   migration-add NAME [listings|matching]
                             Generate a local EF migration (default: listings); no database connection
-  restart [TARGET]          Restart api/worker/listings/matching/rabbitmq/all (default: listings)
-  stop                      Stop deployed APIs, worker, RabbitMQ and PostgreSQL; retain PVCs
+  restart [TARGET]          Restart api/worker/listings/matching/redis/rabbitmq/all (default: listings)
+  stop                      Stop deployed APIs, worker, RabbitMQ, PostgreSQL and Redis; retain PVCs
   status                    Show local workloads, Services, Jobs and PVCs
   logs [TARGET] [--follow]  Show api/worker/db/rabbitmq/migrations or
-                            matching-api/matching-db/matching-migrations logs (default: worker)
+                            matching-api/matching-db/matching-migrations/redis logs (default: worker)
   ui [rabbitmq|matching]    Forward RabbitMQ management to http://localhost:15672 (default) or
                             the Matching API to http://localhost:5083; Ctrl+C stops
   config                    Create missing ignored .env files from examples; edit placeholders
@@ -75,7 +76,7 @@ create_cluster() {
 
 config_files() {
     local file
-    for file in "$KUBE_DIR/local/.env" "$KUBE_DIR/local/rabbitmq/.env" "$KUBE_DIR/local/matching/.env"; do
+    for file in "$KUBE_DIR/local/.env" "$KUBE_DIR/local/rabbitmq/.env" "$KUBE_DIR/local/matching/.env" "$KUBE_DIR/local/redis/.env"; do
         if [[ ! -e "$file" ]]; then
             (umask 077; cp "$file.example" "$file")
             printf 'Created %s; replace its placeholders before first startup.\n' "$file"
@@ -96,6 +97,7 @@ ensure_secret() {
     case "$name" in
         listings-credentials|matching-credentials) keys='postgres-password connection-string' ;;
         rabbitmq-credentials) keys='username password erlang-cookie' ;;
+        redis-credentials) keys='password connection-string' ;;
         *) fail "No local credential schema is configured for $name." ;;
     esac
     for key in $keys; do
@@ -164,10 +166,19 @@ start_broker() {
     kube rollout status statefulset/rabbitmq --timeout=300s
 }
 
+# Shared by Listings and Matching; both deploy paths call this, so either can run alone.
+start_redis() {
+    kube apply -f "$KUBE_DIR/base/namespace.yaml"
+    ensure_secret redis-credentials "$KUBE_DIR/local/redis/.env"
+    kube apply -k "$KUBE_DIR/base/redis"
+    kube rollout status deployment/redis --timeout=180s
+}
+
 start_infrastructure() {
     kube apply -f "$KUBE_DIR/base/namespace.yaml"
     ensure_secret listings-credentials "$KUBE_DIR/local/.env"
     ensure_secret rabbitmq-credentials "$KUBE_DIR/local/rabbitmq/.env"
+    start_redis
     kube apply -f "$KUBE_DIR/base/listings/db-service.yaml" -f "$KUBE_DIR/base/listings/db-statefulset.yaml"
     kube rollout status statefulset/listings-db --timeout=180s
     start_broker "$1"
@@ -210,14 +221,16 @@ restart_target() {
         rabbitmq) kube rollout restart statefulset/rabbitmq; kube rollout status statefulset/rabbitmq --timeout=300s ;;
         listings) restart_target api; restart_target worker ;;
         matching) kube rollout restart deployment/matching-service; kube rollout status deployment/matching-service --timeout=180s ;;
+        redis) kube rollout restart deployment/redis; kube rollout status deployment/redis --timeout=180s ;;
         all)
             restart_target rabbitmq; restart_target listings
             if exists deployment/matching-service; then restart_target matching; fi ;;
-        *) fail "Unknown restart target '$1'. Use api, worker, listings, matching, rabbitmq or all." ;;
+        *) fail "Unknown restart target '$1'. Use api, worker, listings, matching, redis, rabbitmq or all." ;;
     esac
 }
 
 deploy_matching() {
+    start_redis
     start_matching_database
     run_migration matching
     # Applied only after the migration Job succeeded; Listings objects are not touched.
@@ -247,7 +260,7 @@ deploy_target() {
     [[ "$target" != all ]] || refresh_broker=yes
     start_infrastructure "$refresh_broker"
     run_migration listings
-    kube apply -k "$KUBE_DIR/overlays/local" --selector "$NOT_MATCHING_SELECTOR"
+    kube apply -k "$KUBE_DIR/overlays/local" --selector "$LISTINGS_SELECTOR"
     # Local tags and subPath ConfigMap mounts require replacing existing pods.
     restart_target listings
     if [[ "$target" == all ]]; then
@@ -270,7 +283,8 @@ logs_target() {
         matching-api) resource=deployment/matching-service ;;
         matching-db) resource=statefulset/matching-db ;;
         matching-migrations) resource=job/matching-migrate ;;
-        *) fail "Unknown log target '$1'. Use api, worker, db, rabbitmq, migrations, matching-api, matching-db or matching-migrations." ;;
+        redis) resource=deployment/redis ;;
+        *) fail "Unknown log target '$1'. Use api, worker, db, rabbitmq, migrations, matching-api, matching-db, matching-migrations or redis." ;;
     esac
     case "$2" in
         '') kube logs "$resource" --tail=100 ;;
@@ -295,6 +309,11 @@ stop_workloads() {
         kube wait --for=delete pod -l app.kubernetes.io/name=listings-service --timeout=180s
         kube wait --for=delete pod -l app.kubernetes.io/name=listings-outbox-worker --timeout=180s
         kube scale statefulset/rabbitmq statefulset/listings-db --replicas=0
+        stopped=yes
+    fi
+    # Stop the cache last; its contents are disposable and not persisted.
+    if exists deployment/redis; then
+        kube scale deployment/redis --replicas=0
         stopped=yes
     fi
     [[ "$stopped" == yes ]] || printf 'No Listings or Matching workloads exist; nothing to stop.\n'

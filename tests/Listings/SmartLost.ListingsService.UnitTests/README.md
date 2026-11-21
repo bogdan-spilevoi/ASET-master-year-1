@@ -56,7 +56,8 @@ Domain declarations are maintained manually; no Python or Domain generation step
 
 CategoryCachingTests counts category SELECTs through the real HTTP/MediatR/EF flow, verifies
 one read for repeated requests, absolute TTL refresh using an injected clock and immutable
-cached DTOs. It uses an isolated SQLite connection and no real-time sleep.
+cached DTOs. It uses an isolated SQLite connection, the serialized process-local cache
+store (no Redis server) and no real-time sleep.
 
 Worker mode tests verify Publish registers the shared processor/continuous host and RabbitMQ
 publisher without the inspection reader, and rejects unknown modes. BuildingBlocks tests

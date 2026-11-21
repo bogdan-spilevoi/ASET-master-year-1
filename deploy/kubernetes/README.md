@@ -1,11 +1,12 @@
 # Local Kubernetes: Listings, Matching, PostgreSQL and RabbitMQ
 
 This setup runs three Listings API replicas, one Outbox Publish worker, one Matching API
-replica, a separate PostgreSQL 16 StatefulSet for each service and RabbitMQ 4.4 in
-namespace `smartlost`. Each StatefulSet has a separate 1 GiB PVC. Explicit EF
-migration-bundle Jobs prepare each database. Auth, Redis, Ingress and Azure deployment
-are not included. Root Compose remains independent. Matching has its own section:
-[Matching API and PostgreSQL](#matching-api-and-postgresql).
+replica, a separate PostgreSQL 16 StatefulSet for each service, RabbitMQ 4.4 and one
+shared Redis query cache in namespace `smartlost`. Each StatefulSet has a separate 1 GiB
+PVC; Redis keeps no data on disk. Explicit EF migration-bundle Jobs prepare each database.
+Auth, Ingress and Azure deployment are not included. Root Compose remains independent.
+Matching and Redis have their own sections:
+[Matching API and PostgreSQL](#matching-api-and-postgresql) and [Redis query cache](#redis-query-cache).
 
 ## Short local commands
 
@@ -23,6 +24,8 @@ Use the executable [root helper](../../k8s.sh) from the repository root (Bash on
 ./k8s.sh status
 ./k8s.sh logs worker --follow
 ./k8s.sh logs matching-api --follow
+./k8s.sh logs redis
+./k8s.sh restart redis    # Empties the shared query cache; APIs keep serving meanwhile
 ./k8s.sh ui               # Temporary RabbitMQ UI forwarding; Ctrl+C stops it
 ./k8s.sh ui matching      # Temporary Matching forwarding to localhost:5083; Ctrl+C stops it
 ./k8s.sh stop             # Scale deployed workloads to zero; retain database and broker PVCs
@@ -40,9 +43,10 @@ Use the executable [root helper](../../k8s.sh) from the repository root (Bash on
 
 These separate commands do exactly their named step: build does not load, load does not
 restart, and restart does not build or migrate. Prefer `deploy listings` or
-`deploy matching` for a complete application update. `deploy listings` applies only overlay
-objects without the `smartlost/service=matching` label; `deploy matching` applies only
-objects with it. `deploy all` runs both and rebuilds/restarts the broker too; `up`
+`deploy matching` for a complete application update. Both first ensure the shared Redis
+Secret and Deployment (`smartlost/service=redis`), so either service can be deployed alone.
+`deploy listings` applies only overlay objects whose `smartlost/service` label is neither
+`matching` nor `redis`; `deploy matching` applies only objects labeled `matching`. `deploy all` runs both and rebuilds/restarts the broker too; `up`
 additionally creates the cluster if missing. First installation requires `up`, so the
 broker image is loaded. To resume after `stop`, use `up`; `restart` does not scale
 stopped workloads back up.
@@ -95,6 +99,8 @@ or GitHub workflow was changed by adding this helper; .NET suites were not rerun
 | [base/matching/](base/matching/) | Matching API Deployment/ClusterIP Service, settings and environment ConfigMaps, and its own PostgreSQL StatefulSet/headless Service; every object is labeled `smartlost/service=matching`. |
 | [base/listings/worker-deployment.yaml](base/listings/worker-deployment.yaml) | One Publish worker, no Service or published port; JSON/Secret shared with Listings. |
 | [base/rabbitmq/](base/rabbitmq/) | Internal headless Service and broker StatefulSet/PVC; AMQP 5672, management 15672. |
+| [base/redis/](base/redis/) | Shared query-cache Deployment and ClusterIP Service `redis:6379`; no PVC, NodePort or host mapping. |
+| [local/redis/.env.example](local/redis/.env.example) | Placeholder password and `ConnectionStrings__Redis` value for the ignored `local/redis/.env`. |
 | [images/rabbitmq/Dockerfile](images/rabbitmq/Dockerfile) | Digest-pinned broker base with patched Ubuntu apt libraries; non-root runtime. |
 | [local/rabbitmq/.env.example](local/rabbitmq/.env.example) | Separate ignored broker credentials/cookie file. |
 | [overlays/local/kustomization.yaml](overlays/local/kustomization.yaml) | `smartlost` namespace, three Listings API replicas, the Listings-only NodePort patch and the Matching Development patch. |
@@ -116,7 +122,9 @@ HTTP routes and are not a comprehensive application health check.
 
 The ConfigMap mounts non-secret JSON at `/app/appsettings.json`. The Secret supplies
 `ConnectionStrings__ListingsDatabase`, overriding JSON through standard .NET
-configuration, and the matching PostgreSQL initialization password. Changing a Secret
+configuration, and the matching PostgreSQL initialization password. The API also reads
+`ConnectionStrings__Redis` from the separate `redis-credentials` Secret (see
+[Redis query cache](#redis-query-cache)). Changing a Secret
 does not rotate credentials in an initialized database; environment changes require a
 pod restart. A ConfigMap mounted with `subPath` also requires restarting the API/worker pods.
 Only the local overlay exists; Development enables the current Swagger and seed flow.
@@ -300,7 +308,7 @@ Port 5082 avoids the existing Compose API's port 5081. Kind maps this loopback-o
 to the Service's NodePort 30081, which routes connections to ready API endpoints on 8080.
 New connections can select different replicas; connection reuse does not guarantee a
 different pod per HTTP request. Only Listings has a host mapping/NodePort; no Auth,
-Matching or database port is exposed. Stop any old port-forward using 5082 before creating
+Matching, Redis or database port is exposed. Stop any old port-forward using 5082 before creating
 the replacement cluster. Docker Desktop must stay running for the local cluster.
 
 Seed once using the existing Development-only mode in one API pod. This starts a second,
@@ -312,17 +320,19 @@ curl --fail http://localhost:5082/api/categories
 curl --fail 'http://localhost:5082/api/listings?type=Lost&pageIndex=0&pageSize=10'
 ```
 
-Startup seed remains disabled for all three replicas. The existing category cache is
-per process with a 300-second TTL; a previously cached empty category result can remain
-until expiry. For an immediate category refresh after manual seeding, restart the API:
+Startup seed remains disabled for all three replicas. The category cache is shared in
+Redis with a 300-second TTL, so a previously cached empty category result stays visible
+to every replica until expiry, even after an API restart. To refresh it immediately
+after manual seeding, delete only the Listings cache keys:
 
 ```sh
-kubectl -n smartlost rollout restart deployment/listings-service
-kubectl -n smartlost rollout status deployment/listings-service --timeout=180s
+kubectl -n smartlost exec deploy/redis -- sh -c 'redis-cli --scan --pattern "smartlost:listings:*" | while IFS= read -r key; do redis-cli del "$key"; done'
+curl --fail http://localhost:5082/api/categories
 ```
 
-The fixed URL continues working after rollout; no forwarding process needs restarting.
-No Redis or cache invalidation is added by Kubernetes.
+Keys contain spaces from .NET type names, so delete them one line at a time as above.
+The fixed URL keeps working; no forwarding process or API restart is needed. There is no
+automatic cache invalidation.
 
 ## Matching API and PostgreSQL
 
@@ -341,8 +351,9 @@ is loaded through `envFrom`. The Secret `matching-credentials` supplies
 `matching-environment` sets `Production` and `MockAdapters__Enabled=false`, so the API
 refuses to start on its own (no real photo/AI adapters exist). The local overlay patches it
 to `ASPNETCORE_ENVIRONMENT=Development` and `MockAdapters__Enabled=true`, which enables
-Swagger and the Development-only test endpoints. The photo-analysis cache is unchanged:
-the existing process-local `IQueryCache`, one per pod, emptied on restart.
+Swagger and the Development-only test endpoints. The photo-analysis cache uses the shared
+[Redis query cache](#redis-query-cache) (`ConnectionStrings__Redis` from Secret
+`redis-credentials`), so a cached analysis survives API pod replacement.
 
 Create the ignored credentials file (or run `./k8s.sh config`) and replace **both**
 password placeholders with the same local alphanumeric/hex value:
@@ -446,6 +457,62 @@ To back up Matching before recreating the cluster, use the
 [backup procedure](#backup-and-restore-before-cluster-recreation) with
 `deployment/matching-service`, `matching-db-0`, user/database `matchingservice` and a
 separate `matching.dump` file. Keep the ignored `local/matching/.env` as well.
+
+## Redis query cache
+
+One Redis Deployment (`redis:8.8.4-alpine`) serves the MediatR query cache of every
+Listings and Matching pod in the namespace. It is reachable only inside the cluster at
+`redis:6379`; there is no NodePort, Kind host mapping or port-forward command. Keys are
+scoped as `smartlost:<service>:<environment>:...`, so both services can share it. Only
+Listings `GetCategoriesQuery` and Matching `AnalyzePhotoContentQuery` are stored, each with
+a 300-second absolute TTL. See [query caching](../../docs/QUERY_CACHING.md) for the cache
+policy and failure behavior.
+
+Create the ignored credentials file (or run `./k8s.sh config`) and replace **both**
+placeholders with the same letters/digits password:
+
+```sh
+cp -n deploy/kubernetes/local/redis/.env.example deploy/kubernetes/local/redis/.env
+chmod 600 deploy/kubernetes/local/redis/.env
+```
+
+`./k8s.sh up`, `deploy listings` and `deploy matching` all create Secret
+`redis-credentials` if it is missing, apply [base/redis](base/redis/) and wait for its
+rollout before migrating and rolling out the API. An existing cluster therefore needs
+only this file and one of those commands. Both API Deployments read
+`ConnectionStrings__Redis` from the Secret's `connection-string` key. The worker and the
+migration Jobs do not use Redis. Manual equivalent:
+
+```sh
+kubectl -n smartlost create secret generic redis-credentials --from-env-file=deploy/kubernetes/local/redis/.env --dry-run=client -o yaml | kubectl -n smartlost apply -f -
+kubectl -n smartlost apply -k deploy/kubernetes/base/redis
+kubectl -n smartlost rollout status deployment/redis --timeout=180s
+```
+
+Configuration and security:
+- Redis runs with `requirepass` from the Secret, as UID/GID 999 (the image's `redis`
+  user), with a read-only root filesystem, no capabilities and no service-account token.
+- It has no RDB/AOF persistence. It uses `emptyDir` for `/data` and `/tmp`, `maxmemory
+  64mb` with `allkeys-lru`, and the `Recreate` strategy so two cache pods never run side by side.
+- Probes run `redis-cli ping` and authenticate through `REDISCLI_AUTH` rather than a
+  password argument. The server itself receives the password as the expanded
+  `$(REDIS_PASSWORD)` argument. The manifest therefore contains no secret, but the
+  process list inside the Redis container does.
+
+Cache contents are disposable. Restarting or stopping Redis empties the cache. The APIs
+keep serving and stay Ready meanwhile: each request runs its handler once and logs
+warning 2103. They reconnect automatically when Redis returns.
+
+```sh
+kubectl -n smartlost exec deploy/redis -- redis-cli --scan --pattern 'smartlost:*'
+kubectl -n smartlost exec deploy/redis -- redis-cli info stats | grep keyspace_
+./k8s.sh logs redis
+./k8s.sh restart redis
+```
+
+`./k8s.sh stop` scales Redis to zero after the applications. Existing Secrets are never
+overwritten, and a running pod keeps its old password even after the Secret changes. To
+rotate it, update the Secret yourself, then restart Redis and both APIs.
 
 ## Backup and restore before cluster recreation
 
@@ -663,3 +730,40 @@ Kubernetes API and `127.0.0.1:5082`.
 
 Not executed: a Job that fails against a reachable database (the helper code path is shared
 with Listings), Linux/amd64 images and hosted GitHub Actions.
+
+### Redis cache verification on 2026-11-21
+
+Executed locally on the existing `smartlost-local` cluster (same tool versions as above).
+
+- **Manifests:** `./k8s.sh validate` and `kubectl kustomize` rendered the overlay with the
+  Redis objects. Trivy 0.74.0 `config` reported no HIGH/CRITICAL findings in
+  `deploy/kubernetes`.
+- **Compose:** `docker compose config --quiet` passed with `REDIS_PASSWORD` set and failed
+  with the documented message without it. The rendered `redis` service publishes no ports.
+  A temporary `docker compose up -d --wait redis` became healthy as UID 999 and answered
+  `PONG` with the password. It rejected a wrong password (`WRONGPASS`) and reported
+  `save` empty and `maxmemory 67108864`. The container was removed afterwards.
+- **Independent deploys:**
+  - `./k8s.sh deploy matching` created `redis-credentials`, the Redis Service and Deployment,
+    then migrated and rolled out Matching.
+  - `./k8s.sh deploy listings` then reported Redis `unchanged` and rolled out Listings.
+  - `./k8s.sh up` completed on the second attempt; the first exceeded the 30-minute tool
+    limit during image builds before changing the cluster. Redis ran as UID 999, and both
+    APIs logged `Query cache uses the Redis store.`
+- **Listings across pods:** after seeding, Listings pod A missed and wrote the categories
+  key once (`hmset` 1). Pod B returned the same three categories from Redis
+  (`keyspace_hits` 0 → 1) without another write. The key was
+  `smartlost:listings:development:listings:categories:v1:...` with TTL 300.
+- **Matching:** the first photo analysis wrote
+  `smartlost:matching:development:matching:photo-analysis:v1:...`. After a rollout replaced
+  the Matching pod, the same request was a Redis hit with no new write. Photo revision 2
+  still returned 404, and suggestions returned 200 without creating a key.
+- **Redis outage:** with Redis scaled to zero, Listings categories and Matching photo
+  analysis kept returning 200. With the final client timeouts, one request took about
+  2.1 seconds and the others under 0.06 seconds. Logs showed
+  `Query cache read failed with RedisConnectionException`, all API pods stayed Ready
+  with 0 restarts, and after scaling Redis back the cache was repopulated within two requests.
+- **Key deletion:** the documented one-key-per-line command removed the Listings cache key.
+  An `xargs` variant failed because keys contain spaces.
+
+Not executed: hosted GitHub Actions and a Compose run of the full application stack.
