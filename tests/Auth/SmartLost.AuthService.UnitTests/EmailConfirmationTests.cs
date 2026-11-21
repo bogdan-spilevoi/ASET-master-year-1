@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -13,6 +14,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SmartLost.AuthService.Api.Contracts;
@@ -20,8 +22,10 @@ using SmartLost.AuthService.Application.Contracts;
 using SmartLost.AuthService.Application.IntegrationEvents;
 using SmartLost.AuthService.Application.Interfaces;
 using SmartLost.AuthService.Domain.Entities;
+using SmartLost.AuthService.Infrastructure.Authentication;
 using SmartLost.AuthService.Infrastructure.Outbox;
 using SmartLost.AuthService.Infrastructure.Persistence;
+using SmartLost.AuthService.Worker;
 using SmartLost.BuildingBlocks.Application.Emails;
 using SmartLost.BuildingBlocks.Application.Outbox;
 using SmartLost.BuildingBlocks.Infrastructure.Outbox;
@@ -59,7 +63,7 @@ public sealed class EmailConfirmationTests
             Assert.Contains(messages, message => message.Type == AuthOutboxMessageTypes.ConfirmationEmailRequested && message.ProcessedOn is null);
             Assert.Contains(messages, message => message.Type == AuthIntegrationEventTypes.UserCreated && message.ProcessedOn is null);
 
-            OutboxProcessor<AuthDbContext> processor = CreateEmailProcessor(context, emailSender, fixture.Clock);
+            OutboxProcessor<AuthDbContext> processor = CreateEmailProcessor(scope.ServiceProvider, emailSender, fixture.Clock);
             int delivered = await processor.ProcessBatchAsync(CancellationToken.None);
             Assert.Equal(1, delivered);
 
@@ -142,7 +146,7 @@ public sealed class EmailConfirmationTests
         using (IServiceScope firstScope = fixture.Factory.Services.CreateScope())
         {
             AuthDbContext context = firstScope.ServiceProvider.GetRequiredService<AuthDbContext>();
-            OutboxProcessor<AuthDbContext> failingProcessor = CreateEmailProcessor(context, new FailingEmailSender(), fixture.Clock);
+            OutboxProcessor<AuthDbContext> failingProcessor = CreateEmailProcessor(firstScope.ServiceProvider, new FailingEmailSender(), fixture.Clock);
             Assert.Equal(0, await failingProcessor.ProcessBatchAsync(CancellationToken.None));
 
             OutboxMessage failed = await context.OutboxMessages.AsNoTracking()
@@ -157,7 +161,7 @@ public sealed class EmailConfirmationTests
         using (IServiceScope retryScope = fixture.Factory.Services.CreateScope())
         {
             AuthDbContext context = retryScope.ServiceProvider.GetRequiredService<AuthDbContext>();
-            OutboxProcessor<AuthDbContext> retryProcessor = CreateEmailProcessor(context, recoverySender, fixture.Clock);
+            OutboxProcessor<AuthDbContext> retryProcessor = CreateEmailProcessor(retryScope.ServiceProvider, recoverySender, fixture.Clock);
             Assert.Equal(0, await retryProcessor.ProcessBatchAsync(CancellationToken.None));
 
             fixture.Clock.Advance(TimeSpan.FromSeconds(2));
@@ -224,8 +228,7 @@ public sealed class EmailConfirmationTests
         RecordingEmailSender sender = new();
         using (IServiceScope scope = customFixture.Factory.Services.CreateScope())
         {
-            AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
-            Assert.Equal(1, await CreateEmailProcessor(context, sender, customFixture.Clock).ProcessBatchAsync(CancellationToken.None));
+            Assert.Equal(1, await CreateEmailProcessor(scope.ServiceProvider, sender, customFixture.Clock).ProcessBatchAsync(CancellationToken.None));
         }
 
         EmailMessage sentEmail = Assert.Single(sender.Messages);
@@ -275,8 +278,8 @@ public sealed class EmailConfirmationTests
         RecordingEmailSender sender = new();
         using (IServiceScope scope = fixture.Factory.Services.CreateScope())
         {
+            Assert.Equal(1, await CreateEmailProcessor(scope.ServiceProvider, sender, fixture.Clock).ProcessBatchAsync(CancellationToken.None));
             AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
-            Assert.Equal(1, await CreateEmailProcessor(context, sender, fixture.Clock).ProcessBatchAsync(CancellationToken.None));
             EmailConfirmationToken storedToken = await context.EmailConfirmationTokens.SingleAsync();
             context.Entry(storedToken).Property(value => value.ExpiresAtUtc).CurrentValue = DateTime.UtcNow.AddMinutes(-1);
             await context.SaveChangesAsync();
@@ -332,8 +335,13 @@ public sealed class EmailConfirmationTests
         Assert.Equal(1, await context.EmailConfirmationTokens.CountAsync());
         OutboxMessage emailOutbox = await context.OutboxMessages
             .SingleAsync(message => message.Type == AuthOutboxMessageTypes.ConfirmationEmailRequested);
-        EmailMessage payload = JsonSerializer.Deserialize<EmailMessage>(emailOutbox.Payload, JsonSerializerOptions.Web)!;
-        Assert.Equal("direct.user@example.com", payload.ToAddress);
+        Assert.Equal(2, emailOutbox.Version);
+        using var json = JsonDocument.Parse(emailOutbox.Payload);
+        Assert.Equal(["encryptedToken", "expiresAtUtc", "recipient"],
+            json.RootElement.EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal));
+        Assert.Equal("direct.user@example.com", json.RootElement.GetProperty("recipient").GetString());
+        Assert.Equal((await context.EmailConfirmationTokens.SingleAsync()).ExpiresAtUtc,
+            json.RootElement.GetProperty("expiresAtUtc").GetDateTimeOffset().UtcDateTime);
     }
 
     [Fact]
@@ -352,8 +360,7 @@ public sealed class EmailConfirmationTests
         RecordingEmailSender sender = new();
         using (IServiceScope scope = fixture.Factory.Services.CreateScope())
         {
-            AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
-            Assert.Equal(1, await CreateEmailProcessor(context, sender, fixture.Clock).ProcessBatchAsync(CancellationToken.None));
+            Assert.Equal(1, await CreateEmailProcessor(scope.ServiceProvider, sender, fixture.Clock).ProcessBatchAsync(CancellationToken.None));
         }
 
         string token = ExtractToken(Assert.Single(sender.Messages).TextBody);
@@ -382,33 +389,114 @@ public sealed class EmailConfirmationTests
     public async Task EmailPublisherValidatesEnvelopeContractAndPayload()
     {
         RecordingEmailSender sender = new();
-        AuthOutboxEmailPublisher publisher = new(sender);
+        using SqliteConfirmFixture fixture = new();
+        AuthOutboxEmailPublisher publisher = CreatePublisher(fixture.Factory.Services, sender, fixture.Clock);
 
         await Assert.ThrowsAsync<ArgumentNullException>(() => publisher.PublishAsync(null!, CancellationToken.None));
         await Assert.ThrowsAsync<InvalidOperationException>(() => publisher.PublishAsync(
             new OutboxEnvelope(Guid.NewGuid(), AuthIntegrationEventTypes.UserCreated, 1, "{}", DateTimeOffset.UtcNow),
             CancellationToken.None));
         await Assert.ThrowsAsync<InvalidOperationException>(() => publisher.PublishAsync(
-            new OutboxEnvelope(Guid.NewGuid(), AuthOutboxMessageTypes.ConfirmationEmailRequested, 2, "{}", DateTimeOffset.UtcNow),
+            new OutboxEnvelope(Guid.NewGuid(), AuthOutboxMessageTypes.ConfirmationEmailRequested, 3, "{}", DateTimeOffset.UtcNow),
             CancellationToken.None));
         await Assert.ThrowsAsync<InvalidOperationException>(() => publisher.PublishAsync(
             new OutboxEnvelope(Guid.NewGuid(), AuthOutboxMessageTypes.ConfirmationEmailRequested, 1, "null", DateTimeOffset.UtcNow),
             CancellationToken.None));
         Assert.Empty(sender.Messages);
+
+        var legacy = new EmailMessage("old@example.com", "Legacy confirmation", "Already queued", null);
+        var previousEnvelope = new OutboxEnvelope(Guid.NewGuid(), AuthOutboxMessageTypes.ConfirmationEmailRequested,
+            1, JsonSerializer.Serialize(legacy, JsonSerializerOptions.Web), DateTimeOffset.UtcNow);
+        await publisher.PublishAsync(previousEnvelope, CancellationToken.None);
+        Assert.Equal(legacy.TextBody, Assert.Single(sender.Messages).TextBody);
+    }
+
+    [Fact]
+    public async Task WorkerRendersOnlyUnexpiredRequestsAndReusesTheSameToken()
+    {
+        using SqliteConfirmFixture fixture = new();
+        using IServiceScope scope = fixture.Factory.Services.CreateScope();
+        var user = UserAccount.Create("template.user", "template@example.com", DateTime.UtcNow);
+        user.SetPasswordHash("test-hash");
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+        context.Users.Add(user);
+        await scope.ServiceProvider.GetRequiredService<IEmailConfirmationService>()
+            .EnqueueConfirmationAsync(user, CancellationToken.None);
+        OutboxMessage row = await context.OutboxMessages.SingleAsync(m => m.Type == AuthOutboxMessageTypes.ConfirmationEmailRequested);
+        OutboxEnvelope envelope = row.ToEnvelope();
+
+        // A separate worker host receives the same secret, as it would in another pod.
+        string sharedKey = scope.ServiceProvider.GetRequiredService<IOptions<EmailConfirmationOptions>>().Value.EncryptionKey;
+        using IHost worker = WorkerProgram.BuildHost(
+        [
+            "--ConnectionStrings:AuthDatabase=Host=localhost;Database=unused",
+            "--Worker:Mode=Email",
+            "--EmailConfirmation:EncryptionKey=" + sharedKey,
+            "--EmailConfirmation:ConfirmationBaseUrl=https://worker.example.com/api/auth/confirm-email"
+        ]);
+        RecordingEmailSender sender = new();
+        AuthOutboxEmailPublisher publisher = new(sender, worker.Services.GetRequiredService<AuthEmailComposer>(), fixture.Clock);
+        await publisher.PublishAsync(envelope, CancellationToken.None);
+        await publisher.PublishAsync(envelope, CancellationToken.None);
+        EmailMessage[] sent = [.. sender.Messages];
+        Assert.Equal(2, sent.Length);
+        Assert.Contains("https://worker.example.com/api/auth/confirm-email?", sent[0].TextBody, StringComparison.Ordinal);
+        string token = ExtractToken(sent[0].TextBody);
+        Assert.Equal(token, ExtractToken(sent[1].TextBody));
+        Assert.DoesNotContain(token, row.Payload, StringComparison.Ordinal);
+
+        fixture.Clock.Advance(TimeSpan.FromDays(2));
+        await publisher.PublishAsync(envelope, CancellationToken.None);
+        Assert.Equal(2, sender.Messages.Count);
+    }
+
+    [Fact]
+    public void ProtectedTokenIsBoundToItsKeyAndRequest()
+    {
+        IOptions<EmailConfirmationOptions> options = Options.Create(new EmailConfirmationOptions
+        {
+            EncryptionKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+        });
+        ConfirmationTokenProtector protector = new(options);
+        var id = Guid.NewGuid();
+        DateTimeOffset expiry = DateTimeOffset.UtcNow.AddHours(1);
+        const string Recipient = "intended@example.com";
+        string token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        string ciphertext = protector.Protect(token, id, Recipient, expiry);
+        Assert.NotEqual(ciphertext, protector.Protect(token, id, Recipient, expiry));
+        Assert.Equal(token, new ConfirmationTokenProtector(options).Unprotect(ciphertext, id, Recipient, expiry));
+        Assert.Throws<AuthenticationTagMismatchException>(() => protector.Unprotect(ciphertext, id, "other@example.com", expiry));
+        Assert.Throws<AuthenticationTagMismatchException>(() => protector.Unprotect(ciphertext, Guid.NewGuid(), Recipient, expiry));
+        Assert.Throws<AuthenticationTagMismatchException>(() => protector.Unprotect(ciphertext, id, Recipient, expiry.AddMinutes(1)));
+        byte[] tampered = Convert.FromBase64String(ciphertext);
+        tampered[^1] ^= 1;
+        Assert.Throws<AuthenticationTagMismatchException>(() => protector.Unprotect(Convert.ToBase64String(tampered), id, Recipient, expiry));
+        Assert.Throws<CryptographicException>(() => protector.Unprotect("AA==", id, Recipient, expiry));
+        ConfirmationTokenProtector otherKey = new(Options.Create(new EmailConfirmationOptions
+        {
+            EncryptionKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+        }));
+        Assert.Throws<AuthenticationTagMismatchException>(() => otherKey.Unprotect(ciphertext, id, Recipient, expiry));
     }
 
     private static OutboxProcessor<AuthDbContext> CreateEmailProcessor(
-        AuthDbContext context, IEmailSender emailSender, TimeProvider timeProvider)
+        IServiceProvider services, IEmailSender emailSender, TimeProvider timeProvider)
     {
         return new OutboxProcessor<AuthDbContext>(
-            context,
-            new AuthOutboxEmailPublisher(emailSender),
+            services.GetRequiredService<AuthDbContext>(),
+            CreatePublisher(services, emailSender, timeProvider),
             Options.Create(new OutboxOptions
             {
                 MessageTypes = [AuthOutboxMessageTypes.ConfirmationEmailRequested]
             }),
             timeProvider,
             NullLogger<OutboxProcessor<AuthDbContext>>.Instance);
+    }
+
+    private static AuthOutboxEmailPublisher CreatePublisher(IServiceProvider services, IEmailSender sender, TimeProvider clock)
+    {
+        IOptions<EmailConfirmationOptions> options = services.GetRequiredService<IOptions<EmailConfirmationOptions>>();
+        return new AuthOutboxEmailPublisher(sender, new AuthEmailComposer(new ConfirmationTokenProtector(options), options), clock);
     }
 
     private static void AssertSecurityHeaders(HttpResponseMessage response)
@@ -478,7 +566,7 @@ public sealed class EmailConfirmationTests
 
     private sealed class TestClock : TimeProvider
     {
-        private DateTimeOffset _now = new(2026, 11, 20, 12, 0, 0, TimeSpan.Zero);
+        private DateTimeOffset _now = DateTimeOffset.UtcNow;
 
         public override DateTimeOffset GetUtcNow()
         {

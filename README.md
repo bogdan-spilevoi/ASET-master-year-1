@@ -423,7 +423,11 @@ appsettings.Docker.json for its container (`Host=auth-db`, `listings-db` or `mat
 Set LISTINGS_POSTGRES_PASSWORD in the root `.env` and use the same password in Listings
 JSON connection strings. Compose loads the root `.env` automatically. PowerShell uses the same paths with `Copy-Item` instead of `cp`.
 Local `appsettings*.json` files are ignored by Git; only `appsettings*.example.json` files
-are versioned. Replace the JWT signing-key placeholder in local files. Compose's database
+are versioned. Replace the JWT signing-key placeholder in local files. For Auth, generate a separate
+32-byte key once with `openssl rand -base64 32` and set `EmailConfirmation:EncryptionKey`
+in the ignored Auth settings. Compose shares the Docker setting with the email worker.
+Native worker processes must use the same key as the API. The worker builds the email
+from the recipient, encrypted token and expiration stored in the Outbox. Compose's database
 uses the documented development-only password in the examples; keep database passwords
 consistent if changing the local stack. Share completed JSON settings privately with teammates.
 .NET loads configuration directly from JSON; no extra file loader or user-secrets setup is required.
@@ -568,7 +572,7 @@ worker, PostgreSQL 16 and RabbitMQ 4.4. Each database and RabbitMQ StatefulSet h
 1 GiB PVC; Mailpit runs in-memory with a read-only rootfs and non-root UID/GID `65532`.
 ConfigMaps/Secrets supply configuration (including `auth-settings` with `mailpit:1025`,
 `http://localhost:5080/api/auth/confirm-email` and `Worker:Mode=Email`, plus `auth-credentials`
-with `Jwt__SigningKey`);
+with `Jwt__SigningKey` and the separate `auth-email-protection` Secret for API and email worker);
 explicit `auth-migrate` and `listings-migrate` EF bundle Jobs run before the applications.
 Both Auth and Listings API/worker Dockerfiles build separate images (`runtime` and opt-in
 `migrations` targets) alongside the [patched broker Dockerfile](deploy/kubernetes/images/rabbitmq/Dockerfile).

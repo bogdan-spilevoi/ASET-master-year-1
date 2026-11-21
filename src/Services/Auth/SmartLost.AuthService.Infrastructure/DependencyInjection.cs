@@ -28,11 +28,7 @@ public static class DependencyInjection
             .Validate(options => !string.IsNullOrWhiteSpace(options.SigningKey) && Encoding.UTF8.GetByteCount(options.SigningKey) >= 32,
                 "Jwt:SigningKey must contain at least 32 UTF-8 bytes.")
             .ValidateOnStart();
-        services.AddOptions<EmailConfirmationOptions>()
-            .Bind(configuration.GetSection(EmailConfirmationOptions.SectionName))
-            .ValidateDataAnnotations()
-            .Validate(options => options.IsValid(), "Configure a valid HTTP/HTTPS EmailConfirmation:ConfirmationBaseUrl and TokenExpiryHours between 1 and 168.")
-            .ValidateOnStart();
+        AddEmailConfirmation(services, configuration);
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
         services.AddScoped<IUnitOfWork, AuthUnitOfWork>();
         services.AddScoped<IPasswordHasher<UserAccount>, PasswordHasher<UserAccount>>();
@@ -63,6 +59,8 @@ public static class DependencyInjection
     public static IServiceCollection AddAuthEmailOutboxWorker(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddAuthPersistence(configuration);
+        AddEmailConfirmation(services, configuration);
+        services.AddSingleton<AuthEmailComposer>();
         services.AddBuildingBlocksSmtpEmailSender(options => configuration.GetSection(SmtpEmailOptions.SectionName).Bind(options));
         services.AddBuildingBlocksOutboxDelivery<AuthDbContext>(
             options =>
@@ -73,6 +71,16 @@ public static class DependencyInjection
             delivery => configuration.GetSection("OutboxDelivery").Bind(delivery));
         services.AddScoped<IOutboxMessagePublisher, AuthOutboxEmailPublisher>();
         return services;
+    }
+
+    private static void AddEmailConfirmation(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<EmailConfirmationOptions>()
+            .Bind(configuration.GetSection(EmailConfirmationOptions.SectionName))
+            .ValidateDataAnnotations()
+            .Validate(options => options.IsValid(), "Configure a valid HTTP/HTTPS EmailConfirmation:ConfirmationBaseUrl and TokenExpiryHours between 1 and 168, and a Base64-encoded 32-byte EmailConfirmation:EncryptionKey.")
+            .ValidateOnStart();
+        services.AddSingleton<ConfirmationTokenProtector>();
     }
 
     private static void AddAuthPersistence(this IServiceCollection services, IConfiguration configuration)

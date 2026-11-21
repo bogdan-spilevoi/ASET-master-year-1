@@ -10,6 +10,10 @@
       "auth.user.identity_changed": "https://consumer.invalid/"
     }
   },
+  "EmailConfirmation": {
+    "EncryptionKey": "replace-with-same-key-as-auth-api",
+    "ConfirmationBaseUrl": "http://localhost:5048/api/auth/confirm-email"
+  },
   "Smtp": {
     "Host": "localhost",
     "Port": 1025,

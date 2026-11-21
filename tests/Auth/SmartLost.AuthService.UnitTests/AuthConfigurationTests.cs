@@ -97,6 +97,8 @@ public sealed class AuthConfigurationTests : IDisposable
     [InlineData("EmailConfirmation:ConfirmationBaseUrl", "")]
     [InlineData("EmailConfirmation:ConfirmationBaseUrl", "relative/path")]
     [InlineData("EmailConfirmation:ConfirmationBaseUrl", "ftp://example.com/confirm")]
+    [InlineData("EmailConfirmation:EncryptionKey", "")]
+    [InlineData("EmailConfirmation:EncryptionKey", "invalid")]
     [InlineData("EmailConfirmation:TokenExpiryHours", "0")]
     [InlineData("EmailConfirmation:TokenExpiryHours", "169")]
     public async Task InvalidEmailConfirmationConfigurationFailsAtStartup(string key, string value)
@@ -146,6 +148,7 @@ public sealed class AuthConfigurationTests : IDisposable
             ["ConnectionStrings:AuthDatabase"] = "Host=local-test;Database=unused",
             ["Jwt:Issuer"] = "AuthServiceTests",
             ["Jwt:Audience"] = "AuthServiceTests",
+            ["EmailConfirmation:EncryptionKey"] = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
             ["Jwt:SigningKey"] = "test-only-signing-key-at-least-32-characters",
             ["Jwt:ExpiryMinutes"] = "60"
         };

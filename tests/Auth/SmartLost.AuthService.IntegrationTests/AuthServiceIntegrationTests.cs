@@ -361,9 +361,11 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
             AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
             Assert.Equal(2, await context.OutboxMessages.CountAsync());
 
+            IOptions<EmailConfirmationOptions> options = scope.ServiceProvider.GetRequiredService<IOptions<EmailConfirmationOptions>>();
+            AuthEmailComposer composer = new(new ConfirmationTokenProtector(options), options);
             OutboxProcessor<AuthDbContext> failingProcessor = new(
                 context,
-                new AuthOutboxEmailPublisher(new FailingEmailSender()),
+                new AuthOutboxEmailPublisher(new FailingEmailSender(), composer, clock),
                 Options.Create(new OutboxOptions { MessageTypes = [AuthOutboxMessageTypes.ConfirmationEmailRequested] }),
                 clock,
                 NullLogger<OutboxProcessor<AuthDbContext>>.Instance);
@@ -380,7 +382,7 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
             clock.Advance(TimeSpan.FromSeconds(2));
             OutboxProcessor<AuthDbContext> retryProcessor = new(
                 context,
-                new AuthOutboxEmailPublisher(emailSender),
+                new AuthOutboxEmailPublisher(emailSender, composer, clock),
                 Options.Create(new OutboxOptions { MessageTypes = [AuthOutboxMessageTypes.ConfirmationEmailRequested] }),
                 clock,
                 NullLogger<OutboxProcessor<AuthDbContext>>.Instance);
@@ -500,7 +502,7 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
 
     private sealed class ManualClock : TimeProvider
     {
-        private DateTimeOffset _now = new(2026, 11, 20, 12, 0, 0, TimeSpan.Zero);
+        private DateTimeOffset _now = DateTimeOffset.UtcNow;
 
         public override DateTimeOffset GetUtcNow()
         {

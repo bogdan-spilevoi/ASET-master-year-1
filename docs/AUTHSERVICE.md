@@ -1,6 +1,6 @@
 # AuthService
 
-A .NET 10 authentication microservice for the ASET solution. It exposes register, login, refresh, current-user and email confirmation endpoints, issues JWTs, queues email confirmation links atomically into the PostgreSQL Outbox (`auth.email.confirmation_requested`) for post-commit SMTP delivery with retry (`SmartLost.AuthService.Worker` in `Email` mode targeting `Mailpit` in local dev), and delivers profile messages in finite `Batch` mode.
+A .NET 10 authentication microservice for the ASET solution. It exposes register, login, refresh, current-user and email confirmation endpoints, issues JWTs, queues compact encrypted-token confirmation requests atomically into the PostgreSQL Outbox (`auth.email.confirmation_requested`) for post-commit SMTP delivery with retry (`SmartLost.AuthService.Worker` in `Email` mode targeting `Mailpit` in local dev), and delivers profile messages in finite `Batch` mode.
 
 ## Architecture
 
@@ -291,7 +291,7 @@ additional local configuration loader or user-secrets setup.
 | `ConnectionStrings:AuthDatabase` | Full PostgreSQL connection string |
 | `Jwt` | Issuer, audience, signing key and token lifetime |
 | `Smtp` | Used by `SmartLost.AuthService.Worker` (`Worker:Mode=Email`): SMTP host (`localhost` / `mailpit`), port (`1025`), sender address/name and optional credentials/TLS |
-| `EmailConfirmation` | Used by API when queuing confirmation links: public base URL (`/api/auth/confirm-email`) and token expiry hours (`24` default) |
+| `EmailConfirmation` | API and email worker share a dedicated 32-byte Base64 encryption key. The API sets token expiry (24 hours by default) and the worker uses the public base URL to compose confirmation links |
 | `Worker`, `Outbox`, `OutboxDelivery` | Worker mode (`Batch` or `Email`), poll interval, batch size, retry attempts and batch delivery limits |
 | `Logging`, `AllowedHosts` | Logging and host configuration |
 

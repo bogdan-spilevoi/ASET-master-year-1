@@ -29,6 +29,11 @@ spec:
           env:
             - name: DOTNET_ENVIRONMENT
               value: Development
+            - name: EmailConfirmation__EncryptionKey
+              valueFrom:
+                secretKeyRef:
+                  name: auth-email-protection
+                  key: encryption-key
             - name: ConnectionStrings__AuthDatabase
               valueFrom:
                 secretKeyRef:

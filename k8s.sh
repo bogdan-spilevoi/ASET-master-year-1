@@ -200,6 +200,12 @@ start_listings_infrastructure() {
 start_auth_infrastructure() {
     kube apply -f "$KUBE_DIR/base/namespace.yaml"
     ensure_secret auth-credentials "$KUBE_DIR/local/auth/.env"
+    if [[ -z "$(kube get secret auth-email-protection --ignore-not-found -o name)" ]]; then
+        need openssl
+        local email_key
+        email_key=$(openssl rand -base64 32)
+        printf '%s' "$email_key" | kube create secret generic auth-email-protection --from-file=encryption-key=/dev/stdin
+    fi
     kube apply -f "$KUBE_DIR/base/auth/db-service.yaml" -f "$KUBE_DIR/base/auth/db-statefulset.yaml"
     kube rollout status statefulset/auth-db --timeout=180s
     start_mailpit "$1"

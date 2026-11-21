@@ -96,6 +96,7 @@ public sealed class AuthServiceFactory : WebApplicationFactory<Program>, IAsyncL
             ["ConnectionStrings:AuthDatabase"] = _database.GetConnectionString(),
             ["Jwt:Issuer"] = "AuthServiceIntegrationTests",
             ["Jwt:Audience"] = "AuthServiceIntegrationTests",
+            ["EmailConfirmation:EncryptionKey"] = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
             ["Jwt:SigningKey"] = "test-only-signing-key-at-least-32-characters",
             ["Jwt:ExpiryMinutes"] = "60",
             ["Jwt:RefreshTokenExpiryDays"] = "7"

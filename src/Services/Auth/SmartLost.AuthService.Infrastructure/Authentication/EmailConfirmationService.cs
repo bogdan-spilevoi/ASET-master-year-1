@@ -1,4 +1,3 @@
-using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -11,7 +10,6 @@ using SmartLost.AuthService.Application.Interfaces;
 using SmartLost.AuthService.Domain.Entities;
 using SmartLost.AuthService.Domain.Errors;
 using SmartLost.AuthService.Infrastructure.Persistence;
-using SmartLost.BuildingBlocks.Application.Emails;
 using SmartLost.BuildingBlocks.Application.Outbox;
 using SmartLost.BuildingBlocks.Core.Results;
 
@@ -21,6 +19,7 @@ public sealed class EmailConfirmationService(
     AuthDbContext dbContext,
     IUserAccountRepository userAccountRepository,
     IOutboxWriter outboxWriter,
+    ConfirmationTokenProtector protector,
     IOptions<EmailConfirmationOptions> options) : IEmailConfirmationService
 {
     public async Task EnqueueConfirmationAsync(UserAccount user, CancellationToken cancellationToken)
@@ -35,27 +34,18 @@ public sealed class EmailConfirmationService(
         var confirmationToken = EmailConfirmationToken.Create(user, tokenHash, nowUtc, expiresAtUtc);
         dbContext.EmailConfirmationTokens.Add(confirmationToken);
 
-        string baseUrl = settings.ConfirmationBaseUrl.Trim();
-        string separator = baseUrl.Contains('?', StringComparison.Ordinal) ? "&" : "?";
-        string confirmationUrl = $"{baseUrl}{separator}token={Uri.EscapeDataString(rawToken)}";
-        string encodedUrl = WebUtility.HtmlEncode(confirmationUrl);
-        string encodedUserName = WebUtility.HtmlEncode(user.UserName);
-        string textBody =
-            $"Hello {user.UserName},\n\n" +
-            $"Confirm your SmartLost email address by opening the link below:\n{confirmationUrl}\n\n" +
-            $"This link expires in {settings.TokenExpiryHours} hours.";
-        string htmlBody =
-            $"<p>Hello {encodedUserName},</p>" +
-            $"<p>Confirm your SmartLost email address by clicking <a href=\"{encodedUrl}\">Confirm email</a>.</p>" +
-            $"<p>If the link does not open, copy this URL into your browser: {encodedUrl}</p>" +
-            $"<p>This link expires in {settings.TokenExpiryHours} hours.</p>";
-
-        var emailMessage = new EmailMessage(user.Email, "Confirm your SmartLost email address", textBody, htmlBody);
-        string payload = JsonSerializer.Serialize(emailMessage, JsonSerializerOptions.Web);
+        string encryptedToken = protector.Protect(rawToken, confirmationToken.Id, user.Email, expiresAtUtc);
+        var request = new ConfirmationEmailRequested
+        {
+            Recipient = user.Email,
+            EncryptedToken = encryptedToken,
+            ExpiresAtUtc = expiresAtUtc
+        };
+        string payload = JsonSerializer.Serialize(request, JsonSerializerOptions.Web);
         outboxWriter.Enqueue(new OutboxEnvelope(
             confirmationToken.Id,
             AuthOutboxMessageTypes.ConfirmationEmailRequested,
-            1,
+            2,
             payload,
             nowUtc));
 

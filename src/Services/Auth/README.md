@@ -41,6 +41,10 @@ configuration or tests. If interactions do not change, add a specific explanatio
 under their review notes. CI checks that the communication document changes; human
 review verifies that the arrows and implementation status remain accurate.
 
+The confirmation Outbox payload (v2) contains the recipient, encrypted token and UTC expiration.
+The email worker renders the subject, text and HTML at delivery time with `AuthEmailComposer`.
+See [worker setup and upgrade](SmartLost.AuthService.Worker/README.md#confirmation-email-delivery).
+
 ## Container security maintenance
 
 The [API Dockerfile](SmartLost.AuthService.Api/Dockerfile) and

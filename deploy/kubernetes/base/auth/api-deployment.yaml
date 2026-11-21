@@ -34,6 +34,11 @@ spec:
               value: Development
             - name: ASPNETCORE_URLS
               value: http://+:8080
+            - name: EmailConfirmation__EncryptionKey
+              valueFrom:
+                secretKeyRef:
+                  name: auth-email-protection
+                  key: encryption-key
             - name: ConnectionStrings__AuthDatabase
               valueFrom:
                 secretKeyRef:

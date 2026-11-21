@@ -242,6 +242,15 @@ forward. The fixed API URLs (`5080`, `5082`) need no port-forward.
 
 ## Auth credentials and Mailpit
 
+`./k8s.sh up` and `./k8s.sh deploy auth` generate a dedicated `auth-email-protection`
+Secret once. The API and email worker read its `encryption-key`. Back it up securely
+with the Auth database for recovery and drain pending v2 messages before replacing it.
+For manual deployment, create the Secret once in the local namespace:
+
+```sh
+openssl rand -base64 32 | kubectl --context kind-smartlost-local -n smartlost create secret generic auth-email-protection --from-file=encryption-key=/dev/stdin
+```
+
 Create `deploy/kubernetes/local/auth/.env`, replace the password placeholders in both keys,
 and replace `jwt-signing-key` with a random value of at least 32 characters:
 

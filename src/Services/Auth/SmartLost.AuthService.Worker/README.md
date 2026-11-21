@@ -17,6 +17,24 @@ See the [Auth communication diagrams](../COMMUNICATION.md#post-commit-confirmati
 for atomic message staging, post-commit email delivery, leased worker delivery and the
 receiver boundary. Keep that diagram current when worker or delivery behavior changes.
 
+## Confirmation email delivery
+
+Auth writes contract version 2 with exactly `recipient`, `encryptedToken` and `expiresAtUtc`.
+The API encrypts each token with AES-256-GCM and a fresh nonce. The message ID, recipient
+and expiration are authenticated together. The worker uses the same key to decrypt the
+token, and `AuthEmailComposer` builds the public link and both email bodies. Retries use
+the original token and expiration. Expired requests finish without sending mail.
+
+For native processes set `EmailConfirmation:EncryptionKey` in both ignored settings files
+to the same Base64-encoded 32 random bytes (generate once with `openssl rand -base64 32`).
+Configure the worker's `EmailConfirmation:ConfirmationBaseUrl` for the recipient's browser.
+Compose mounts the Auth Docker settings for both processes. In Kind the local helper
+creates and reuses the dedicated `auth-email-protection` Secret. Keep the key separate
+from the JWT signing key, and preserve it when restoring pending messages.
+Drain pending v2 messages before rotating the key. Upgrade the worker before switching
+producers. The worker can still deliver queued v1 emails; historical v1 rows retain their
+original payload until removed under the database retention policy.
+
 ## Messages and receiver contract
 
 | Type | Contract version | Payload |

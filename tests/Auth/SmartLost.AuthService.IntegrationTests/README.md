@@ -12,7 +12,7 @@ that revocation still persists outside the transactional-command wrapper.
 
 [`AuthServiceFactory`](Fixtures/AuthServiceFactory.cs) starts `postgres:16-alpine` with database/user `authservice_tests` on a
 random host port. The API uses the `Testing` environment, the container connection string
-and test-only JWT configuration supplied by the fixture. Local `appsettings.json` and the
+and test-only JWT settings and a randomly generated confirmation-encryption key supplied by the fixture. Local `appsettings.json` and the
 development Compose database are not used as test dependencies.
 
 The fixture applies EF migrations only to its own container database, truncates the five

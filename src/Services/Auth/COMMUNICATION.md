@@ -57,14 +57,14 @@ flowchart LR
     DB[("Auth PostgreSQL: OutboxMessages")]
     EmailWorker["AuthOutboxWorker (Worker:Mode=Email / OutboxDeliveryService)"]
     Processor["OutboxProcessor (MessageTypes = [auth.email.confirmation_requested])"]
-    EmailPub["AuthOutboxEmailPublisher + SmtpEmailSender"]
+    EmailPub["AuthOutboxEmailPublisher + AuthEmailComposer + SmtpEmailSender"]
     Mailpit["Mailpit SMTP (:1025) / configured SMTP"]
 
     EmailWorker -->|"1. Poll every 2s via fresh DI scope"| Processor
     Processor -->|"1.1 Claim pending auth.email.confirmation_requested rows with expiring lease"| DB
-    DB -->|"1.2 Claimed EmailMessage payload"| Processor
+    DB -->|"1.2 Claimed v2 recipient, encryptedToken and expiresAtUtc"| Processor
     Processor -->|"1.3 PublishAsync"| EmailPub
-    EmailPub -->|"1.4 Send confirmation email over SMTP"| Mailpit
+    EmailPub -->|"1.4 For unexpired requests, decrypt token, compose and send via SMTP"| Mailpit
     EmailPub -->|"1.5 Success or SMTP exception"| Processor
     Processor -->|"1.6 Set ProcessedOn, or schedule exponential retry / dead-letter state"| DB
 ```
@@ -104,7 +104,7 @@ flowchart LR
 Link-preview/email scanners opening `GET /api/auth/confirm-email?token=...` only receive a safe
 HTML confirmation page (`Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Content-Security-Policy`)
 whose button triggers `POST /api/auth/confirm-email` via `fetch`. Confirmation links carry the raw
-32-byte Base64Url token, while persistence stores only its SHA-256 hex digest with `ExpiresAtUtc`
+32-byte Base64Url token, while EmailConfirmationTokens stores its SHA-256 hex digest with `ExpiresAtUtc`
 and single-use `UsedAtUtc`. Confirming marks `EmailConfirmationToken.UsedAtUtc` and
 `UserAccount.EmailConfirmed` / `EmailConfirmedAtUtc` atomically via `AuthDbContext.SaveChangesAsync`
 (no outbox event). Concurrent consumption maps `DbUpdateConcurrencyException` to `409 Conflict`.
