@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-settings
+data:
+  appsettings.json: |
+    {
+      "Jwt": {
+        "Issuer": "AuthService",
+        "Audience": "AuthService",
+        "ExpiryMinutes": 60,
+        "RefreshTokenExpiryDays": 7
+      },
+      "Smtp": {
+        "Host": "mailpit",
+        "Port": 1025,
+        "FromAddress": "noreply@smartlost.local",
+        "FromDisplayName": "SmartLost"
+      },
+      "EmailConfirmation": {
+        "ConfirmationBaseUrl": "http://localhost:5080/api/auth/confirm-email",
+        "TokenExpiryHours": 24
+      },
+      "Worker": { "Mode": "Email" },
+      "OutboxDelivery": { "PollInterval": "00:00:02" },
+      "RabbitMq": {
+        "HostName": "rabbitmq",
+        "Port": 5672,
+        "VirtualHost": "smartlost",
+        "Exchange": "smartlost.events",
+        "ConnectionName": "smartlost-auth-identity",
+        "Bindings": { "smartlost.auth.identity": ["auth.user.created", "auth.user.identity_changed"] }
+      },
+      "Outbox": { "BatchSize": 20, "MaximumAttempts": 8 },
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft.AspNetCore": "Warning",
+          "Microsoft.EntityFrameworkCore": "Warning"
+        }
+      },
+      "AllowedHosts": "*"
+    }

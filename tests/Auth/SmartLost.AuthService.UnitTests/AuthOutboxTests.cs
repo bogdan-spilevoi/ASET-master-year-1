@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SmartLost.AuthService.Application.IntegrationEvents;
@@ -13,6 +14,8 @@ using SmartLost.AuthService.Infrastructure.Outbox;
 using SmartLost.AuthService.Infrastructure.Persistence;
 using SmartLost.AuthService.Worker;
 using SmartLost.BuildingBlocks.Application.Outbox;
+using SmartLost.BuildingBlocks.Infrastructure.Outbox;
+using SmartLost.BuildingBlocks.Messaging.RabbitMq;
 using Xunit;
 
 namespace SmartLost.AuthService.UnitTests;
@@ -100,6 +103,77 @@ public sealed class AuthOutboxTests
         services.AddAuthOutboxWorker(configuration);
         using ServiceProvider provider = services.BuildServiceProvider();
         Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptions<AuthOutboxDeliveryOptions>>().Value);
+    }
+
+    [Fact]
+    public void WorkerBuildHostConfiguresBatchEmailAndRejectsUnknownModes()
+    {
+        using Microsoft.Extensions.Hosting.IHost batchHost = WorkerProgram.BuildHost(
+        [
+            "--ConnectionStrings:AuthDatabase=Host=localhost;Database=unused",
+            "--Worker:Mode=Batch",
+            "--OutboxDelivery:ServiceKey=" + new string('k', 32),
+            "--OutboxDelivery:Routes:auth.user.created=https://receiver.example.com/events",
+            "--OutboxDelivery:Routes:auth.user.identity_changed=https://receiver.example.com/events"
+        ]);
+        IOptions<SmartLost.BuildingBlocks.Infrastructure.Outbox.OutboxOptions> batchOutbox =
+            batchHost.Services.GetRequiredService<IOptions<SmartLost.BuildingBlocks.Infrastructure.Outbox.OutboxOptions>>();
+        Assert.NotNull(batchOutbox.Value.MessageTypes);
+        Assert.Equal([AuthIntegrationEventTypes.UserCreated, AuthIntegrationEventTypes.UserIdentityChanged], batchOutbox.Value.MessageTypes);
+
+        using Microsoft.Extensions.Hosting.IHost emailHost = WorkerProgram.BuildHost(
+        [
+            "--ConnectionStrings:AuthDatabase=Host=localhost;Database=unused",
+            "--Worker:Mode=Email",
+            "--Smtp:Host=localhost",
+            "--Smtp:Port=1025",
+            "--Smtp:FromAddress=noreply@smartlost.local"
+        ]);
+        IOptions<SmartLost.BuildingBlocks.Infrastructure.Outbox.OutboxOptions> emailOutbox =
+            emailHost.Services.GetRequiredService<IOptions<SmartLost.BuildingBlocks.Infrastructure.Outbox.OutboxOptions>>();
+        Assert.NotNull(emailOutbox.Value.MessageTypes);
+        Assert.Equal([AuthOutboxMessageTypes.ConfirmationEmailRequested], emailOutbox.Value.MessageTypes);
+        Assert.Contains(
+            emailHost.Services.GetServices<Microsoft.Extensions.Hosting.IHostedService>(),
+            service => service is SmartLost.BuildingBlocks.Infrastructure.Outbox.OutboxDeliveryService);
+
+        using Microsoft.Extensions.Hosting.IHost invalidSmtpHost = WorkerProgram.BuildHost(
+        [
+            "--ConnectionStrings:AuthDatabase=Host=localhost;Database=unused",
+            "--Worker:Mode=Email",
+            "--Smtp:Host="
+        ]);
+        Assert.Throws<OptionsValidationException>(() =>
+            invalidSmtpHost.Services.GetRequiredService<IOptions<SmartLost.BuildingBlocks.Infrastructure.Emails.SmtpEmailOptions>>().Value);
+
+        Assert.Throws<InvalidOperationException>(() => WorkerProgram.BuildHost(
+        [
+            "--ConnectionStrings:AuthDatabase=Host=localhost;Database=unused",
+            "--Worker:Mode=Unknown"
+        ]));
+    }
+
+    [Fact]
+    public void PublishModeUsesRabbitMqAndOnlyClaimsIdentityEvents()
+    {
+        using IHost host = WorkerProgram.BuildHost(
+        [
+            "--ConnectionStrings:AuthDatabase=Host=localhost;Database=unused",
+            "--Worker:Mode=Publish",
+            "--RabbitMq:UserName=test",
+            "--RabbitMq:Password=test",
+            "--RabbitMq:Exchange=smartlost.events",
+            "--RabbitMq:Bindings:smartlost.auth.identity:0=auth.user.created",
+            "--RabbitMq:Bindings:smartlost.auth.identity:1=auth.user.identity_changed",
+            "--Outbox:MessageTypes:0=auth.email.confirmation_requested"
+        ]);
+
+        OutboxOptions outbox = host.Services.GetRequiredService<IOptions<OutboxOptions>>().Value;
+        Assert.NotNull(outbox.MessageTypes);
+        Assert.Equal([AuthIntegrationEventTypes.UserCreated, AuthIntegrationEventTypes.UserIdentityChanged], outbox.MessageTypes);
+        Assert.IsType<RabbitMqOutboxPublisher>(host.Services.GetRequiredService<IOutboxMessagePublisher>());
+        Assert.Null(host.Services.GetService<AuthOutboxJob>());
+        Assert.Contains(host.Services.GetServices<Microsoft.Extensions.Hosting.IHostedService>(), service => service is OutboxDeliveryService);
     }
 
     [Theory]

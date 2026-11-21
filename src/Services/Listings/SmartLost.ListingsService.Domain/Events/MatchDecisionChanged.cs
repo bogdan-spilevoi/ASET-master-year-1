@@ -3,7 +3,7 @@ using SmartLost.ListingsService.Domain.Enums;
 
 namespace SmartLost.ListingsService.Domain.Events;
 
-/// <summary>A local decision transition; delivery and outbox persistence are not configured yet.</summary>
+/// <summary>A local decision transition persisted as Outbox metadata; transport delivery is separate.</summary>
 public sealed record MatchDecisionChanged(Guid DecisionId, MatchDecisionState State, Guid? RecoveryId) : IDomainEvent
 {
     public Guid Id { get; } = Guid.NewGuid();

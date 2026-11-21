@@ -9,8 +9,8 @@ They contain technical primitives and own no database, service entities or busin
 Library projects live under `src/BuildingBlocks/`, with their unit test project
 under `tests/BuildingBlocks/`. The solution and physical directories share this grouping.
 
-Open [BuildingBlocks.slnx](../src/BuildingBlocks/BuildingBlocks.slnx) for the four
-libraries and their unit test project. All four libraries appear in [Aset.slnx](../Aset.slnx); the Auth solution
+Open [BuildingBlocks.slnx](../src/BuildingBlocks/BuildingBlocks.slnx) for the five
+libraries and their unit test project. All five libraries appear in [Aset.slnx](../Aset.slnx); the Auth solution
 now includes all four shared dependencies and its own worker. Editing a library changes the one
 shared source tree. This solution has no service project dependency. CI uses the
 root solution to validate consumers together with the shared libraries.
@@ -18,9 +18,10 @@ root solution to validate consumers together with the shared libraries.
 | Library | Contents | Dependencies |
 | --- | --- | --- |
 | [Core](../src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | `Entity<TId>`, `AggregateRoot<TId>`, `IDomainEvent`, `IHasDomainEvents`, `Guard`, `Result`, `Result<T>`, `IResult`, `Error`, `ErrorKind`, `DomainException`, `PageSlice<T>`, `PagedResult<T>`, `PagedDataGuard` | .NET only |
-| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/README.md) | Validation/exception/optional transaction, authorization and profiling behaviors, isolated profiling contexts and measurements, transaction and Outbox contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
+| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/README.md) | Validation/exception/optional transaction, authorization and profiling behaviors, isolated profiling contexts and measurements, transaction, Outbox and email (`IEmailSender`) contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
 | [AspNetCore](../src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/) | `ToActionResult`, `ProblemDetails`, unexpected-exception handler, `HttpCurrentUser`, API registration | Application/Core, ASP.NET Core framework |
-| [Infrastructure](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/) | EF Outbox model/configuration, writer, leased batch processor and registration | Application, EF Core Relational 10.0.12 |
+| [Infrastructure](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/) | EF Outbox model/configuration, writer, leased processor, optional inspection/delivery hosts, query cache and opt-in `SmtpEmailSender` | Application, EF Core Relational 10.0.12 |
+| [Messaging.RabbitMq](../src/BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/README.md) | Opt-in persistent mandatory publishing, confirms and durable topic topology | Application, RabbitMQ.Client 7.2.2 |
 
 Service Domain projects reference Core; service Application projects reference Application;
 service API projects reference AspNetCore. Service Infrastructure implements persistence contracts and may opt into shared
@@ -63,19 +64,22 @@ protect model invariants when the model is called through other paths.
 Auth now uses these primitives for its user/session aggregate roots, entity invariants
 and local domain events. See [Auth's domain guide](AUTHSERVICE.md#domain-aggregates-guards-and-events).
 Auth also stages selected profile events into its Outbox and has a separately executable
-HTTP delivery worker; receiver configuration and deployment remain application concerns.
+worker with RabbitMQ and HTTP delivery modes.
 
 ## Opt-in relational Outbox
 
 The [Infrastructure module](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/README.md)
-contains reusable persistence and delivery code. It owns no database and starts no worker.
+contains reusable persistence, delivery and opt-in inspection-host code. It owns no
+database and starts no worker unless the corresponding host registration is requested.
 Auth now consumes this library through its Infrastructure project, a service-owned migration
-and [finite worker](../src/Services/Auth/SmartLost.AuthService.Worker/README.md).
+and [Auth worker](../src/Services/Auth/SmartLost.AuthService.Worker/README.md).
+Listings owns its separate Outbox table and
+[Inspect/Publish worker](../src/Services/Listings/SmartLost.ListingsService.Worker/README.md).
 
 ### Contracts and persistence
 
 - Application defines `OutboxEnvelope`, `IOutboxEventMapper`, `IOutboxWriter`,
-  `IOutboxMessagePublisher` and `IOutboxProcessor`; these contracts have no EF dependency.
+  `IOutboxMessagePublisher`, `IOutboxProcessor` and read-only `IOutboxReader`; these contracts have no EF dependency.
 - Envelopes contain a nonempty message ID, explicit type name (maximum 200 characters),
   positive contract version, valid JSON payload and occurrence time normalized to UTC.
   Use names such as `listing.published`, not CLR assembly/type names. Receivers must
@@ -135,8 +139,10 @@ Use synchronized UTC clocks on worker instances. Provider-specific behavior stil
 integration verification against PostgreSQL; EF InMemory cannot exercise this mechanism.
 
 Defaults: batches of 20, maximum 8 delivery attempts, exponential retry starting at 2 seconds
-and capped at 5 minutes, 30-second delivery timeout and 2-minute lease. Options validate on
-startup; the lease must exceed the delivery timeout. A failed final attempt is dead-lettered;
+and capped at 5 minutes, 30-second delivery timeout and 2-minute lease; optional
+`OutboxOptions.MessageTypes` restricts a processor instance to specific message types while
+leaving other message types untouched. Options validate on startup; the lease must exceed
+the delivery timeout. A failed final attempt is dead-lettered;
 expired claims that exhausted the attempt limit are also dead-lettered on the next run.
 Persisted errors are generic codes; exceptions are sent to the host's logger, not the table.
 Success records `ProcessedOn`; terminal rows remain for a service-defined retention policy.
@@ -155,7 +161,7 @@ not a cross-worker or per-aggregate ordering guarantee. Dead-letter replay, rece
 retention cleanup, metrics and transport-specific routing remain service responsibilities.
 
 The shared library itself adds no deployment or migration. Auth provides its own migration
-and finite worker host; Azure scale-to-zero consumers still require an external schedule.
+and worker host; Azure scale-to-zero consumers still require an external schedule.
 
 ## Application pipeline
 
@@ -201,9 +207,33 @@ specific error mapping. Default EfUnitOfWork saving works for a plain DbContext 
 OutboxDbContext is an optional base that delegates staging/cleanup to the separate
 DomainEventOutboxCoordinator. It supplies sync/async SaveChanges integration and receives
 internal transaction lifecycle notifications, without knowing about MediatR or HTTP.
-Service contexts retain model/table ownership. Auth uses this base; Matching and Listings
-retain ordinary DbContexts because they do not currently stage domain-event Outbox rows.
-No migration or change in marked transactional requests is introduced by this extraction.
+Service contexts retain model/table ownership. Auth and Listings use this base; Matching
+retains an ordinary DbContext. Listings registers the generic unit of work for seeding
+and stages selected notification metadata through its AddListingsOutbox migration.
+
+### Read-only Outbox inspection
+
+`AddBuildingBlocksOutboxInspection<TContext>` registers EfOutboxReader, validated
+OutboxInspectionOptions and OutboxInspectionService. It does not register a publisher
+or delivery processor. The reader selects ProcessedOn=null/DeadLetteredAt=null rows in
+occurrence-time/ID order, with a batch limit of 1–1000. Active leases and deferred retries
+can appear because inspection does not compete for delivery ownership. The host logs
+metadata, opens a fresh scope per iteration, retries failed reads after the interval
+(1 second–1 hour; default 10 seconds) and stops through cancellation. It never changes
+delivery state; repeated polls can show the same oldest batch. This sample is not an
+exhaustive backlog viewer. Listings defaults to Inspect locally and selects Publish in Kubernetes.
+
+### Continuous RabbitMQ delivery
+
+`AddBuildingBlocksOutboxDelivery<TContext>` adds the existing leased processor plus a
+continuous host with a fresh scope per batch and validated `OutboxDelivery:PollInterval`
+(default 2 seconds). Empty batches do not stop it; transient batch failures retry later.
+Register a transport separately. The Listings and Auth profile workers use the opt-in
+[Messaging.RabbitMq project](../src/BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/README.md):
+durable topic exchange/queues, persistent mandatory messages and publisher confirms.
+Only broker acknowledgement marks a row processed; returns/disconnects/timeouts follow
+the existing retry/dead-letter policy. Consumers must deduplicate and handle stale
+sequences. No Matching consumer/full snapshot integration is implemented.
 
 ## Opt-in query caching
 

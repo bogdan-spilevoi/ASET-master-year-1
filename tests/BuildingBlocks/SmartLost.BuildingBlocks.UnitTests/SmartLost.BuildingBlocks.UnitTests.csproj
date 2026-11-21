@@ -7,6 +7,8 @@
     <ProjectReference Include="../../../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
     <ProjectReference Include="../../../src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
     <ProjectReference Include="../../../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/SmartLost.BuildingBlocks.Infrastructure.csproj" />
+    <ProjectReference Include="../../../src/BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/SmartLost.BuildingBlocks.Messaging.RabbitMq.csproj" />
+    <PackageReference Include="NSubstitute" Version="6.2.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="coverlet.collector" Version="10.1.0">

@@ -1,4 +1,5 @@
 using FluentValidation.Results;
+using SmartLost.AuthService.Application.Commands.ConfirmEmail;
 using SmartLost.AuthService.Application.Commands.Login;
 using SmartLost.AuthService.Application.Commands.Register;
 using Xunit;
@@ -44,5 +45,19 @@ public sealed class AuthValidatorTests
         LoginUserCommandValidator validator = new();
         ValidationResult result = await validator.ValidateAsync(new LoginUserCommand(new string('a', 250) + "@example.com", "password"));
         Assert.Equal("auth.invalid_email", Assert.Single(result.Errors).ErrorCode);
+    }
+
+    [Fact]
+    public async Task ConfirmEmailValidatesTokenPresenceAndFormat()
+    {
+        ConfirmEmailCommandValidator validator = new();
+        Assert.True((await validator.ValidateAsync(new ConfirmEmailCommand(new string('A', 43)))).IsValid);
+        Assert.True((await validator.ValidateAsync(new ConfirmEmailCommand(new string('b', 86)))).IsValid);
+
+        ValidationResult empty = await validator.ValidateAsync(new ConfirmEmailCommand(" "));
+        Assert.Equal("auth.confirmation_token_required", Assert.Single(empty.Errors).ErrorCode);
+
+        ValidationResult malformed = await validator.ValidateAsync(new ConfirmEmailCommand("too-short"));
+        Assert.Equal("auth.invalid_confirmation_token", Assert.Single(malformed.Errors).ErrorCode);
     }
 }

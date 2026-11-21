@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+spec:
+  serviceName: rabbitmq
+  replicas: 1
+  revisionHistoryLimit: 2
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rabbitmq
+        app.kubernetes.io/part-of: smartlost
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: rabbitmq
+          image: smartlost-rabbitmq:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: management
+              containerPort: 15672
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: RABBITMQ_NODENAME
+              value: rabbit@$(POD_NAME)
+            - name: RABBITMQ_DEFAULT_VHOST
+              value: smartlost
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: username
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: password
+            - name: RABBITMQ_ERLANG_COOKIE
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: erlang-cookie
+            - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
+              value: "+S 2:2 +A 4"
+            - name: RABBITMQ_CTL_ERL_ARGS
+              value: "+S 1:1 +A 2"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          startupProbe:
+            exec:
+              command: [rabbitmq-diagnostics, -q, ping]
+            periodSeconds: 5
+            timeoutSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: amqp
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: [rabbitmq-diagnostics, -q, check_running]
+            periodSeconds: 20
+            timeoutSeconds: 10
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
+            - name: temporary
+              mountPath: /tmp
+            - name: logs
+              mountPath: /var/log/rabbitmq
+      volumes:
+        - name: temporary
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: logs
+          emptyDir:
+            sizeLimit: 128Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: rabbitmq-data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 1Gi

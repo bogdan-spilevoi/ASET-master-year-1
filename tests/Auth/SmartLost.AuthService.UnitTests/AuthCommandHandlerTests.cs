@@ -1,8 +1,10 @@
+using SmartLost.AuthService.Application.Commands.ConfirmEmail;
 using SmartLost.AuthService.Application.Commands.Login;
 using SmartLost.AuthService.Application.Commands.Register;
 using SmartLost.AuthService.Application.Contracts;
 using SmartLost.AuthService.Application.Interfaces;
 using SmartLost.AuthService.Domain.Entities;
+using SmartLost.AuthService.Domain.Errors;
 using SmartLost.BuildingBlocks.Core.Results;
 using Xunit;
 
@@ -14,11 +16,13 @@ public sealed class AuthCommandHandlerTests
     public async Task RegisterUserCreatesAccountAndReturnsToken()
     {
         InMemoryUserAccountRepository repository = new();
-        RegisterUserCommandHandler handler = new(repository, new TestPasswordService(), new TestTokenService());
+        TestEmailConfirmationService confirmationService = new();
+        RegisterUserCommandHandler handler = new(repository, new TestPasswordService(), new TestTokenService(), confirmationService);
 
         Result<AuthResponse> result = await handler.Handle(new RegisterUserCommand(" alex.popescu ", " alex@example.com ", "P@ssw0rd123!"), CancellationToken.None);
 
         Assert.Single(repository.Users);
+        Assert.Single(confirmationService.SentUsers);
         Assert.True(result.IsSuccess);
         Assert.Equal("token", result.Value.AccessToken);
         Assert.Equal("alex.popescu", result.Value.UserName);
@@ -33,7 +37,7 @@ public sealed class AuthCommandHandlerTests
     public async Task LoginUsesTheSameNormalizationAsAccountCreation(string email)
     {
         InMemoryUserAccountRepository repository = new();
-        RegisterUserCommandHandler registerHandler = new(repository, new TestPasswordService(), new TestTokenService());
+        RegisterUserCommandHandler registerHandler = new(repository, new TestPasswordService(), new TestTokenService(), new TestEmailConfirmationService());
         Result<AuthResponse> registered = await registerHandler.Handle(
             new RegisterUserCommand("Alex.Popescu", "Alex@Example.com", "P@ssw0rd123!"), CancellationToken.None);
         LoginUserCommandHandler loginHandler = new(repository, new TestPasswordService(), new TestTokenService());
@@ -52,7 +56,7 @@ public sealed class AuthCommandHandlerTests
     public async Task RegisterRejectsDuplicatesWithDifferentCasingAndWhitespace(string userName, string email)
     {
         InMemoryUserAccountRepository repository = new();
-        RegisterUserCommandHandler handler = new(repository, new TestPasswordService(), new TestTokenService());
+        RegisterUserCommandHandler handler = new(repository, new TestPasswordService(), new TestTokenService(), new TestEmailConfirmationService());
         await handler.Handle(new RegisterUserCommand("Alex.Popescu", "Alex@Example.com", "P@ssw0rd123!"), CancellationToken.None);
 
         Result<AuthResponse> result = await handler.Handle(new RegisterUserCommand(userName, email, "P@ssw0rd123!"), CancellationToken.None);
@@ -66,7 +70,7 @@ public sealed class AuthCommandHandlerTests
     public async Task LoginRejectsUserNameEvenWithCorrectPassword()
     {
         InMemoryUserAccountRepository repository = new();
-        RegisterUserCommandHandler registerHandler = new(repository, new TestPasswordService(), new TestTokenService());
+        RegisterUserCommandHandler registerHandler = new(repository, new TestPasswordService(), new TestTokenService(), new TestEmailConfirmationService());
         await registerHandler.Handle(new RegisterUserCommand("alex.popescu", "alex@example.com", "P@ssw0rd123!"), CancellationToken.None);
         LoginUserCommandHandler loginHandler = new(repository, new TestPasswordService(), new TestTokenService());
 
@@ -80,13 +84,29 @@ public sealed class AuthCommandHandlerTests
     public async Task LoginUserRejectsInvalidPassword()
     {
         InMemoryUserAccountRepository repository = new();
-        RegisterUserCommandHandler registerHandler = new(repository, new TestPasswordService(), new TestTokenService());
+        RegisterUserCommandHandler registerHandler = new(repository, new TestPasswordService(), new TestTokenService(), new TestEmailConfirmationService());
         await registerHandler.Handle(new RegisterUserCommand("alex.popescu", "alex@example.com", "P@ssw0rd123!"), CancellationToken.None);
         LoginUserCommandHandler loginHandler = new(repository, new TestPasswordService(), new TestTokenService());
 
         Result<AuthResponse> result = await loginHandler.Handle(new LoginUserCommand("alex@example.com", "incorrect"), CancellationToken.None);
         Assert.True(result.IsFailure);
         Assert.Equal(ErrorKind.Unauthorized, Assert.Single(result.Errors).Kind);
+    }
+
+    [Fact]
+    public async Task ConfirmEmailCommandHandlerDelegatesToConfirmationService()
+    {
+        TestEmailConfirmationService confirmationService = new();
+        ConfirmEmailCommandHandler handler = new(confirmationService);
+        string token = new('a', 43);
+
+        Result<EmailConfirmationResponse> success = await handler.Handle(new ConfirmEmailCommand(token), CancellationToken.None);
+        Assert.True(success.IsSuccess);
+        Assert.True(success.Value.EmailConfirmed);
+
+        Result<EmailConfirmationResponse> invalid = await handler.Handle(new ConfirmEmailCommand("wrong-token"), CancellationToken.None);
+        Assert.True(invalid.IsFailure);
+        Assert.Equal("auth.invalid_confirmation_token", Assert.Single(invalid.Errors).Code);
     }
 
     private sealed class InMemoryUserAccountRepository : IUserAccountRepository
@@ -137,6 +157,28 @@ public sealed class AuthCommandHandlerTests
         public Task<Result<AuthResponse>> RefreshAsync(string refreshToken, CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
+        }
+    }
+
+    private sealed class TestEmailConfirmationService : IEmailConfirmationService
+    {
+        public List<UserAccount> SentUsers { get; } = [];
+
+        public Task EnqueueConfirmationAsync(UserAccount user, CancellationToken cancellationToken)
+        {
+            SentUsers.Add(user);
+            return Task.CompletedTask;
+        }
+
+        public Task<Result<EmailConfirmationResponse>> ConfirmAsync(string token, CancellationToken cancellationToken)
+        {
+            if (token.Length == 43)
+            {
+                return Task.FromResult(Result<EmailConfirmationResponse>.Success(
+                    new EmailConfirmationResponse(Guid.NewGuid(), "alex@example.com", true, DateTime.UtcNow)));
+            }
+
+            return Task.FromResult(Result<EmailConfirmationResponse>.Failure(AuthErrors.InvalidEmailConfirmationToken));
         }
     }
 }

@@ -14,6 +14,12 @@ public partial class Program
 
     public static async Task Main(string[] args)
     {
+        await using WebApplication app = BuildApplication(args);
+        await RunApplicationAsync(app);
+    }
+
+    public static WebApplication BuildApplication(string[] args, Action<WebApplicationBuilder>? configureBuilder = null)
+    {
         WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
         builder.Services.AddControllers().AddJsonOptions(options =>
             options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<ListingType>()));
@@ -28,7 +34,12 @@ public partial class Program
         builder.Services.AddListingsApplication();
         builder.Services.AddListingsPersistence(builder.Configuration);
 
-        await using WebApplication app = builder.Build();
+        configureBuilder?.Invoke(builder);
+        return builder.Build();
+    }
+
+    public static async Task RunApplicationAsync(WebApplication app, CancellationToken cancellationToken = default)
+    {
         bool seedOnly = app.Configuration.GetValue<bool>("SeedData:Only");
         if (seedOnly && !app.Environment.IsDevelopment())
         {
@@ -47,7 +58,7 @@ public partial class Program
             if (seedOnly || app.Configuration.GetValue<bool>("SeedData:Enabled"))
             {
                 await using AsyncServiceScope scope = app.Services.CreateAsyncScope();
-                await scope.ServiceProvider.GetRequiredService<ListingsDevelopmentSeeder>().SeedAsync();
+                await scope.ServiceProvider.GetRequiredService<ListingsDevelopmentSeeder>().SeedAsync(cancellationToken);
                 _seedCompleted(app.Logger, null);
             }
         }
@@ -62,6 +73,6 @@ public partial class Program
         }
 
         app.MapControllers();
-        await app.RunAsync();
+        await app.RunAsync(cancellationToken);
     }
 }

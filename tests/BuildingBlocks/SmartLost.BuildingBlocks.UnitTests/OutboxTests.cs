@@ -142,6 +142,121 @@ public sealed class OutboxTests
 
     private sealed record SampleEvent(Guid Id, DateTimeOffset OccurredOn) : IDomainEvent;
 
+    [Fact]
+    public void DeliveryHostRegistrationKeepsTheProcessorScopedAndValidatesPolling()
+    {
+        using Store store = new();
+        ServiceCollection services = new();
+        services.AddLogging();
+        services.AddSingleton(store.Context);
+        services.AddSingleton<IOutboxMessagePublisher>(new Publisher((_, _) => Task.CompletedTask));
+        services.AddBuildingBlocksOutboxDelivery<TestContext>();
+        using ServiceProvider provider = services.BuildServiceProvider();
+        using IServiceScope scope = provider.CreateScope();
+        Assert.IsType<OutboxProcessor<TestContext>>(scope.ServiceProvider.GetRequiredService<IOutboxProcessor>());
+        Assert.IsType<OutboxDeliveryService>(Assert.Single(provider.GetServices<Microsoft.Extensions.Hosting.IHostedService>()));
+        Assert.True(provider.GetRequiredService<IOptions<OutboxDeliveryOptions>>().Value.IsValid());
+        ServiceCollection invalid = new();
+        invalid.AddBuildingBlocksOutboxDelivery<TestContext>(configureWorker: settings => settings.PollInterval = TimeSpan.Zero);
+        using ServiceProvider invalidProvider = invalid.BuildServiceProvider();
+        Assert.Throws<OptionsValidationException>(() => invalidProvider.GetRequiredService<IOptions<OutboxDeliveryOptions>>().Value);
+    }
+
+    [Fact]
+    public async Task ReadOnlyInspectionIsBoundedRepeatableAndNeverChangesDeliveryState()
+    {
+        using Store store = new();
+        Guid processed = store.Enqueue();
+        await store.Processor(new Publisher((_, _) => Task.CompletedTask)).ProcessBatchAsync(CancellationToken.None);
+        Guid dead = store.Enqueue();
+        await store.Processor(new Publisher((_, _) => throw new InvalidOperationException()),
+            new OutboxOptions { MaximumAttempts = 1 }).ProcessBatchAsync(CancellationToken.None);
+        Guid oldest = store.Enqueue();
+        store.Clock.Advance(TimeSpan.FromSeconds(1));
+        Guid newest = store.Enqueue();
+        store.Context.Entry(store.Context.Set<OutboxMessage>().Local.Single(message => message.Id == oldest))
+            .Property(message => message.LeaseExpiresAt).CurrentValue = store.Clock.GetUtcNow().AddHours(1);
+        store.Context.SaveChanges();
+        store.Context.ChangeTracker.Clear();
+        string before = System.Text.Json.JsonSerializer.Serialize(await store.Context.Set<OutboxMessage>().AsNoTracking().OrderBy(message => message.Id).ToArrayAsync());
+        EfOutboxReader<TestContext> reader = new(store.Context);
+        OutboxEnvelope first = Assert.Single(await reader.ReadPendingAsync(1, CancellationToken.None));
+        Assert.Equal(oldest, first.Id);
+        Assert.Equal("sample.created", first.Type);
+        Assert.Equal(1, first.Version);
+        Assert.Equal("{}", first.Payload);
+        IReadOnlyList<OutboxEnvelope> repeated = await reader.ReadPendingAsync(20, CancellationToken.None);
+        Assert.Equal([oldest, newest], repeated.Select(message => message.Id));
+        Assert.DoesNotContain(repeated, message => message.Id == processed || message.Id == dead);
+        Assert.Empty(store.Context.ChangeTracker.Entries());
+        Assert.Equal(before, System.Text.Json.JsonSerializer.Serialize(await store.Context.Set<OutboxMessage>().AsNoTracking().OrderBy(message => message.Id).ToArrayAsync()));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => reader.ReadPendingAsync(0, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => reader.ReadPendingAsync(1001, CancellationToken.None));
+        using CancellationTokenSource cancelled = new();
+        await cancelled.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => reader.ReadPendingAsync(1, cancelled.Token));
+    }
+
+    [Fact]
+    public void InspectionRegistrationNeedsNoPublisherAndValidatesItsOwnOptions()
+    {
+        ServiceCollection services = new();
+        services.AddLogging();
+        services.AddBuildingBlocksOutboxInspection<TestContext>();
+        using ServiceProvider provider = services.BuildServiceProvider();
+        Assert.NotNull(provider.GetRequiredService<TimeProvider>());
+        Assert.True(provider.GetRequiredService<IOptions<OutboxInspectionOptions>>().Value.IsValid());
+        Assert.IsType<OutboxInspectionService>(Assert.Single(provider.GetServices<Microsoft.Extensions.Hosting.IHostedService>()));
+        Assert.Null(provider.GetService<IOutboxMessagePublisher>());
+        Assert.Throws<ArgumentNullException>(() => DependencyInjection.AddBuildingBlocksOutboxInspection<TestContext>(null!));
+        ServiceCollection invalid = new();
+        invalid.AddBuildingBlocksOutboxInspection<TestContext>(settings => settings.BatchSize = 0);
+        using ServiceProvider invalidProvider = invalid.BuildServiceProvider();
+        Assert.Throws<OptionsValidationException>(() => invalidProvider.GetRequiredService<IOptions<OutboxInspectionOptions>>().Value);
+    }
+
+    [Fact]
+    public async Task ProcessorFiltersByConfiguredMessageTypesWithoutTouchingOtherRows()
+    {
+        using Store store = new();
+        Guid matchedId = store.Enqueue("type.a");
+        Guid unmatchedId = store.Enqueue("type.b");
+        Guid exhaustedUnmatchedId = store.Enqueue("type.b");
+        OutboxMessage exhaustedRow = store.Context.Set<OutboxMessage>().Local.Single(message => message.Id == exhaustedUnmatchedId);
+        store.Context.Entry(exhaustedRow).Property(message => message.AttemptCount).CurrentValue = 5;
+        await store.Context.SaveChangesAsync();
+
+        List<Guid> deliveredIds = [];
+        Publisher publisher = new((envelope, _) =>
+        {
+            deliveredIds.Add(envelope.Id);
+            return Task.CompletedTask;
+        });
+
+        OutboxOptions filteredOptions = new()
+        {
+            MaximumAttempts = 3,
+            MessageTypes = ["type.a"]
+        };
+        int delivered = await store.Processor(publisher, filteredOptions).ProcessBatchAsync(CancellationToken.None);
+
+        Assert.Equal(1, delivered);
+        Assert.Equal([matchedId], deliveredIds);
+        OutboxMessage matched = await store.ReadAsync(matchedId);
+        OutboxMessage unmatched = await store.ReadAsync(unmatchedId);
+        OutboxMessage exhaustedUnmatched = await store.ReadAsync(exhaustedUnmatchedId);
+        Assert.NotNull(matched.ProcessedOn);
+        Assert.Null(unmatched.ProcessedOn);
+        Assert.Equal(0, unmatched.AttemptCount);
+        Assert.Null(exhaustedUnmatched.DeadLetteredAt);
+
+        ServiceCollection invalidServices = new();
+        invalidServices.AddLogging();
+        invalidServices.AddBuildingBlocksOutboxProcessor<TestContext>(settings => settings.MessageTypes = [" "]);
+        using ServiceProvider invalidProvider = invalidServices.BuildServiceProvider();
+        Assert.Throws<OptionsValidationException>(() => invalidProvider.GetRequiredService<IOptions<OutboxOptions>>().Value);
+    }
+
     private sealed class SampleAggregate(Guid id) : AggregateRoot<Guid>(id)
     {
         public void Raise(IDomainEvent domainEvent)
@@ -217,9 +332,9 @@ public sealed class OutboxTests
 
         public TestClock Clock { get; } = new();
 
-        public Guid Enqueue()
+        public Guid Enqueue(string type = "sample.created")
         {
-            var envelope = new OutboxEnvelope(Guid.NewGuid(), "sample.created", 1, "{}", Clock.GetUtcNow());
+            var envelope = new OutboxEnvelope(Guid.NewGuid(), type, 1, "{}", Clock.GetUtcNow());
             Context.Add(OutboxMessage.Create(envelope));
             Context.SaveChanges();
             return envelope.Id;

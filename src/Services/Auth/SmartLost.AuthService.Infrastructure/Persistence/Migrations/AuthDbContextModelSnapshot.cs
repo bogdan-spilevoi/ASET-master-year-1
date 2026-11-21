@@ -22,6 +22,42 @@ namespace SmartLost.AuthService.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("SmartLost.AuthService.Domain.Entities.EmailConfirmationToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("UsedAtUtc")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("EmailConfirmationTokens", (string)null);
+                });
+
             modelBuilder.Entity("SmartLost.AuthService.Domain.Entities.RefreshSession", b =>
                 {
                     b.Property<Guid>("Id")
@@ -90,6 +126,14 @@ namespace SmartLost.AuthService.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<bool>("EmailConfirmed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("EmailConfirmedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<long>("IdentityVersion")
                         .IsConcurrencyToken()
@@ -174,6 +218,17 @@ namespace SmartLost.AuthService.Infrastructure.Persistence.Migrations
                     b.HasIndex("ProcessedOn", "DeadLetteredAt", "NextAttemptAt");
 
                     b.ToTable("OutboxMessages", (string)null);
+                });
+
+            modelBuilder.Entity("SmartLost.AuthService.Domain.Entities.EmailConfirmationToken", b =>
+                {
+                    b.HasOne("SmartLost.AuthService.Domain.Entities.UserAccount", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("SmartLost.AuthService.Domain.Entities.RefreshSession", b =>

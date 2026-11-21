@@ -82,4 +82,65 @@ public sealed class UserIdentityTests
         Assert.Equal("bogdan@example.com", account.Email);
         Assert.Equal("BOGDAN@EXAMPLE.COM", account.NormalizedEmail);
     }
+
+    [Fact]
+    public void EmailConfirmationUpdatesUserStateAndResetsWhenEmailChanges()
+    {
+        DateTime createdAtUtc = new(2026, 11, 18, 10, 0, 0, DateTimeKind.Utc);
+        DateTime confirmedAtUtc = createdAtUtc.AddMinutes(5);
+        var account = UserAccount.Create("Bogdan", "bogdan@example.com", createdAtUtc);
+
+        Assert.False(account.EmailConfirmed);
+        Assert.Null(account.EmailConfirmedAtUtc);
+        Assert.Throws<DomainException>(() => account.ConfirmEmail(default));
+        Assert.Throws<DomainException>(() => account.ConfirmEmail(DateTime.SpecifyKind(confirmedAtUtc, DateTimeKind.Local)));
+
+        account.ConfirmEmail(confirmedAtUtc);
+        account.ConfirmEmail(confirmedAtUtc.AddMinutes(10));
+        Assert.True(account.EmailConfirmed);
+        Assert.Equal(confirmedAtUtc, account.EmailConfirmedAtUtc);
+
+        account.ChangeIdentity("Bogdan.Updated", "bogdan@example.com");
+        Assert.True(account.EmailConfirmed);
+        Assert.Equal(confirmedAtUtc, account.EmailConfirmedAtUtc);
+
+        account.ChangeIdentity("Bogdan.Updated", "new@example.com");
+        Assert.False(account.EmailConfirmed);
+        Assert.Null(account.EmailConfirmedAtUtc);
+    }
+
+    [Fact]
+    public void EmailConfirmationTokenGuardsCreationExpiryAndSingleUse()
+    {
+        DateTime createdAtUtc = new(2026, 11, 18, 10, 0, 0, DateTimeKind.Utc);
+        DateTime expiresAtUtc = createdAtUtc.AddHours(24);
+        var account = UserAccount.Create("Maria", "maria@example.com", createdAtUtc);
+
+        Assert.Throws<DomainException>(() => EmailConfirmationToken.Create(null!, new string('A', 64), createdAtUtc, expiresAtUtc));
+        Assert.Throws<DomainException>(() => EmailConfirmationToken.Create(account, " ", createdAtUtc, expiresAtUtc));
+        Assert.Throws<DomainException>(() => EmailConfirmationToken.Create(account, new string('A', 64), default, expiresAtUtc));
+        Assert.Throws<DomainException>(() => EmailConfirmationToken.Create(account, new string('A', 64), createdAtUtc, createdAtUtc));
+
+        var validToken = EmailConfirmationToken.Create(account, new string('A', 64), createdAtUtc, expiresAtUtc);
+        Assert.Equal(account.Id, validToken.UserId);
+        Assert.Equal(createdAtUtc, validToken.CreatedAtUtc);
+        Assert.Equal(expiresAtUtc, validToken.ExpiresAtUtc);
+        Assert.Null(validToken.UsedAtUtc);
+
+        Assert.Throws<DomainException>(() => validToken.Consume(default));
+        Assert.Throws<DomainException>(() => validToken.Consume(expiresAtUtc));
+
+        DateTime usedAtUtc = createdAtUtc.AddHours(1);
+        validToken.Consume(usedAtUtc);
+        Assert.Equal(usedAtUtc, validToken.UsedAtUtc);
+        Assert.True(account.EmailConfirmed);
+        Assert.Equal(usedAtUtc, account.EmailConfirmedAtUtc);
+
+        DomainException reused = Assert.Throws<DomainException>(() => validToken.Consume(usedAtUtc.AddMinutes(1)));
+        Assert.Equal("auth.confirmation_token_already_used", reused.Error.Code);
+
+        var expiredToken = EmailConfirmationToken.Create(account, new string('B', 64), createdAtUtc, expiresAtUtc);
+        DomainException expired = Assert.Throws<DomainException>(() => expiredToken.Consume(expiresAtUtc.AddMinutes(1)));
+        Assert.Equal("auth.confirmation_token_expired", expired.Error.Code);
+    }
 }

@@ -135,6 +135,23 @@ category synonym normalization are not implemented.
 
 ## Review notes
 
+- 2026-11-20: Reviewed shared BuildingBlocks `OutboxOptions.MessageTypes` filtering and root
+  Compose / Kubernetes additions (`auth-email-worker` in Compose, `auth-outbox-worker` in K8s).
+  Matching does not opt into the Outbox processor, SMTP sender or Kubernetes manifests; its
+  existing API/AI/database arrows are unchanged.
+
+- 2026-11-18: Reviewed shared BuildingBlocks `IEmailSender` / `SmtpEmailSender`, root Compose
+  `mailpit` container, and local Kubernetes Auth/Mailpit manifests plus `./k8s.sh` additions.
+  Matching does not register `IEmailSender`, has no Kubernetes manifests yet, and has no
+  runtime communication with Mailpit; all existing Matching API/AI/database arrows are unchanged.
+
+- 2026-11-17: Reviewed shared continuous Outbox host and opt-in RabbitMQ transport. Matching does not register this transport and has no RabbitMQ consumer. Listings notifications currently wait in a broker queue; Matching API/AI/database arrows are unchanged.
+
+
+- 2026-11-17: Reviewed shared Outbox inspection reader/host additions. Matching does not
+  register them or adopt Outbox persistence. Existing API/AI mock/database flows remain
+  unchanged; no worker, consumer, broker or new outgoing call is introduced here.
+
 - 2026-11-10: MatchingUnitOfWork now inherits shared EfUnitOfWork<MatchingDbContext>; only
   concurrency error mapping remains service-specific. Explicit rollback now discards tracked
   state through the shared adapter. Separate claim/result saves and the AI call outside a

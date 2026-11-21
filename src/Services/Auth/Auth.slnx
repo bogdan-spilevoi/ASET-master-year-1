@@ -12,6 +12,7 @@
     <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Application/SmartLost.BuildingBlocks.Application.csproj" />
     <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/SmartLost.BuildingBlocks.AspNetCore.csproj" />
     <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/SmartLost.BuildingBlocks.Infrastructure.csproj" />
+    <Project Path="../../BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/SmartLost.BuildingBlocks.Messaging.RabbitMq.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="../../../tests/Auth/SmartLost.AuthService.UnitTests/SmartLost.AuthService.UnitTests.csproj" />
