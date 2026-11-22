@@ -19,16 +19,14 @@ internal sealed class ListingsApiFactory : WebApplicationFactory<Program>
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
     private readonly string _environment;
     private readonly bool _seed;
-    private readonly bool _seedOnly;
     private readonly TimeProvider? _clock;
     private readonly DbCommandInterceptor? _interceptor;
 
     internal ListingsApiFactory(string environment = "Development", bool seed = true,
-        TimeProvider? clock = null, DbCommandInterceptor? interceptor = null, bool seedOnly = false)
+        TimeProvider? clock = null, DbCommandInterceptor? interceptor = null)
     {
         _environment = environment;
         _seed = seed;
-        _seedOnly = seedOnly;
         _clock = clock;
         _interceptor = interceptor;
         _connection.Open();
@@ -86,7 +84,7 @@ internal sealed class ListingsApiFactory : WebApplicationFactory<Program>
         {
             ["ConnectionStrings:ListingsDatabase"] = "Host=unused;Database=unused",
             ["SeedData:Enabled"] = _seed.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["SeedData:Only"] = _seedOnly.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            ["SeedData:Only"] = "false"
         };
     }
 }

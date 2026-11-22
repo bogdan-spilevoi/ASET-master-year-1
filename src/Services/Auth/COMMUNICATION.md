@@ -143,6 +143,18 @@ No cloud schedule or receiver is configured by the repository examples.
 
 ## Review notes
 
+- 2026-11-17: Upgraded API AutoMapper from 16.2.0 to 16.3.0 and refreshed API/unit/integration
+  dependency locks to fix GHSA-6vhm-j9h7-f9gh and GHSA-gpwp-5797-mjff. Existing request-to-command
+  maps, API routes, JWT claims and database/worker communications are unchanged; no arrow changes.
+
+- 2026-11-17: Reviewed shared continuous Outbox host and opt-in RabbitMQ transport. Auth retains its finite HTTP delivery worker; no RabbitMQ registration or new outgoing/incoming arrow is introduced.
+
+
+- 2026-11-17: Reviewed shared Outbox inspection reader/host additions. Auth does not opt
+  into inspection; its existing finite HTTP-delivery worker, claim/retry behavior and
+  numbered API/database/message flows are unchanged. The new hosting-abstractions
+  dependency adds no Auth process or network interaction.
+
 - 2026-11-10: Extracted transaction lifecycle into shared EfUnitOfWork/EfTransaction and event
   staging into OutboxDbContext/DomainEventOutboxCoordinator. AuthDbContext now owns only its
   model; AuthUnitOfWork preserves repository error mapping. Existing numbered

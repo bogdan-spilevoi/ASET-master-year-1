@@ -23,7 +23,7 @@ adapters. Real inter-service and AI integrations are not implemented.
 The [SmartLost project description](docs/SMARTLOST.md) documents the proposed Listings and
 Matching services, their data ownership, C4 diagrams, publication/matching flows and credibility
 rules. Their network workflows remain a design proposal. Listings now has service-owned
-EF mappings, a first migration and [conventional Domain entities](src/Services/Listings/SmartLost.ListingsService.Domain/README.md)
+EF mappings, service-owned migrations and [conventional Domain entities](src/Services/Listings/SmartLost.ListingsService.Domain/README.md)
 maintained manually, with shared AggregateRoot/Entity bases and guarded partial methods.
 NMF remains separate for modeling/XMI; Domain has no NMF dependency or code-generation step. [EF verification](docs/LISTINGS_EF_COMPATIBILITY.md) exercises the checked-in
 Infrastructure model/migration without a running Listings API.
@@ -46,7 +46,7 @@ src/
       Auth.slnx        # Auth runtime projects, NMF Modeling, shared dependencies and Auth tests
       SmartLost.AuthService.*/
     Listings/
-      Listings.slnx    # Read API/CQRS, Domain, EF Infrastructure, Modeling and tests
+      Listings.slnx    # Read API/CQRS, Domain, EF, Outbox Inspect/Publish worker, Modeling and tests
       SmartLost.ListingsService.*/
     Matching/
       Matching.slnx    # Runtime layers, NMF Modeling, shared dependencies and unit/integration tests
@@ -68,9 +68,9 @@ Future services belong under `src/Services/<Service>/`, with tests under
 | --- | --- |
 | [Aset.slnx](Aset.slnx) | All backend projects and tests; the main CI entry point |
 | [Auth.slnx](src/Services/Auth/Auth.slnx) | Five Auth runtime projects, NMF Modeling, four BuildingBlocks libraries and the two Auth test projects |
-| [Listings.slnx](src/Services/Listings/Listings.slnx) | Listings read API/CQRS, Domain/Infrastructure, NMF Modeling, four BuildingBlocks libraries, Listings contracts and Listings unit/integration suites |
-| [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching runtime-layer projects, NMF Modeling, four BuildingBlocks libraries, Listings contracts and the Matching unit/integration suites |
-| [BuildingBlocks.slnx](src/BuildingBlocks/BuildingBlocks.slnx) | Four shared libraries and their existing unit test project |
+| [Listings.slnx](src/Services/Listings/Listings.slnx) | Listings read API/CQRS, Domain/Infrastructure, Outbox Inspect/Publish worker, NMF Modeling, five BuildingBlocks libraries, Listings contracts and unit/integration suites |
+| [Matching.slnx](src/Services/Matching/Matching.slnx) | Four Matching runtime-layer projects, NMF Modeling, five BuildingBlocks libraries, Listings contracts and the Matching unit/integration suites |
+| [BuildingBlocks.slnx](src/BuildingBlocks/BuildingBlocks.slnx) | Five shared libraries and their existing unit test project |
 
 Solutions list the same `.csproj` files directly; they do not nest other solutions
 or duplicate code. Tests stay physically under `tests/` and appear in the relevant
@@ -237,7 +237,8 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | [`.github/`](.github/) | GitHub Actions workflows, PR/main validation, Coverlet gates, security and container checks | [CI guide](.github/README.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh API, JWT issuance, rotating refresh sessions and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Finite Auth Outbox job delivering versioned public-profile snapshots to configured HTTP receivers | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
-| [`src/Services/Listings/`](src/Services/Listings/) | Manually maintained Domain aggregates/entities with guarded listing, decision, recovery and credibility behavior; separate NMF/XMI models; EF context/configurations and InitialCreate; public GET categories/listings/details through CQRS | [Module README](src/Services/Listings/README.md), [API](src/Services/Listings/SmartLost.ListingsService.Api/README.md), [Application](src/Services/Listings/SmartLost.ListingsService.Application/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md), [Domain and behavior](src/Services/Listings/SmartLost.ListingsService.Domain/README.md), [Infrastructure](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md) |
+| [`src/Services/Listings/`](src/Services/Listings/) | Manually maintained Domain aggregates/entities with guarded listing, decision, recovery and credibility behavior; separate NMF/XMI models; EF migrations and atomic Outbox persistence; public GET categories/listings/details through CQRS | [Module README](src/Services/Listings/README.md), [API](src/Services/Listings/SmartLost.ListingsService.Api/README.md), [Application](src/Services/Listings/SmartLost.ListingsService.Application/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md), [Domain and behavior](src/Services/Listings/SmartLost.ListingsService.Domain/README.md), [Infrastructure](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md) |
+| [`src/Services/Listings/SmartLost.ListingsService.Worker/`](src/Services/Listings/SmartLost.ListingsService.Worker/) | Inspect/Publish host for service-owned Outbox; Kubernetes uses persistent RabbitMQ publishing with confirms and retries | [Worker README](src/Services/Listings/SmartLost.ListingsService.Worker/README.md) |
 | [`src/Services/Matching/`](src/Services/Matching/) | Suggestion ranking, embedding preparation and photo-analysis use cases with `ProfilingBehavior` and AI-call profiling decorators, a Matching-only PostgreSQL database, mock photo/AI adapters and development-only test endpoints; real Listings/AI integration and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
 | [`SmartLost.BuildingBlocks.*`](src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | Reusable domain/event/result/pagination primitives, application behaviors, HTTP adapters and opt-in EF Core Outbox | [Building blocks guide](docs/BUILDING_BLOCKS.md) |
 | [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen CPU/NVIDIA CUDA label extraction and DINOv3 CPU/NVIDIA CUDA normalized image embeddings | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
@@ -254,7 +255,8 @@ will be logical references, without foreign keys between service databases.
 | `SmartLost.BuildingBlocks.Core` | Type-aware `Entity<TId>`, `AggregateRoot<TId>`, domain-event contracts, domain `Guard`, immutable `Result`/`Result<T>`, errors, explicit domain exceptions, `PageSlice<T>`/`PagedResult<T>` and pagination defaults; no framework dependencies |
 | `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction/cache/authorization/profiling behaviors and shared profiling contexts, query cache metadata/contract, transaction/Outbox contracts and `ICurrentUser` |
 | `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped HTTP current-user adapter and API registration |
-| `SmartLost.BuildingBlocks.Infrastructure` | Generic EF unit-of-work/transaction adapters, optional OutboxDbContext with separate event coordinator; process-local query cache; EF Core Outbox mapping, event staging, leased batch delivery, retry and dead-letter state; each consuming service owns its table and delivery adapter |
+| `SmartLost.BuildingBlocks.Infrastructure` | Generic EF unit-of-work/transaction adapters, optional OutboxDbContext with separate event coordinator; process-local query cache; EF Outbox mapping/staging, leased delivery/retry/dead letters, and opt-in read-only inspection/continuous delivery hosts; each service owns its table and delivery adapter |
+| [`SmartLost.BuildingBlocks.Messaging.RabbitMq`](src/BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/README.md) | Opt-in persistent mandatory publishing, durable topic topology and publisher confirms; no database dependency |
 
 The root, Listings and Matching solutions include the contracts project. Both runtime
 Domain models use its ListingType. Generated NMF enums remain separate, with tests checking
@@ -384,7 +386,7 @@ They use HTTPS package sources during the update, require both packages to be at
 If the fixed packages are unavailable, image build fails. Existing Trivy HIGH/CRITICAL
 and secret-scan failure gates remain enabled; updating NuGet packages alone cannot fix
 an inherited operating-system package.
-Listings also pins its final runtime to ASP.NET `10.0.14`, including the patched .NET
+Listings also pins its final runtime to ASP.NET `10.0.15`, including the patched .NET
 runtime for [GHSA-p3jp-9v83-76w9](https://github.com/dotnet/runtime/security/advisories/GHSA-p3jp-9v83-76w9).
 Local Linux/arm64 verification on 2026-11-06 rebuilt all three images, confirmed both
 APT package versions as `2.8.4ubuntu0.1` and passed Trivy 0.74.0 image scans with no
@@ -522,6 +524,45 @@ categories and six listings on sequential runs, including hidden Draft/Closed ex
 it is off by default, Development-only and never applies migrations. See the
 [API setup and seed guide](src/Services/Listings/SmartLost.ListingsService.Api/README.md).
 
+### Local Kubernetes alternative: Listings
+
+Use the [local helper](k8s.sh) to avoid repeating Docker/Kind/kubectl commands:
+
+```sh
+./k8s.sh help
+./k8s.sh up               # First setup/resume: build/load all, migrate, start
+./k8s.sh deploy listings  # Update API + worker + migration bundle
+./k8s.sh migrate          # Rebuild/load/apply migrations only
+./k8s.sh status
+./k8s.sh stop             # Retain both PVCs; no volume deletion
+```
+
+For first setup, run `./k8s.sh config` and edit placeholders before `up`. Separate image
+build/load, local migration generation, logs and RabbitMQ UI shortcuts are documented
+in the [runbook](deploy/kubernetes/README.md#short-local-commands). The helper uses only
+the explicit local Kind context; it is not invoked by CI or a deployment workflow.
+
+The [Kubernetes runbook](deploy/kubernetes/README.md) runs three Listings API replicas,
+one Outbox Publish worker, PostgreSQL 16 and RabbitMQ 4.4. Each StatefulSet has its own
+1 GiB PVC. ConfigMap/Secrets supply configuration; an explicit EF bundle Job runs before
+the applications. The Listings Dockerfile has API and optional `migrations` targets;
+the [worker Dockerfile](src/Services/Listings/SmartLost.ListingsService.Worker/Dockerfile)
+and [patched broker Dockerfile](deploy/kubernetes/images/rabbitmq/Dockerfile) build separate images.
+
+Only Listings is exposed at `http://localhost:5082/swagger` through the local NodePort/Kind
+mapping. PostgreSQL and RabbitMQ remain internal; management UI access uses an optional
+port-forward. Root Compose remains independent and starts neither this worker nor broker.
+Auth/Matching, Redis, public ingress and Azure deployment are not included in Kubernetes;
+no deployment workflow is activated. The category cache remains per API process.
+
+The worker polls due Outbox rows in bounded batches, publishes persistent mandatory
+messages to topic exchange `smartlost.events` / durable queue
+`smartlost.listings.notifications`, and marks them processed only after broker confirms.
+Failures use existing retry/lease/dead-letter fields. `ProcessedOn` means broker acceptance;
+no Matching consumer is implemented. Existing payloads are notification metadata, not full
+Matching snapshots. Duplicate delivery is possible. Local worker startup defaults to
+read-only Inspect; see [settings/modes](src/Services/Listings/SmartLost.ListingsService.Worker/README.md).
+
 ## Database and migrations
 
 `SmartLost.AuthService.Api` owns the `authservice` PostgreSQL database. The service uses EF Core with a
@@ -557,7 +598,8 @@ Generate SQL on demand for review; SQL exports do not need to be committed.
 
 Listings owns `listingsservice` with connection key `ListingsDatabase`. Its
 [Infrastructure](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md)
-contains ListingsDbContext, seven configurations, a design-time factory and InitialCreate.
+contains ListingsDbContext, seven domain configurations plus the shared Outbox mapping,
+a design-time factory, InitialCreate and AddListingsOutbox.
 The schema stores listings, photos, categories/assignments, decisions, recoveries and
 credibility entries. Auth identities are GUID references with no cross-database FKs.
 Apply the existing migration explicitly after configuring the local database:
@@ -568,8 +610,12 @@ dotnet ef database update --project src/Services/Listings/SmartLost.ListingsServ
 
 Infrastructure is also the CLI startup project; migrations do not start the Listings API.
 The [module guide](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md#ef-cli)
-has offline inspection, new migration and SQL generation commands. Domain events are
-currently ignored by EF; Listings Outbox integration and application transactions remain pending.
+has offline inspection, new migration and SQL generation commands. Selected local domain
+notifications are staged through the shared OutboxDbContext atomically with business saves;
+event collections are ignored as EF columns. The seed uses the shared EF unit of work.
+The migration adds one table to the same database and does not backfill historical events.
+The worker supports Inspect and broker-confirmed RabbitMQ Publish modes. Complete Matching
+snapshot contracts/consumers and transactional mutation HTTP use cases remain unimplemented.
 
 `SmartLost.MatchingService.Api` owns the separate `matchingservice` PostgreSQL database
 (connection string `MatchingDatabase`). It is reachable only from Matching. Its
@@ -659,7 +705,7 @@ See the [Matching README](src/Services/Matching/README.md#test-endpoints-develop
 
 | Area | Current configuration |
 | --- | --- |
-| SDK / target | SDK **10.0.401** pinned exactly in `global.json` and Docker build images; backend targets `net10.0`; Auth runtime uses `aspnet:10.0`, Listings runtime uses `aspnet:10.0.14`; Listings base images are also pinned by manifest digest |
+| SDK / target | SDK **10.0.401** pinned exactly in `global.json` and Docker build images; backend targets `net10.0`; Auth runtime uses `aspnet:10.0`, Listings runtime uses `aspnet:10.0.15`; Listings base images are also pinned by manifest digest |
 | Style / analysis | `.editorconfig`, .NET 10 recommended analyzers, nullable references, warnings as errors |
 | Dependencies | Locked restore and direct/transitive NuGet auditing; lock files required with projects; local `dotnet-ef` 10.0.12 and `NMF-Ecore2Code` 2.0.467 pinned in `.config/dotnet-tools.json`; Auth, Listings and Matching Modeling reference `NMF-Basics` 2.0.467 |
 | Tests / coverage | All tests must pass; unit tests check Auth migration/model drift, PostgreSQL SQL generation and the NMF Auth and Listings models; **Coverlet** collects unit line coverage; inline workflow gates require **strictly above 80%** overall and on changed executable code; declaration-only interfaces, enums, empty records without primary constructors/members and const-only static classes are recognized regardless of location; 17 inline classifier regression checks run before missing-file exceptions |
@@ -678,7 +724,7 @@ The configured workflows are:
   check never generates or commits documentation.
 - [Validate commit](.github/workflows/validate-commit.yml): builds, checks formatting/analyzers,
   and runs unit tests on Linux, Windows and macOS for `Aset.slnx`; runs integration tests on Linux; then runs
-  workflow/security scans and builds/scans any `SmartLost.*/Dockerfile`, retaining image archives
+  workflow/security scans and builds/scans Dockerfiles under `src/Services` and `deploy/kubernetes/images`, retaining image archives
   and SBOMs.
 
 The workflow executes these exact commands once projects exist (run from the repository root):
@@ -726,7 +772,12 @@ encapsulation and structural consistency with the Ecore model. TestServer/SQLite
 exercise public HTTP → CQRS → EF reads, validation, seed idempotency and documentation visibility. EF checks use the real Infrastructure mapping on isolated SQLite and offline Npgsql,
 including snapshot drift, configuration and SQL generation. The Listings integration suite
 applies, rolls back and reapplies the checked-in migration on PostgreSQL 16 and 17.
-[Verification details](docs/LISTINGS_EF_COMPATIBILITY.md) distinguish persistence setup from pending API/Outbox integration. Matching runtime tests also cover Domain, Application, Infrastructure and HTTP using fakes,
+[Historical EF verification](docs/LISTINGS_EF_COMPATIBILITY.md) documents the original persistence setup.
+Current Listings tests also cover atomic Outbox saves/rollback, nonempty-database upgrade,
+read-only inspection, Inspect/Publish composition and real RabbitMQ confirms/returns/restart.
+Seed-only tests own the application's lifetime directly, checking no HTTP startup and the
+exact Production rejection; WebApplicationFactory is reserved for the running HTTP host.
+Matching runtime tests also cover Domain, Application, Infrastructure and HTTP using fakes,
 EF InMemory and WebApplicationFactory. Pure interfaces, enums,
 empty records without primary constructors or declared members, and const-only static classes
 are recognized as declarations when absent from Coverlet; executable generated code remains covered by
@@ -754,7 +805,7 @@ Listings query results use records named `CategoryDto`, `PhotoDto`, `ListingSumm
 and `ListingDetailsDto` in [Application/Dtos](src/Services/Listings/SmartLost.ListingsService.Application/Dtos/).
 HTTP input contracts keep the `Request` suffix in the API layer.
 
-AuthService uses AutoMapper 16.2.0 to map API request DTOs to Application commands.
+AuthService uses AutoMapper 16.3.0 to map API request DTOs to Application commands.
 Profiles are registered through the API's `AddApiMapping` extension; domain entities retain their factory
 methods and invariants. See [mapping setup](docs/AUTHSERVICE.md#object-mapping).
 
@@ -794,6 +845,7 @@ change as code/configuration, using relative links and verified, secret-safe exa
 ## Further reading
 
 - [Attribute-driven query cache: implementation, flow, AOP explanation and observation commands](docs/QUERY_CACHING.md)
+- [Local Kubernetes Listings/PostgreSQL setup, migration Job and lifecycle](deploy/kubernetes/README.md)
 
 - [Listings Domain / EF Core verification and historical NMF findings](docs/LISTINGS_EF_COMPATIBILITY.md)
 - [BPMN process models for three teams of two: editable diagrams, previews and responsibilities](docs/bpmn/README.md)

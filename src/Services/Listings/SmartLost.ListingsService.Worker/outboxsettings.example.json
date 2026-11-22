@@ -1,0 +1,21 @@
+{
+  "ConnectionStrings": {
+    "ListingsDatabase": "Host=localhost;Port=5433;Database=listingsservice;Username=listingsservice;Password=replace-with-local-development-password"
+  },
+  "OutboxInspection": {
+    "BatchSize": 20,
+    "PollInterval": "00:00:10"
+  },
+  "Worker": { "Mode": "Inspect" },
+  "OutboxDelivery": { "PollInterval": "00:00:02" },
+  "RabbitMq": {
+    "HostName": "localhost",
+    "Port": 5672,
+    "VirtualHost": "smartlost",
+    "UserName": "smartlost",
+    "Password": "replace-with-local-rabbitmq-password",
+    "Exchange": "smartlost.events",
+    "ConnectionName": "smartlost-listings-outbox",
+    "Bindings": { "smartlost.listings.notifications": ["listings.*"] }
+  }
+}

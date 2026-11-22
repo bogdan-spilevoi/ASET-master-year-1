@@ -43,6 +43,68 @@ process and is cleared on API restart. Stop/down preserve database data unless v
 removal is explicitly requested; adopted external volumes survive even `down --volumes`.
 Cloud deployment remains inactive.
 
+## Local Kubernetes alternative
+
+The checked-in [local Kubernetes runbook](../../../deploy/kubernetes/README.md) covers
+Listings only. Root Compose remains an alternative; its PostgreSQL volume is not adopted.
+
+```mermaid
+flowchart LR
+    Operator["Developer / kubectl or k8s.sh in explicit Kind local context"]
+    Build["Existing API Dockerfile: runtime + opt-in migrations target"]
+    Images["Kind node image store"]
+    Config["ConfigMap JSON + local credentials Secret"]
+    Migration["Explicit EF bundle Job"]
+    Service["listings-service:80 / local NodePort:30081"]
+    Pods["Deployment: 3 API pods on :8080"]
+    Inspector["Deployment: 1 Publish Outbox worker; no port"]
+    Broker["Headless rabbitmq:5672 / one broker pod"]
+    BrokerStorage[("PVC: rabbitmq-data-rabbitmq-0")]
+    Database["Headless listings-db:5432 / one PostgreSQL pod"]
+    Storage[("PVC: database-data-listings-db-0")]
+    Client["Browser / HTTP client"]
+    HostPort["Kind loopback mapping: localhost:5082 to node:30081"]
+    Operator -->|"1. Build API and migration images"| Build
+    Build -->|"2. Load images before pod creation"| Images
+    Operator -->|"3. Create namespace, Secret, DB Service and StatefulSet"| Database
+    Database -->|"3.1 Initialize or reopen PostgreSQL data"| Storage
+    Config -->|"3.2 PostgreSQL password"| Database
+    Operator -->|"4. Run migration Job after DB readiness; wait for completion"| Migration
+    Config -->|"4.1 Connection environment for migration bundle"| Migration
+    Migration -->|"4.2 Apply checked-in schema; exit success or failure"| Database
+    Operator -->|"5. Apply local overlay after successful migration"| Pods
+    Config -->|"5.1 JSON mount + connection environment; seed off"| Pods
+    Pods -->|"6. EF reads + uncached list readiness probe"| Database
+    Client -->|"7. HTTP localhost:5082; no port-forward"| HostPort
+    HostPort -->|"7.1 NodePort 30081; local Service override"| Service
+    Service -->|"8. Select ready API endpoints on port 8080"| Pods
+    Operator -->|"9. Optional seed-only process in one API pod"| Pods
+    Pods -->|"9.1 Explicit fixture transaction; no schema migration"| Database
+    Operator -->|"10. Start Publish host after migration and broker startup"| Inspector
+    Config -->|"10.1 Connection/Rabbit Secrets + JSON as outboxsettings.json"| Inspector
+    Inspector -->|"10.2 Every 2 seconds: claim due rows, persist outcomes"| Database
+    Inspector -->|"11. Persistent mandatory publish; wait for confirm"| Broker
+    Broker -->|"11.1 Store durable queue/messages; no consumer yet"| BrokerStorage
+```
+
+Migration Job failures exit nonzero and require explicit correction/recreation (no
+automatic retry). API/database process crashes are restarted by Kubernetes; pod deletion
+is reconciled by their controllers. The API readiness query fails when PostgreSQL/schema
+is unavailable, removing that pod from normal Service traffic; TCP liveness does not
+restart the API merely because the database is down. Application query retry behavior
+is unchanged. The singleton database is unavailable during pod replacement and is not HA.
+The PVC survives database pod replacement/StatefulSet deletion, but namespace or Kind
+cluster deletion destroys this local data. Category cache remains per process; restart
+API pods or wait for TTL after optional seeding if an empty category result was cached.
+The Publish worker adds an outgoing AMQP connection and retries failed deliveries through
+the shared processor. No HTTP route or cloud workflow is added. Worker readiness indicates
+a running host, not successful DB/broker delivery. Startup does not migrate or seed
+automatically. Swagger is Development-only.
+The base API Service remains ClusterIP; the local overlay alone adds NodePort 30081.
+The Kind node publishes only Listings on loopback port 5082. Auth, Matching and databases
+have no additional host mappings. Changing Kind mappings requires node recreation and
+database backup/restore; applying the Service patch alone does not publish a host port.
+
 ## Current NMF modeling flow
 
 Solid numbered arrows describe local modeling tools and tests, not a running service.
@@ -128,7 +190,7 @@ flowchart LR
     Gate -->|"2. Create scoped seeder"| Seeder
     Seeder -->|"3. Reuse categories / author-title fixtures"| DB
     Seeder -->|"4. Build missing fictional records"| Domain
-    Seeder -->|"5. Save in transaction and commit"| DB
+    Seeder -->|"5. Shared EF unit of work: save entities + Outbox metadata, then commit"| DB
     Seeder -->|"6. SeedData:Only=true: dispose application and exit"| Exit
 ```
 
@@ -142,6 +204,67 @@ of a separately running API process; its categories can stay stale until TTL/res
 Repeated sequential runs preserve existing fixture records. Read endpoints expose the
 four Open samples; Draft/Withdrawn fixtures remain hidden. Canonical local connection
 settings now live beside the API; Infrastructure links that same file for EF CLI.
+Newly created published fixtures generate notification rows; unchanged seed reruns do
+not recreate historical events. Outbox event cleanup occurs after the seed transaction commits.
+
+## Current Outbox persistence, inspection and RabbitMQ delivery
+
+```mermaid
+flowchart LR
+    Caller["Seeder / Domain persistence caller"]
+    Domain["ListingChanged / MatchDecisionChanged"]
+    Mapper["ListingsOutboxEventMapper"]
+    Context["ListingsDbContext : shared OutboxDbContext"]
+    DB[("Listings PostgreSQL: business tables + OutboxMessages")]
+    Worker["Listings Worker / shared OutboxInspectionService"]
+    Reader["Scoped EfOutboxReader: AsNoTracking"]
+    Logs["Metadata-only logs"]
+    Caller -->|"1. Execute Domain methods"| Domain
+    Caller -->|"2. Save through EF / managed unit of work"| Context
+    Context -->|"2.1 Map tracked domain notifications before saving"| Mapper
+    Domain -->|"2.2 Stable event ID/time + notification metadata"| Mapper
+    Mapper -->|"2.3 Versioned JSON envelope; unknown local events ignored"| Context
+    Context -->|"3. Commit business rows + Outbox rows atomically"| DB
+    Context -->|"3.1 Clear captured domain events after successful commit"| Domain
+    Worker -->|"4. Every 10 seconds create/dispose a fresh scope"| Reader
+    Reader -->|"4.1 SELECT oldest 20 pending rows; no claims or updates"| DB
+    Reader -->|"4.2 Immutable envelopes"| Worker
+    Worker -->|"5. Count, message ID, type and schema version; no payload"| Logs
+```
+
+Implicit saves use EF's transaction; explicit event saves require the shared unit of work.
+Unmanaged/ambient boundaries are rejected before staging. Failure rolls back business
+and Outbox changes; rollback retains domain events on entity references and discards
+tracked state. Inspection filters out processed/dead-lettered rows but may show leased
+or deferred-retry messages. It never changes attempts, leases, processing timestamps or
+errors. Repeated polls can log the same oldest batch. Inspect is the local default;
+Publish is selected in Kubernetes and follows the separate flow below. Existing payloads
+are not complete Matching snapshots. AddListingsOutbox does not backfill earlier changes.
+
+```mermaid
+flowchart LR
+    Worker["Listings Worker: Publish / shared continuous host"]
+    Processor["Scoped shared OutboxProcessor"]
+    DB[("Listings-owned OutboxMessages")]
+    Publisher["Shared RabbitMqOutboxPublisher"]
+    Broker["RabbitMQ topic exchange smartlost.events"]
+    Queue[("Durable smartlost.listings.notifications queue / PVC")]
+    Worker -->|"1. Every 2 seconds create/dispose batch scope"| Processor
+    Processor -->|"2. Claim due rows with expiring leases; increment attempts"| DB
+    Processor -->|"3. Stable envelope ID and metadata payload"| Publisher
+    Publisher -->|"3.1 Lazy durable topology; persistent mandatory publish"| Broker
+    Broker -->|"3.2 Route listings.*"| Queue
+    Broker -->|"4. Confirm or return/nack/disconnect"| Publisher
+    Publisher -->|"4.1 Awaited success or exception"| Processor
+    Processor -->|"5. Confirm: ProcessedOn; failure: retry/dead letter; clear lease"| DB
+```
+
+`ProcessedOn` means broker acceptance, not consumer application. There is no Matching
+consumer. Failures retry with backoff, up to 8 attempts, then remain dead-lettered in
+PostgreSQL; automatic replay is not implemented. Expired claims can be recovered. A crash
+after confirm before DB update can duplicate an ID. Future consumers need deduplication
+and stale-sequence handling; retries/parallel workers do not guarantee aggregate ordering.
+One classic broker/queue with a PVC is persistent but not highly available.
 
 ## Current development API documentation flow
 
@@ -194,7 +317,8 @@ An already confirmed decision rejects another confirmation. Public setters and c
 mutation cannot bypass behavior. The caller supplies actor identity; HTTP authentication
 is not implemented here. Cross-root transaction/concurrency, global reservations,
 consumed Found eligibility, automatic invalidation and durable retries remain pending.
-Events are neither staged in an Outbox nor published to another service.
+When tracked entities are saved, selected events are staged in the service-owned Outbox;
+no event is published to another service.
 
 ## Current Infrastructure and explicit migration flows
 
@@ -207,8 +331,8 @@ flowchart LR
     Factory["ListingsDbContextFactory"]
     Settings["JSON / environment / forwarded arguments"]
     DI["AddListingsPersistence"]
-    Context["ListingsDbContext + seven configurations"]
-    Migration["InitialCreate / snapshot"]
+    Context["ListingsDbContext + domain and shared Outbox configurations"]
+    Migration["InitialCreate / AddListingsOutbox / snapshot"]
     DB[("Listings-owned PostgreSQL")]
     Tests["DomainEfCompatibilityTests / ListingsPersistenceTests"]
     SQLite[("Isolated SQLite in-memory database")]
@@ -241,7 +365,9 @@ Listing Revision/ChangeSequence and decision State protect optimistic writes. St
 throw DbUpdateConcurrencyException; unique/FK violations throw DbUpdateException. No
 application retry orchestration is wired. Physical FKs stay inside Listings; Auth user IDs
 are logical references. Photo/assignment deletion cascades; historical/shared references
-restrict deletion. Local DomainEvents are ignored and are not cleared, staged or delivered.
+restrict deletion. DomainEvents are ignored as mapped columns; selected notifications
+are staged in Outbox and cleared after commit. Inspect mode does not deliver them;
+Publish sends metadata notifications to RabbitMQ.
 See [Infrastructure commands/configuration](SmartLost.ListingsService.Infrastructure/README.md)
 and the [verification report](../../../docs/LISTINGS_EF_COMPATIBILITY.md).
 
@@ -254,23 +380,22 @@ application/infrastructure work.
 flowchart LR
     Client["Future client"]
     Listings["Future Listings API / application"]
-    DB[("Listings-owned PostgreSQL; Outbox adoption pending")]
+    DB[("Listings PostgreSQL; metadata Outbox implemented, full snapshots pending")]
     Storage["Future private photo storage"]
     Matching["Future Matching service"]
-    Worker["Future Listings Outbox worker"]
+    Worker["Current publisher; future full snapshot contract"]
     Client -.->|"1. Submit listing and optional photo"| Listings
     Listings -.->|"1.1 Store authorized photo"| Storage
     Listings -.->|"1.2 Request optional image analysis"| Matching
     Client -.->|"2. Confirm categories and publish"| Listings
     Listings -.->|"2.1 Commit aggregates, sequence and Outbox snapshot atomically"| DB
-    Worker -.->|"3. Claim due messages; recover expired claims"| DB
-    Worker -.->|"3.1 Deliver snapshot with ChangeSequence"| Matching
-    Worker -.->|"3.2 Record acknowledgement or schedule retry"| DB
+    Worker -.->|"3. Expand payload and deliver full snapshot via broker/consumer"| Matching
 ```
 
 Only Listings will access its database/photo storage. Auth identities and Matching
 results use logical IDs, without cross-service physical FKs. Auth Outbox reception,
-snapshot delivery, inference calls and workers are not implemented in Listings.
+snapshot delivery and inference calls are not implemented in Listings. The current worker
+publishes metadata to RabbitMQ; full snapshot production/consumption remains planned.
 
 ## Source references
 
@@ -280,6 +405,36 @@ snapshot delivery, inference calls and workers are not implemented in Listings.
 - [Proposed publication activity](../../../docs/diagrams/member-4/smartlost-publication-activity.puml)
 
 ## Review notes
+
+- 2026-11-17: Split Program construction and execution so seed-only tests can own the
+  application's lifetime without WebApplicationFactory's deferred-start/disposal race.
+  HTTP tests still execute Main. Current seed, persistence and HTTP arrows are unchanged:
+  Production rejects SeedData:Only before writes; Development seed-only exits without HTTP.
+
+- 2026-11-17: Added the root local k8s.sh helper around the existing build/load, migration,
+  infrastructure, rollout, logs and stop operations. Updated the operator label; runtime
+  API/DB/AMQP arrows and contracts are unchanged. Migration generation remains local;
+  the helper refuses to replace active Jobs and does not activate CI/cloud deployment.
+
+- 2026-11-17: RabbitMQ Publish mode uses shared continuous delivery and a separate shared
+  transport. Added confirmed publishing/retry/queue arrows; reviewed every service diagram.
+  No Matching consumer, new HTTP endpoint or schema migration was added by this step.
+
+- 2026-11-17: Added AddListingsOutbox, shared event-save integration and Listings' continuous
+  read-only inspection host/Deployment. Updated seed, Kubernetes and persistence arrows;
+  added the current Outbox diagram. No broker, publisher, delivery claims or new HTTP
+  mutation endpoint is introduced. Auth/Matching diagrams were reviewed for shared changes.
+
+- 2026-11-17: Replaced Listings' temporary Kubernetes port-forward access with a local-only
+  NodePort/Kind mapping on 5082. Updated arrows 7-8; the base Service stays ClusterIP.
+  No other service is exposed, and the API/query/seed/database ownership flows are unchanged.
+
+- 2026-11-17: Added the local Kubernetes hosting alternative, ConfigMap/Secret inputs,
+  separate migration target/Job, real-read readiness, explicit seed and PVC/recovery paths
+  above. Existing HTTP/CQRS contracts, database ownership and planned integration arrows
+  remain unchanged; no RabbitMQ or Outbox is implemented. Both runtime targets now pin
+  ASP.NET 10.0.15 after image scanning identified three vulnerabilities in 10.0.14;
+  application routes and communication are unchanged by the runtime patch.
 
 - 2026-11-10: Reviewed shared EF transaction/Outbox extraction. Listings keeps a normal
   DbContext and its read-only queries; it does not opt into the Outbox base or transaction

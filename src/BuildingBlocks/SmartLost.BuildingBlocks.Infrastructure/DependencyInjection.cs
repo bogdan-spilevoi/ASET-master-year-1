@@ -25,6 +25,24 @@ public static class DependencyInjection
         return services;
     }
 
+    public static IServiceCollection AddBuildingBlocksOutboxInspection<TContext>(
+        this IServiceCollection services, Action<OutboxInspectionOptions>? configure = null) where TContext : DbContext
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.AddOptions<OutboxInspectionOptions>()
+            .Validate(settings => settings.IsValid(), "Outbox inspection batch size or polling interval is invalid.")
+            .ValidateOnStart();
+        if (configure is not null)
+        {
+            services.Configure(configure);
+        }
+
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<IOutboxReader, EfOutboxReader<TContext>>();
+        services.AddHostedService<OutboxInspectionService>();
+        return services;
+    }
+
     public static IServiceCollection AddBuildingBlocksOutboxProcessor<TContext>(
         this IServiceCollection services, Action<OutboxOptions>? configure = null) where TContext : DbContext
     {
@@ -39,6 +57,22 @@ public static class DependencyInjection
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IOutboxProcessor, OutboxProcessor<TContext>>();
+        return services;
+    }
+
+    public static IServiceCollection AddBuildingBlocksOutboxDelivery<TContext>(this IServiceCollection services,
+        Action<OutboxOptions>? configureOutbox = null, Action<OutboxDeliveryOptions>? configureWorker = null) where TContext : DbContext
+    {
+        services.AddBuildingBlocksOutboxProcessor<TContext>(configureOutbox);
+        services.AddOptions<OutboxDeliveryOptions>()
+            .Validate(settings => settings.IsValid(), "Outbox delivery polling interval is invalid.")
+            .ValidateOnStart();
+        if (configureWorker is not null)
+        {
+            services.Configure(configureWorker);
+        }
+
+        services.AddHostedService<OutboxDeliveryService>();
         return services;
     }
 }

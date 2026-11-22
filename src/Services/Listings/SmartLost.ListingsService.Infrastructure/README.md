@@ -2,7 +2,7 @@
 
 This project implements Listings-owned EF Core persistence: [ListingsDbContext](Persistence/ListingsDbContext.cs),
 [seven entity configurations](Persistence/Configurations/), the [design-time factory](Persistence/ListingsDbContextFactory.cs),
-[InitialCreate and model snapshot](Persistence/Migrations/) and opt-in DI registration.
+[InitialCreate/AddListingsOutbox and model snapshot](Persistence/Migrations/) and opt-in DI registration.
 EF Core/tooling is pinned to **10.0.12**, Npgsql EF provider to **10.0.3**.
 Domain remains independent of EF and NMF. The API now composes Application read queries
 with the EF [ListingsReadStore](Persistence/ListingsReadStore.cs).
@@ -11,7 +11,8 @@ with the EF [ListingsReadStore](Persistence/ListingsReadStore.cs).
 
 The service owns the `listingsservice` PostgreSQL database. InitialCreate creates
 Listings, Photos, Categories, ListingCategories, MatchDecisions, Recoveries and
-CredibilityEntries, plus EF migration history. Auth user IDs are logical values: no
+CredibilityEntries. AddListingsOutbox adds OutboxMessages to the same database, alongside
+EF migration history. Auth user IDs are logical values: no
 Users table or cross-service foreign key is created.
 
 - ListingCategory uses `(ListingId, CategoryId)` as its composite key.
@@ -23,12 +24,15 @@ Users table or cross-service foreign key is created.
   `timestamp with time zone` and require UTC values. Traits use PostgreSQL `text[]`.
 - Private setters and List backing fields allow materialization and read-only public views.
 - Lookup indexes cover author, listing state/type, category name and award beneficiary.
-- Aggregate DomainEvents are ignored. SaveChanges currently persists data only; it does
-  not dispatch, stage in Outbox or clear domain events.
+- Aggregate DomainEvents are ignored as EF columns. The shared OutboxDbContext maps selected
+  notifications through ListingsOutboxEventMapper and saves their rows atomically with
+  business changes; events are cleared after commit. DbContext owns mapping, while shared
+  components coordinate transactions and event cleanup.
 
 Global accepted reservations, consumed Found eligibility, automatic invalidation and
 transaction-level use-case orchestration remain application work. Database mapping alone
-is not the complete recovery protocol. No Outbox table/worker is added here. Public reads use AsNoTracking projections to DTOs;
+is not the complete recovery protocol. The [worker](../SmartLost.ListingsService.Worker/README.md)
+supports read-only inspection and opt-in RabbitMQ delivery with broker acknowledgement. Public reads use AsNoTracking projections to DTOs;
 filtering, sorting, count and pagination run in SQL. The read adapter does not save data
 or call Auth/Matching/Blob Storage. See [query contracts](../SmartLost.ListingsService.Application/README.md).
 
@@ -72,6 +76,12 @@ Changing the password setting does not rotate credentials inside an initialized 
 See [API container setup](../SmartLost.ListingsService.Api/README.md#docker-api-and-database).
 
 ## EF CLI
+
+The [local Kubernetes runbook](../../../../deploy/kubernetes/README.md) provides an
+alternative explicit migration path: build the API Dockerfile's `migrations` target,
+then run `migrations/listings-job.yaml` with the cluster's connection Secret. The bundle
+uses this same design-time factory and checked-in migration; it does not require the
+SDK/EF CLI inside the runtime pod. Kubernetes data is independent of Compose data.
 
 Run from the repository root. Infrastructure is both the target and startup project;
 its design-time factory works without an executable API or a running database for
@@ -130,6 +140,12 @@ The API invokes it when composing the three public read endpoints. It also regis
 IListingsReadStore, the opt-in development seeder and shared in-memory IQueryCache; registration itself does not connect
 to the database or execute seeding.
 
+`AddListingsOutboxInspection(configuration)` registers the same service-owned database,
+event mapper and shared unit of work, then opts into the shared read-only reader/host.
+It does not register the API read store, seeder, cache, publisher or delivery processor.
+The worker polls oldest pending metadata without modifying delivery state. Apply
+AddListingsOutbox before starting it; see the [worker runbook](../SmartLost.ListingsService.Worker/README.md).
+
 After explicitly applying migrations, [seed.sh](../seed.sh) invokes the API's
 Development-only `SeedData:Only` mode to run the same transactional seeder and exit
 without starting HTTP. It uses the existing local connection configuration and preserves
@@ -150,3 +166,10 @@ fixtures on sequential reruns. See [seed commands and data](../SmartLost.Listing
 Listings calls AddBuildingBlocksQueryCache for a singleton MemoryQueryCache. Only the
 Application category query is annotated; no Redis, new table or schema migration is
 required. See [cache policy and limitations](../../../../docs/QUERY_CACHING.md).
+
+### Continuous delivery composition
+
+`AddListingsOutboxDelivery(configuration)` registers ListingsDbContext, the shared leased
+processor and continuous delivery host, binding `Outbox` and `OutboxDelivery`. The Worker
+adds the separate shared RabbitMQ transport in Publish mode. Infrastructure owns no broker
+connection or Matching consumer. Inspect mode retains its independent no-write reader.

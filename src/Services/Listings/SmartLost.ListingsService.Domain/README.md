@@ -64,9 +64,11 @@ itself contains no EF attributes or package reference.
 A decision/recovery operation can change several aggregate roots in this service. The
 application must load them consistently and persist them in one protected transaction.
 Global accepted-pair reservations, consumed Found eligibility, automatic invalidation of
-other decisions, authentication, real storage, durable idempotency and Outbox adoption
-remain application/infrastructure work. EF context/configurations and InitialCreate now
-exist in Infrastructure. Public HTTP read queries are implemented; authenticated mutation
-use-case orchestration and workers remain unimplemented. The context does not persist or clear the local domain events.
+other decisions, authentication, real storage and durable consumer idempotency remain
+application/infrastructure work. EF mappings and InitialCreate/AddListingsOutbox exist in
+Infrastructure. The context stages selected local notifications atomically and clears
+events after commit through shared components. A separate worker supports Inspect and
+broker-confirmed RabbitMQ Publish modes; Domain has no broker dependency. Public reads
+are implemented; authenticated mutation orchestration and Matching consumption remain pending.
 
 See the [service communication diagram](../COMMUNICATION.md) and [verification report](../../../../docs/LISTINGS_EF_COMPATIBILITY.md).

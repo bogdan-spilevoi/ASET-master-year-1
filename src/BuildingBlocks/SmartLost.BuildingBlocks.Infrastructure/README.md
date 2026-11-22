@@ -3,7 +3,7 @@
 Reusable .NET 10 EF Core transaction/Outbox support and opt-in process-local query caching. Depends on BuildingBlocks.Application;
 no service-specific context, database connection, provider or business model is included.
 
-- `Transactions/EfUnitOfWork<TContext>`: begin/save boundary shared by Auth and Matching.
+- `Transactions/EfUnitOfWork<TContext>`: begin/save boundary shared by Auth, Matching and Listings seeding.
 - `Transactions/EfTransaction`: commit/rollback/disposal, discarding tracked state on rollback.
 - `Outbox/OutboxDbContext`: optional sync/async SaveChanges integration for service contexts.
 - `Outbox/DomainEventOutboxCoordinator`: event staging and cleanup after the final commit.
@@ -13,10 +13,21 @@ no service-specific context, database connection, provider or business model is 
   delivery, retry and dead-letter state. Receivers must deduplicate message IDs.
 - `AddBuildingBlocksOutbox<TContext>`: opt-in scoped writer registration.
 - `AddBuildingBlocksOutboxProcessor<TContext>`: scoped delivery registration and validated options.
+- `EfOutboxReader<TContext>` / `IOutboxReader`: bounded, no-tracking inspection of oldest
+  pending rows, without claims, attempts, delivery or acknowledgements.
+- `OutboxInspectionService` / `AddBuildingBlocksOutboxInspection<TContext>`: opt-in hosted
+  polling with a fresh scope per read, validated batch/interval settings and metadata-only
+  logs. Inspect mode uses this host; Auth's finite publisher remains unchanged.
+- `OutboxDeliveryService` / `AddBuildingBlocksOutboxDelivery<TContext>`: continuous scoped
+  batch processing (default 2-second interval), including after empty batches/failures.
+  The caller must register a real `IOutboxMessagePublisher`. RabbitMQ is in a separate
+  opt-in [transport project](../SmartLost.BuildingBlocks.Messaging.RabbitMq/README.md).
 
 Services provide the event mapper, context/migration, transport publisher, error mapping
 and worker host. Transaction mechanics and event-save lifecycle are shared components. Auth now adopts them through a service-owned migration,
 commit-boundary staging and [finite worker](../../Services/Auth/SmartLost.AuthService.Worker/README.md).
+Listings also uses the Outbox context/mapper and has its own
+[Inspect/Publish worker](../../Services/Listings/SmartLost.ListingsService.Worker/README.md).
 
 See the [BuildingBlocks guide](../../../docs/BUILDING_BLOCKS.md#opt-in-relational-outbox)
 for integration steps, defaults, transaction requirements and delivery limitations.

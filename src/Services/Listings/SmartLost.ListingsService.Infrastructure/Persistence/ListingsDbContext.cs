@@ -1,10 +1,16 @@
 using Microsoft.EntityFrameworkCore;
+using SmartLost.BuildingBlocks.Application.Outbox;
+using SmartLost.BuildingBlocks.Infrastructure.Outbox;
 using SmartLost.ListingsService.Domain.Entities;
+using SmartLost.ListingsService.Infrastructure.Outbox;
 
 namespace SmartLost.ListingsService.Infrastructure.Persistence;
 
-public sealed class ListingsDbContext(DbContextOptions<ListingsDbContext> options) : DbContext(options)
+public sealed class ListingsDbContext(DbContextOptions<ListingsDbContext> options, IOutboxEventMapper? eventMapper = null)
+    : OutboxDbContext(options, eventMapper ?? new ListingsOutboxEventMapper())
 {
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
     public DbSet<Listing> Listings => Set<Listing>();
 
     public DbSet<Photo> Photos => Set<Photo>();
@@ -22,5 +28,6 @@ public sealed class ListingsDbContext(DbContextOptions<ListingsDbContext> option
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ListingsDbContext).Assembly);
+        modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
     }
 }
