@@ -3,13 +3,12 @@
 Matching runs as an ASP.NET Core API with its own PostgreSQL database. The Application layer
 implements three MediatR use cases: suggestion ranking, embedding preparation and photo
 analysis. Every request passes through the profiling pipeline behavior and profiling
-decorators. The Listings photo reader and the DINOv3/Qwen adapters are **mocks**; no real
-Listings or AI runtime connection exists. All HTTP routes are development-only test endpoints
+decorators. The HTTP adapter calls the laptop runtime with mounted test images. Empty runtime URL selects explicitly enabled demo mocks. Listings photo download is pending. All HTTP routes are development-only test endpoints
 without service authentication.
 
 ## Current implemented interactions
 
-Solid arrows are implemented and exercised by unit tests and by the Compose container.
+Solid arrows describe implemented paths. The runtime URL selects the inference adapter.
 
 ```mermaid
 flowchart LR
@@ -24,7 +23,7 @@ flowchart LR
     Ranker["ProfiledRelevanceRanker -> RelevanceRanker"]
     AiDecorators["ProfiledImageEmbeddingGenerator / ProfiledPhotoAnalyzer"]
     MockAi["Mock DINOv3 / Qwen adapters"]
-    MockPhotos["MockListingPhotoReader (static demo photos)"]
+    MockPhotos["Photo reader: mock catalog or mounted JPEG/PNG revision"]
     Profiler["MatchingProfiler / shared IProfilingContext"]
     Logs[("ILogger events 1301-1304 (container stdout)")]
     DB[("matchingservice PostgreSQL: SearchListings, ImageEmbeddings, EmbeddingPreparationTasks")]
@@ -54,6 +53,10 @@ flowchart LR
     AnalysisCache -->|"8.3 Miss, unreadable entry or Redis unavailable: analyze permitted photo bytes"| AiDecorators
     AnalysisCache -->|"8.4 Success: deserialized read-only labels, also on other replicas"| Handler
     AiDecorators -->|"7.3 Bounded call with AI timeout"| MockAi
+    AiDecorators -->|"7.3.1 HTTP mode: POST image + API key via HTTPS tunnel"| Runtime["Laptop inference API"]
+    Runtime -->|"7.3.2 Run one CLI process; concurrent request receives 429"| Models["DinoVision or QwenVision"]
+    Models -->|"7.3.3 Vector/version or labels; failure becomes 502"| Runtime
+    Runtime -->|"7.3.4 JSON or unavailable/timeout"| AiDecorators
     AiDecorators -->|"7.4 Record duration, timeout, cancellation or failure"| Profiler
     Handler -->|"7.5 Commit vector + Ready, or retry/exhausted Failed with sanitized code"| DB
     Profiler -->|"9. Warn on AI problems and slow AI calls"| Logs
@@ -91,13 +94,12 @@ Failure and retry paths that are implemented:
   retain the bounded AI call and error mapping. Successful nested label lists are frozen
   and come back from Redis as read-only lists; absolute expiry is 300 seconds. If Redis is
   unavailable or an entry is unreadable, inference runs once and the request still
-  succeeds; write failures are only logged (warning 2103/2104). Current adapters are mocks;
-  the only outgoing network call is the Redis cache connection.
+  succeeds; write failures are only logged (warning 2103/2104). HTTP mode sends the test image to the configured runtime; non-success or malformed responses follow the existing inference failure path.
 
 ## Local Kubernetes alternative
 
 The [local Kubernetes runbook](../../../deploy/kubernetes/README.md#matching-api-and-postgresql)
-runs three Matching API pods and a Matching-only PostgreSQL StatefulSet in the shared
+runs two Matching API pods and a Matching-only PostgreSQL StatefulSet in the shared
 `smartlost-local` Kind cluster and `smartlost` namespace. Root Compose remains available;
 its `matching-db-data` volume is not adopted. Solid arrows show the configured local deployment.
 
@@ -110,7 +112,7 @@ flowchart LR
     Database["Headless matching-db:5432 / one PostgreSQL pod"]
     Storage[("PVC: database-data-matching-db-0")]
     Migration["Job matching-migrate: EF bundle"]
-    Pod["Deployment matching-service: 3 API pods on :8080 (Development, mocks on)"]
+    Pod["Deployment matching-service: 2 API pods on :8080 (Development, mocks on)"]
     Service["ClusterIP matching-service:80"]
     Forward["kubectl port-forward: localhost:5083"]
     Client["Browser / HTTP client"]
@@ -161,8 +163,8 @@ flowchart LR
     Matching["Matching API with service authentication"]
     Worker["Future Matching preparation job"]
     DB[("matchingservice PostgreSQL")]
-    Tunnel["Future authenticated HTTPS tunnel"]
-    AI["Future local Qwen / DINOv3 HTTP runtime"]
+    Tunnel["Configured HTTPS tunnel"]
+    AI["Laptop Qwen / DINOv3 HTTP runtime"]
 
     Listings -.->|"1. Authenticated internal suggestion/analysis request"| Matching
     Listings -.->|"2. Deliver search snapshots (Outbox)"| Matching

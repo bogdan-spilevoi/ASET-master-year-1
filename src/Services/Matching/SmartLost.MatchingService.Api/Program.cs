@@ -4,6 +4,8 @@ using SmartLost.BuildingBlocks.AspNetCore;
 using SmartLost.MatchingService.Api.Diagnostics;
 using SmartLost.MatchingService.Application;
 using SmartLost.MatchingService.Application.Profiling;
+using SmartLost.MatchingService.Application.Services;
+using SmartLost.MatchingService.Domain.ValueObjects;
 using SmartLost.MatchingService.Infrastructure;
 using SmartLost.MatchingService.Infrastructure.Persistence;
 
@@ -16,9 +18,22 @@ builder.Services.AddBuildingBlocksApi();
 
 MatchingProfilingOptions profiling = builder.Configuration.GetSection("Matching:Profiling").Get<MatchingProfilingOptions>()
     ?? new MatchingProfilingOptions();
-builder.Services.AddApplication(profilingOptions: profiling);
+var matching = new MatchingOptions();
+if (!string.IsNullOrWhiteSpace(builder.Configuration["AiRuntime:BaseUrl"]))
+{
+    EmbeddingVersion dino = MatchingOptions.Dinov3Version;
+    matching = matching with
+    {
+        EmbeddingVersion = MatchingOptions.FromRuntime(dino.ModelVersion, dino.PreprocessingVersion)
+    };
+    profiling = profiling with
+    {
+        AiCallTimeout = builder.Configuration.GetValue("AiRuntime:CallTimeout", TimeSpan.FromMinutes(2))
+    };
+}
+builder.Services.AddApplication(matchingOptions: matching, profilingOptions: profiling);
 builder.Services.AddInfrastructure(builder.Configuration);
-// Must follow AddInfrastructure, which registers the (mock) AI adapters being decorated.
+// Must follow AddInfrastructure, which registers the selected AI adapters being decorated.
 builder.Services.AddMatchingAiProfiling();
 
 // Recent logs back the development-only GET /api/matching/demo/logs endpoint.

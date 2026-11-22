@@ -37,6 +37,12 @@ spec:
             - configMapRef:
                 name: matching-environment
           env:
+            - name: AiRuntime__ApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: matching-ai-runtime
+                  key: api-key
+                  optional: true
             - name: ASPNETCORE_URLS
               value: http://+:8080
             - name: ConnectionStrings__MatchingDatabase
@@ -86,12 +92,19 @@ spec:
               mountPath: /app/appsettings.json
               subPath: appsettings.json
               readOnly: true
+            - name: ai-photos
+              mountPath: /app/ai-photos
+              readOnly: true
             - name: temporary
               mountPath: /tmp
       volumes:
         - name: settings
           configMap:
             name: matching-settings
+        - name: ai-photos
+          configMap:
+            name: matching-ai-test-photos
+            optional: true
         - name: temporary
           emptyDir:
             sizeLimit: 128Mi

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SmartLost.BuildingBlocks.Application.Transactions;
 using SmartLost.BuildingBlocks.Infrastructure;
 using SmartLost.MatchingService.Application.Interfaces;
+using SmartLost.MatchingService.Infrastructure.Ai;
 using SmartLost.MatchingService.Infrastructure.Demo;
 using SmartLost.MatchingService.Infrastructure.Mock;
 using SmartLost.MatchingService.Infrastructure.Persistence;
@@ -31,12 +32,40 @@ public static class DependencyInjection
         services.AddHealthChecks().AddCheck<MatchingDatabaseHealthCheck>(MatchingDatabaseHealthCheck.Name,
             tags: [MatchingDatabaseHealthCheck.ReadinessTag]);
 
-        // Only mock photo/AI adapters exist; require an explicit opt-in so they are never enabled silently.
+        services.AddScoped<MatchingDemoSeeder>();
+        string? url = configuration["AiRuntime:BaseUrl"];
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? address) ||
+                !(address.Scheme == Uri.UriSchemeHttps || (address.IsLoopback && address.Scheme == Uri.UriSchemeHttp)) ||
+                address.PathAndQuery != "/" || address.UserInfo.Length != 0 || address.Fragment.Length != 0)
+            {
+                throw new InvalidOperationException("AiRuntime:BaseUrl must be an HTTPS origin (HTTP allowed on loopback).");
+            }
+            string? key = configuration["AiRuntime:ApiKey"];
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                throw new InvalidOperationException("Configure AiRuntime:ApiKey for HTTP inference.");
+            }
+            string photoDirectory = Path.GetFullPath(configuration["AiRuntime:PhotoDirectory"] ?? "ai-photos");
+            services.AddSingleton<IListingPhotoReader>(new DirectoryPhotoReader(photoDirectory));
+            services.AddHttpClient<AiRuntimeClient>(client =>
+            {
+                client.BaseAddress = address;
+                client.Timeout = Timeout.InfiniteTimeSpan; // MatchingProfiler enforces the request deadline.
+                client.MaxResponseContentBufferSize = 1024 * 1024;
+                client.DefaultRequestHeaders.Add("X-Api-Key", key);
+            }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+            services.AddTransient<IImageEmbeddingGenerator>(provider => provider.GetRequiredService<AiRuntimeClient>());
+            services.AddTransient<IPhotoAnalyzer>(provider => provider.GetRequiredService<AiRuntimeClient>());
+            return services;
+        }
+
         IConfigurationSection mockSection = configuration.GetSection(MockAdapterOptions.SectionName);
         if (!mockSection.GetValue<bool>(nameof(MockAdapterOptions.Enabled)))
         {
             throw new InvalidOperationException(
-                "No production Listings photo or AI adapter exists yet. Set MockAdapters:Enabled=true for local testing.");
+                "Configure AiRuntime:BaseUrl or set MockAdapters:Enabled=true for local testing.");
         }
 
         services.AddOptions<MockAdapterOptions>().Bind(mockSection)
@@ -46,7 +75,6 @@ public static class DependencyInjection
         services.AddSingleton<IListingPhotoReader, MockListingPhotoReader>();
         services.AddSingleton<IImageEmbeddingGenerator, MockImageEmbeddingGenerator>();
         services.AddSingleton<IPhotoAnalyzer, MockPhotoAnalyzer>();
-        services.AddScoped<MatchingDemoSeeder>();
         return services;
     }
 }

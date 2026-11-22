@@ -13,4 +13,4 @@ replicas:
   - name: listings-service
     count: 3
   - name: matching-service
-    count: 3
+    count: 2

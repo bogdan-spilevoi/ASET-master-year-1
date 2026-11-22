@@ -3,6 +3,7 @@
 The suite covers the NMF model and the runtime Matching code. Runtime tests live in
 [Runtime/](Runtime/) and use in-memory fakes for the repository, photo and AI ports:
 
+- [AiRuntimeTests](Runtime/AiRuntimeTests.cs) exercises the HTTP adapters through the existing endpoints, image selection by revision, authentication headers, version mapping, upstream failures and configuration errors.
 - `MatchingDomainTests`: SearchListing normalization and guards, photo/version value
   objects, embedding normalization and compatibility, and preparation-task transitions.
 - `MatchingRankingTests`: the eligibility rules (including the one-day Found-before-Lost

@@ -4,11 +4,10 @@ A learning project for a campus lost-and-found application that will suggest mat
 listings using editable image-derived categories and photo similarity, with credibility points
 for confirmed recoveries. Qwen3-VL-4B-Instruct is selected for traits/categories and DINOv3
 ViT-L/16 for image similarity. The selected stack is .NET 10, Angular and PostgreSQL, with
-local model inference (ONNX Runtime verified in a standalone CPU experiment; optional NVIDIA CUDA execution is configured but not locally inferred yet; service integration
-is not implemented) and Azure Blob Storage for
+local model inference (ONNX Runtime verified in a standalone CPU experiment; optional NVIDIA CUDA execution is configured but not locally inferred yet; Matching can call the laptop inference API) and Azure Blob Storage for
 photos. Auth, Listings and Matching have separate APIs and service-owned PostgreSQL databases.
 Listings exposes public CQRS reads; Matching ranks suggestions and profiles operations using
-mock photo/AI adapters and development-only test endpoints.
+configurable HTTP inference and development-only test endpoints.
 
 ## Architecture
 
@@ -17,8 +16,7 @@ data and communicating through explicit contracts. `SmartLost.AuthService.Api` c
 split with API, Application, Domain and Infrastructure projects, a dedicated PostgreSQL
 database connection and JWT issuance. Listings implements its Domain model, EF persistence/migrations
 and three public HTTP read queries through MediatR. Matching implements Domain, use cases,
-EF persistence and development-only test endpoints, with shared profiling and mock photo/AI
-adapters. Real inter-service and AI integrations are not implemented.
+EF persistence and development-only test endpoints, with shared profiling, mock adapters and optional authenticated HTTP inference on laptop-hosted models. Listings photo delivery is pending.
 
 The [SmartLost project description](docs/SMARTLOST.md) documents the proposed Listings and
 Matching services, their data ownership, C4 diagrams, publication/matching flows and credibility
@@ -80,7 +78,7 @@ Deployment is inactive; see the
 [deployment plan](docs/DEPLOYMENT.md).
 
 Listings and Matching have executable APIs, Domain models, EF persistence/migrations
-and API containers. Matching uses mock photo/AI adapters and has no background worker.
+and API containers. Matching supports demo mocks and an HTTP inference client for test photographs. Background preparation remains pending.
 Neither service references the other service's implementation projects. Both use the
 framework-free Listings contracts library for the runtime ListingType enum.
 Listings and Auth have separate [NMF structural models](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md)
@@ -117,7 +115,7 @@ Current service communication documentation lives beside each service:
 [Matching](src/Services/Matching/COMMUNICATION.md). Numbered arrows show interactions;
 planned integrations are explicitly marked. Auth includes its outbox worker flow;
 Listings documents current model-test interactions. Matching documents its HTTP, profiling, database and
-mock-adapter flow. Their service integrations remain planned.
+mock and laptop inference flows.
 Keep these documents current with service changes, or add a specific review note when
 communication is unchanged. CI requires the corresponding document change for service
 code/configuration/test changes; shared BuildingBlocks/contracts implementation or root Compose
@@ -239,9 +237,9 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Auth Outbox worker with RabbitMQ profile publication (`Publish`), confirmation delivery over SMTP (`Email`), and an alternative bounded HTTP transport (`Batch`) | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
 | [`src/Services/Listings/`](src/Services/Listings/) | Manually maintained Domain aggregates/entities with guarded listing, decision, recovery and credibility behavior; separate NMF/XMI models; EF migrations and atomic Outbox persistence; public GET categories/listings/details through CQRS | [Module README](src/Services/Listings/README.md), [API](src/Services/Listings/SmartLost.ListingsService.Api/README.md), [Application](src/Services/Listings/SmartLost.ListingsService.Application/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md), [Domain and behavior](src/Services/Listings/SmartLost.ListingsService.Domain/README.md), [Infrastructure](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md) |
 | [`src/Services/Listings/SmartLost.ListingsService.Worker/`](src/Services/Listings/SmartLost.ListingsService.Worker/) | Inspect/Publish host for service-owned Outbox; Kubernetes uses persistent RabbitMQ publishing with confirms and retries | [Worker README](src/Services/Listings/SmartLost.ListingsService.Worker/README.md) |
-| [`src/Services/Matching/`](src/Services/Matching/) | Suggestion ranking, embedding preparation and photo-analysis use cases with `ProfilingBehavior` and AI-call profiling decorators, a Matching-only PostgreSQL database, mock photo/AI adapters, development-only test endpoints and liveness/readiness endpoints; real Listings/AI integration and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md), [Communication](src/Services/Matching/COMMUNICATION.md), [Kubernetes](deploy/kubernetes/README.md#matching-api-and-postgresql) |
+| [`src/Services/Matching/`](src/Services/Matching/) | Suggestion ranking, embedding preparation and photo-analysis use cases with `ProfilingBehavior` and AI-call profiling decorators, a Matching-only PostgreSQL database, optional laptop HTTP inference, demo photo adapters and development-only endpoints; Listings photo delivery and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md), [Communication](src/Services/Matching/COMMUNICATION.md), [Kubernetes](deploy/kubernetes/README.md#matching-api-and-postgresql) |
 | [`SmartLost.BuildingBlocks.*`](src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | Reusable domain/event/result/pagination primitives, application behaviors, HTTP adapters and opt-in EF Core Outbox | [Building blocks guide](docs/BUILDING_BLOCKS.md) |
-| [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen CPU/NVIDIA CUDA label extraction and DINOv3 CPU/NVIDIA CUDA normalized image embeddings | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
+| [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen labels and DINO embeddings on CPU or NVIDIA CUDA, with an [authenticated laptop API](AIModels/SmartLost.Ai.Api/README.md) | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
 
 `SmartLost.AuthService.Api` owns its database. Listings owns a separate PostgreSQL database
 through its Infrastructure context/migrations. Matching owns its separate `matchingservice` database. Cross-service identifiers
@@ -310,7 +308,7 @@ to load a local Qwen3-VL model on CPU or NVIDIA CUDA and extract English JSON ob
 [`AIModels.slnx`](AIModels/AIModels.slnx), with independent build configuration and commands.
 Its source and configuration are versioned; model files and build outputs are ignored.
 The AI solution is excluded from CI restore/build/format/test checks; repository-wide security scans still apply.
-It has no HTTP API or tunnel configuration.
+The [laptop API setup](AIModels/SmartLost.Ai.Api/README.md) covers the loopback listener on port 5050, ngrok and Matching configuration.
 
 Both AI projects read model/resource paths and an explicit CPU/CUDA provider from their own ignored `appsettings.json`.
 They use the standard .NET JSON configuration provider and a small path resolver.
@@ -582,7 +580,7 @@ Both Auth and Listings API/worker Dockerfiles build separate images (`runtime` a
 `migrations` targets) alongside the [patched broker Dockerfile](deploy/kubernetes/images/rabbitmq/Dockerfile).
 The broker image runs RabbitMQ directly and removes the unused Pebble executable affected by CVE-2026-97054.
 
-Matching runs [three API pods and its own PostgreSQL StatefulSet](deploy/kubernetes/README.md#matching-api-and-postgresql)
+Matching runs [two API pods and its own PostgreSQL StatefulSet](deploy/kubernetes/README.md#matching-api-and-postgresql)
 in the same `smartlost-local` cluster and `smartlost` namespace. The API has an internal
 ClusterIP Service (port 80 to container port 8080). PostgreSQL is internal at
 `matching-db:5432`, with PVC `database-data-matching-db-0`. A `matching-migrate` Job must
@@ -759,10 +757,10 @@ Development and have no service authentication. They are not the final Listings-
 | `POST` | `/api/matching/demo/listings/{listingId}/embedding/process` | Processes the embedding task of a listing's current photo |
 | `POST` | `/api/matching/embedding-tasks/{taskId}/process` | Processes one embedding preparation task |
 | `POST` | `/api/matching/suggestions` | Ranked suggestion pool or Pending/Unavailable status |
-| `POST` | `/api/matching/photo-analysis` | Mock Qwen labels for a listing photo |
+| `POST` | `/api/matching/photo-analysis` | Qwen labels for a test photo (mock by default) |
 | `GET` | `/api/matching/demo/logs?count=10` | Last Matching log entries (in-memory, newest first) |
 
-Photo and AI calls use mock adapters. Swagger is available at `http://localhost:8081/swagger` in Development
+The laptop API accepts authenticated `POST /embeddings` and `POST /photo-analysis` with a raw JPEG/PNG. Matching uses these routes when `AiRuntime:BaseUrl` is configured. Swagger is available at `http://localhost:8081/swagger` in Development
 with Compose, or at `http://localhost:5083/swagger` while `./k8s.sh ui matching` forwards the local Kubernetes Service.
 Matching also exposes health endpoints in every environment:
 

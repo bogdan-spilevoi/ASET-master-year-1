@@ -91,7 +91,8 @@ public sealed class MatchingDemoSeeder(MatchingDbContext context, MatchingOption
         }
 
         return await context.EmbeddingPreparationTasks.AsNoTracking()
-            .Where(task => task.ListingId == listingId && task.PhotoId == photoId && task.PhotoRevision == listing.CurrentPhotoRevision)
+            .Where(task => task.ListingId == listingId && task.PhotoId == photoId && task.PhotoRevision == listing.CurrentPhotoRevision &&
+                task.ModelVersion == options.EmbeddingVersion.ModelVersion && task.PreprocessingVersion == options.EmbeddingVersion.PreprocessingVersion)
             .Select(task => (Guid?)task.Id)
             .FirstOrDefaultAsync(cancellationToken);
     }
