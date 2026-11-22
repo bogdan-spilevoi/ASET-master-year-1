@@ -64,3 +64,9 @@ The transaction wrapper runs after caching/validation and commits through a scop
 AuthUnitOfWork. Refresh remains unmarked so failure-side replay revocation is preserved.
 Matching's AI workflow keeps its separate claim/result saves; Listings currently has no
 mutation commands. See [Auth transaction and Outbox lifecycle](../../../docs/AUTHSERVICE.md#auth-outbox).
+
+## Email contracts
+
+`Emails/EmailMessage` and `Emails/IEmailSender` provide a transport-neutral email
+abstraction for application services without SMTP or MailKit dependencies. Auth consumes
+this contract for registration confirmation emails.

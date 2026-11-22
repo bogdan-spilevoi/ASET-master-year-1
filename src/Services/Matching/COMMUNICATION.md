@@ -207,6 +207,16 @@ category synonym normalization are not implemented.
   `/health/live` (no checks) and `/health/ready` (read-only connectivity and migration
   history). Existing use-case, mock-adapter, cache and Compose arrows are unchanged.
 
+- 2026-11-20: Reviewed shared BuildingBlocks `OutboxOptions.MessageTypes` filtering and root
+  Compose / Kubernetes additions (`auth-email-worker` in Compose, `auth-outbox-worker` in K8s).
+  Matching does not opt into the Outbox processor, SMTP sender or Kubernetes manifests; its
+  existing API/AI/database arrows are unchanged.
+
+- 2026-11-18: Reviewed shared BuildingBlocks `IEmailSender` / `SmtpEmailSender`, root Compose
+  `mailpit` container, and local Kubernetes Auth/Mailpit manifests plus `./k8s.sh` additions.
+  Matching does not register `IEmailSender`, has no Kubernetes manifests yet, and has no
+  runtime communication with Mailpit; all existing Matching API/AI/database arrows are unchanged.
+
 - 2026-11-17: Reviewed shared continuous Outbox host and opt-in RabbitMQ transport. Matching does not register this transport and has no RabbitMQ consumer. Listings notifications currently wait in a broker queue; Matching API/AI/database arrows are unchanged.
 
 

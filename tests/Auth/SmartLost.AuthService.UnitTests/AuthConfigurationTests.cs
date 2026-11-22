@@ -93,6 +93,25 @@ public sealed class AuthConfigurationTests : IDisposable
         Assert.NotEmpty(exception.Failures);
     }
 
+    [Theory]
+    [InlineData("EmailConfirmation:ConfirmationBaseUrl", "")]
+    [InlineData("EmailConfirmation:ConfirmationBaseUrl", "relative/path")]
+    [InlineData("EmailConfirmation:ConfirmationBaseUrl", "ftp://example.com/confirm")]
+    [InlineData("EmailConfirmation:EncryptionKey", "")]
+    [InlineData("EmailConfirmation:EncryptionKey", "invalid")]
+    [InlineData("EmailConfirmation:TokenExpiryHours", "0")]
+    [InlineData("EmailConfirmation:TokenExpiryHours", "169")]
+    public async Task InvalidEmailConfirmationConfigurationFailsAtStartup(string key, string value)
+    {
+        Dictionary<string, string?> settings = ValidSettings();
+        settings[key] = value;
+        using IHost host = CreateHost(settings);
+
+        OptionsValidationException exception = await Assert.ThrowsAsync<OptionsValidationException>(() => host.StartAsync());
+        Assert.Equal(typeof(EmailConfirmationOptions), exception.OptionsType);
+        Assert.NotEmpty(exception.Failures);
+    }
+
     [Fact]
     public async Task ValidConfigurationStartsAndConfiguresTheDatabaseWithoutConnecting()
     {
@@ -129,6 +148,7 @@ public sealed class AuthConfigurationTests : IDisposable
             ["ConnectionStrings:AuthDatabase"] = "Host=local-test;Database=unused",
             ["Jwt:Issuer"] = "AuthServiceTests",
             ["Jwt:Audience"] = "AuthServiceTests",
+            ["EmailConfirmation:EncryptionKey"] = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
             ["Jwt:SigningKey"] = "test-only-signing-key-at-least-32-characters",
             ["Jwt:ExpiryMinutes"] = "60"
         };

@@ -10,7 +10,8 @@ no service-specific context, database connection, provider or business model is 
 - `OutboxMessageConfiguration`: service-owned `OutboxMessages` table mapping.
 - `OutboxWriter<TContext>`: explicit/domain-event staging in the business context.
 - `OutboxProcessor<TContext>`: one bounded batch with atomic expiring claims, acknowledged
-  delivery, retry and dead-letter state. Receivers must deduplicate message IDs.
+  delivery, retry, dead-letter state and optional `OutboxOptions.MessageTypes` filtering.
+  Receivers must deduplicate message IDs.
 - `AddBuildingBlocksOutbox<TContext>`: opt-in scoped writer registration.
 - `AddBuildingBlocksOutboxProcessor<TContext>`: scoped delivery registration and validated options.
 - `EfOutboxReader<TContext>` / `IOutboxReader`: bounded, no-tracking inspection of oldest
@@ -22,6 +23,9 @@ no service-specific context, database connection, provider or business model is 
   batch processing (default 2-second interval), including after empty batches/failures.
   The caller must register a real `IOutboxMessagePublisher`. RabbitMQ is in a separate
   opt-in [transport project](../SmartLost.BuildingBlocks.Messaging.RabbitMq/README.md).
+- `Emails/SmtpEmailOptions`, `Emails/SmtpEmailSender` and `AddBuildingBlocksSmtpEmailSender`:
+  opt-in SMTP email delivery targeting `IEmailSender` with startup option validation
+  (used by Auth with Mailpit).
 
 Services provide the event mapper, context/migration, transport publisher, error mapping
 and worker host. Transaction mechanics and event-save lifecycle are shared components. Auth now adopts them through a service-owned migration,

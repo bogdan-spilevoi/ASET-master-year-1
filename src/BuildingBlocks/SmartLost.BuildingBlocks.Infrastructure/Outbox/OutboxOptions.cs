@@ -38,13 +38,20 @@ public sealed class OutboxOptions
         set;
     } = TimeSpan.FromMinutes(2);
 
+    public string[]? MessageTypes
+    {
+        get;
+        set;
+    }
+
     internal bool IsValid()
     {
         return BatchSize is >= 1 and <= 1000 && MaximumAttempts is >= 1 and <= 100 &&
             InitialRetryDelay > TimeSpan.Zero && MaximumRetryDelay >= InitialRetryDelay &&
             MaximumRetryDelay <= TimeSpan.FromDays(1) &&
             DeliveryTimeout > TimeSpan.Zero && DeliveryTimeout <= TimeSpan.FromMinutes(10) &&
-            LeaseDuration > DeliveryTimeout && LeaseDuration <= TimeSpan.FromHours(1);
+            LeaseDuration > DeliveryTimeout && LeaseDuration <= TimeSpan.FromHours(1) &&
+            (MessageTypes is null || MessageTypes.All(type => !string.IsNullOrWhiteSpace(type)));
     }
 
     internal TimeSpan GetRetryDelay(int attemptCount)

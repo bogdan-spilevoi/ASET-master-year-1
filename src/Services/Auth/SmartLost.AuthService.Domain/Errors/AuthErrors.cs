@@ -57,4 +57,13 @@ public static class AuthErrors
 
     public static readonly Error InvalidUtcTimestamp = new(
         "auth.invalid_utc_timestamp", "A nondefault UTC timestamp is required.", ErrorKind.Failure);
+
+    public static readonly Error InvalidEmailConfirmationToken = new(
+        "auth.invalid_confirmation_token", "Invalid email confirmation token.", ErrorKind.Validation, "Token");
+
+    public static readonly Error EmailConfirmationTokenExpired = new(
+        "auth.confirmation_token_expired", "The email confirmation token has expired.", ErrorKind.Validation, "Token");
+
+    public static readonly Error EmailConfirmationTokenAlreadyUsed = new(
+        "auth.confirmation_token_already_used", "The email confirmation token has already been used.", ErrorKind.Conflict);
 }

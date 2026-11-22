@@ -27,14 +27,14 @@ public sealed class OutboxProcessor<TContext>(
         OutboxOptions settings = options.Value;
         DateTimeOffset now = timeProvider.GetUtcNow();
         // A process may die on its final attempt. Expired claims must not strand those rows.
-        await Pending(now).Where(message => message.AttemptCount >= settings.MaximumAttempts)
+        await Pending(now, settings.MessageTypes).Where(message => message.AttemptCount >= settings.MaximumAttempts)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(message => message.DeadLetteredAt, now)
                 .SetProperty(message => message.LastError, "outbox.attempt_limit_reached")
                 .SetProperty(message => message.LeaseId, (Guid?)null)
                 .SetProperty(message => message.LeaseExpiresAt, (DateTimeOffset?)null), cancellationToken);
 
-        Guid[] candidates = await Pending(now)
+        Guid[] candidates = await Pending(now, settings.MessageTypes)
             .Where(message => message.AttemptCount < settings.MaximumAttempts &&
                 (message.NextAttemptAt == null || message.NextAttemptAt <= now))
             .OrderBy(message => message.OccurredOn).ThenBy(message => message.Id)
@@ -47,7 +47,7 @@ public sealed class OutboxProcessor<TContext>(
             now = timeProvider.GetUtcNow();
             var leaseId = Guid.NewGuid();
             DateTimeOffset expiresAt = now.Add(settings.LeaseDuration);
-            int claimed = await Pending(now)
+            int claimed = await Pending(now, settings.MessageTypes)
                 .Where(message => message.Id == id && message.AttemptCount < settings.MaximumAttempts &&
                     (message.NextAttemptAt == null || message.NextAttemptAt <= now))
                 .ExecuteUpdateAsync(setters => setters
@@ -98,10 +98,17 @@ public sealed class OutboxProcessor<TContext>(
         return delivered;
     }
 
-    private IQueryable<OutboxMessage> Pending(DateTimeOffset now)
+    private IQueryable<OutboxMessage> Pending(DateTimeOffset now, string[]? messageTypes)
     {
-        return context.Set<OutboxMessage>().Where(message => message.ProcessedOn == null &&
+        IQueryable<OutboxMessage> query = context.Set<OutboxMessage>().Where(message => message.ProcessedOn == null &&
             message.DeadLetteredAt == null && (message.LeaseExpiresAt == null || message.LeaseExpiresAt <= now));
+        if (messageTypes is { Length: > 0 })
+        {
+            string[] allowedTypes = [.. messageTypes.Select(type => type.Trim()).Distinct(StringComparer.Ordinal)];
+            query = query.Where(message => allowedTypes.Contains(message.Type));
+        }
+
+        return query;
     }
 
     private IQueryable<OutboxMessage> Owned(Guid id, Guid leaseId)

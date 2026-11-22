@@ -18,9 +18,9 @@ root solution to validate consumers together with the shared libraries.
 | Library | Contents | Dependencies |
 | --- | --- | --- |
 | [Core](../src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | `Entity<TId>`, `AggregateRoot<TId>`, `IDomainEvent`, `IHasDomainEvents`, `Guard`, `Result`, `Result<T>`, `IResult`, `Error`, `ErrorKind`, `DomainException`, `PageSlice<T>`, `PagedResult<T>`, `PagedDataGuard` | .NET only |
-| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/README.md) | Validation/exception/optional transaction, authorization and profiling behaviors, isolated profiling contexts and measurements, transaction and Outbox contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
+| [Application](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/README.md) | Validation/exception/optional transaction, authorization and profiling behaviors, isolated profiling contexts and measurements, transaction, Outbox and email (`IEmailSender`) contracts, `ICurrentUser`, `IPaginatedRequest`, `BasePaginatedValidator<T>`, registration | Core, MediatR 14.2.0, FluentValidation 12.2.0, DI/logging abstractions |
 | [AspNetCore](../src/BuildingBlocks/SmartLost.BuildingBlocks.AspNetCore/) | `ToActionResult`, `ProblemDetails`, unexpected-exception handler, `HttpCurrentUser`, API registration | Application/Core, ASP.NET Core framework |
-| [Infrastructure](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/) | EF Outbox model/configuration, writer, leased processor and optional inspection/delivery hosts | Application, EF Core Relational 10.0.12 |
+| [Infrastructure](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/) | EF Outbox model/configuration, writer, leased processor, optional inspection/delivery hosts, query cache and opt-in `SmtpEmailSender` | Application, EF Core Relational 10.0.12 |
 | [Messaging.RabbitMq](../src/BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/README.md) | Opt-in persistent mandatory publishing, confirms and durable topic topology | Application, RabbitMQ.Client 7.2.2 |
 
 Service Domain projects reference Core; service Application projects reference Application;
@@ -64,7 +64,7 @@ protect model invariants when the model is called through other paths.
 Auth now uses these primitives for its user/session aggregate roots, entity invariants
 and local domain events. See [Auth's domain guide](AUTHSERVICE.md#domain-aggregates-guards-and-events).
 Auth also stages selected profile events into its Outbox and has a separately executable
-HTTP delivery worker; receiver configuration and deployment remain application concerns.
+worker with RabbitMQ and HTTP delivery modes.
 
 ## Opt-in relational Outbox
 
@@ -72,7 +72,7 @@ The [Infrastructure module](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infra
 contains reusable persistence, delivery and opt-in inspection-host code. It owns no
 database and starts no worker unless the corresponding host registration is requested.
 Auth now consumes this library through its Infrastructure project, a service-owned migration
-and [finite worker](../src/Services/Auth/SmartLost.AuthService.Worker/README.md).
+and [Auth worker](../src/Services/Auth/SmartLost.AuthService.Worker/README.md).
 Listings owns its separate Outbox table and
 [Inspect/Publish worker](../src/Services/Listings/SmartLost.ListingsService.Worker/README.md).
 
@@ -139,8 +139,10 @@ Use synchronized UTC clocks on worker instances. Provider-specific behavior stil
 integration verification against PostgreSQL; EF InMemory cannot exercise this mechanism.
 
 Defaults: batches of 20, maximum 8 delivery attempts, exponential retry starting at 2 seconds
-and capped at 5 minutes, 30-second delivery timeout and 2-minute lease. Options validate on
-startup; the lease must exceed the delivery timeout. A failed final attempt is dead-lettered;
+and capped at 5 minutes, 30-second delivery timeout and 2-minute lease; optional
+`OutboxOptions.MessageTypes` restricts a processor instance to specific message types while
+leaving other message types untouched. Options validate on startup; the lease must exceed
+the delivery timeout. A failed final attempt is dead-lettered;
 expired claims that exhausted the attempt limit are also dead-lettered on the next run.
 Persisted errors are generic codes; exceptions are sent to the host's logger, not the table.
 Success records `ProcessedOn`; terminal rows remain for a service-defined retention policy.
@@ -159,7 +161,7 @@ not a cross-worker or per-aggregate ordering guarantee. Dead-letter replay, rece
 retention cleanup, metrics and transport-specific routing remain service responsibilities.
 
 The shared library itself adds no deployment or migration. Auth provides its own migration
-and finite worker host; Azure scale-to-zero consumers still require an external schedule.
+and worker host; Azure scale-to-zero consumers still require an external schedule.
 
 ## Application pipeline
 
@@ -226,7 +228,7 @@ exhaustive backlog viewer. Listings defaults to Inspect locally and selects Publ
 `AddBuildingBlocksOutboxDelivery<TContext>` adds the existing leased processor plus a
 continuous host with a fresh scope per batch and validated `OutboxDelivery:PollInterval`
 (default 2 seconds). Empty batches do not stop it; transient batch failures retry later.
-Register a transport separately. Listings uses the opt-in
+Register a transport separately. The Listings and Auth profile workers use the opt-in
 [Messaging.RabbitMq project](../src/BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/README.md):
 durable topic exchange/queues, persistent mandatory messages and publisher confirms.
 Only broker acknowledgement marks a row processed; returns/disconnects/timeouts follow

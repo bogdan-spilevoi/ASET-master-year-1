@@ -104,19 +104,18 @@ mounted read-only as `/app/appsettings.json`, like Auth and Matching. Create it 
 `appsettings.Docker.example.json` and match its password to the root `.env` value.
 All three APIs and their databases now share one Compose project; databases stay separate.
 
-An alternative [local Kubernetes setup](../../../deploy/kubernetes/README.md) runs only
-Listings: three API replicas, a separate PostgreSQL/PVC and an explicit migration-bundle
+An alternative [local Kubernetes setup](../../../deploy/kubernetes/README.md) runs the Listings module with three API replicas, a separate PostgreSQL/PVC and an explicit migration-bundle
 Job. It keeps Compose data separate. The existing API Dockerfile has an opt-in
 `migrations` target; the default target remains the API. A one-replica Publish worker
 has its own Dockerfile/Deployment and no network port. RabbitMQ runs as a separate
 StatefulSet with a retained PVC and internal Service.
 Use [the local helper](../../../k8s.sh): `./k8s.sh deploy listings` rebuilds/loads API,
 worker and migration images, runs the migration Job, then updates both Deployments.
-`./k8s.sh migrate` applies the latest rebuilt bundle alone; `migration-add <Name>`
+`./k8s.sh migrate listings` applies the latest rebuilt bundle alone; `migration-add <Name>`
 generates a new local migration. See the [command guide](../../../deploy/kubernetes/README.md#short-local-commands).
 `deploy listings` starts the shared internal Redis query cache. All three API replicas share cached
 categories. A Redis readiness timeout warns and allows deployment to continue.
-Its local overlay exposes only Listings at `http://localhost:5082` through NodePort
+The local overlay exposes Listings at `http://localhost:5082` through NodePort
 30081 and a loopback Kind host mapping; no port-forward process is required.
 
 For Compose, Swagger remains at `http://localhost:5081/swagger`; the container connects to

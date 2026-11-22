@@ -51,7 +51,7 @@ Cloud deployment remains inactive.
 ## Local Kubernetes alternative
 
 The checked-in [local Kubernetes runbook](../../../deploy/kubernetes/README.md) covers
-Listings and, separately, Matching. This diagram shows only Listings. Root Compose remains
+Auth, Listings and Matching. This diagram shows only Listings. Root Compose remains
 an alternative; its PostgreSQL volume is not adopted.
 
 ```mermaid
@@ -112,8 +112,8 @@ the shared processor. No HTTP route or cloud workflow is added. Worker readiness
 a running host, not successful DB/broker delivery. Startup does not migrate or seed
 automatically. Swagger is Development-only.
 The base API Service remains ClusterIP; the local overlay alone adds NodePort 30081.
-The Kind node publishes only Listings on loopback port 5082. Auth, Matching and databases
-have no additional host mappings. Changing Kind mappings requires node recreation and
+The Kind node publishes Listings on loopback port 5082 and Auth on port 5080.
+Matching uses port-forwarding and each database stays internal. Changing Kind mappings requires node recreation and
 database backup/restore; applying the Service patch alone does not publish a host port.
 
 ## Current NMF modeling flow
@@ -435,6 +435,18 @@ publishes metadata to RabbitMQ; full snapshot production/consumption remains pla
   applies only overlay objects without the `smartlost/service=matching` label, so Listings
   rollout, migration, NodePort 5082 and AMQP arrows are unchanged. Matching runs in its own
   objects and database and adds no Listings call, queue consumer or host mapping.
+
+- 2026-11-20: Reviewed shared BuildingBlocks `OutboxOptions.MessageTypes` filtering and root
+  Compose / Kubernetes additions (`auth-email-worker` in Compose, `auth-outbox-worker` in K8s).
+  Listings leaves `OutboxOptions.MessageTypes` null so its worker behavior, database ownership,
+  RabbitMQ topology, API routes and `./k8s.sh` Listings flows remain unchanged.
+
+- 2026-11-18: Reviewed shared BuildingBlocks `IEmailSender` / `SmtpEmailSender`, root Compose
+  `mailpit` container, and local Kubernetes Auth/Mailpit manifests plus `./k8s.sh` targets.
+  Listings does not register `IEmailSender`, does not communicate with Mailpit or Auth at
+  runtime, and preserves its API/database/RabbitMQ/worker arrows. `./k8s.sh deploy` with no
+  argument now defaults to `all`, while `./k8s.sh deploy listings` and `listings-nodeport`
+  (`30081` -> `5082`) preserve existing Listings cluster behavior.
 
 - 2026-11-17: Split Program construction and execution so seed-only tests can own the
   application's lifetime without WebApplicationFactory's deferred-start/disposal race.

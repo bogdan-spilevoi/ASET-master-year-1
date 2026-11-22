@@ -8,8 +8,10 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SmartLost.BuildingBlocks.Application.Caching;
+using SmartLost.BuildingBlocks.Application.Emails;
 using SmartLost.BuildingBlocks.Application.Outbox;
 using SmartLost.BuildingBlocks.Infrastructure.Caching;
+using SmartLost.BuildingBlocks.Infrastructure.Emails;
 using SmartLost.BuildingBlocks.Infrastructure.Outbox;
 
 namespace SmartLost.BuildingBlocks.Infrastructure;
@@ -98,6 +100,22 @@ public static class DependencyInjection
         }
 
         services.AddHostedService<OutboxDeliveryService>();
+        return services;
+    }
+
+    public static IServiceCollection AddBuildingBlocksSmtpEmailSender(
+        this IServiceCollection services, Action<SmtpEmailOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.AddOptions<SmtpEmailOptions>()
+            .Validate(settings => settings.IsValid(), "SMTP email host, port, sender address, credentials or timeout settings are invalid.")
+            .ValidateOnStart();
+        if (configure is not null)
+        {
+            services.Configure(configure);
+        }
+
+        services.TryAddScoped<IEmailSender, SmtpEmailSender>();
         return services;
     }
 }
