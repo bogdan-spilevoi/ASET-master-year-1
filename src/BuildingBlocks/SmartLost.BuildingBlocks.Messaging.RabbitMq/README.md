@@ -1,8 +1,8 @@
 # SmartLost.BuildingBlocks.Messaging.RabbitMq
 
 Opt-in RabbitMQ.Client 7.2.2 implementation of Application's `IOutboxMessagePublisher`.
-References Application only; it owns no service context or business schema. API hosts and
-Auth/Matching do not register this transport. Listings' Publish worker is the first caller.
+References Application only; it owns no service context or business schema. The Listings and Auth identity
+workers register this transport in `Publish` mode. Each configures its own queue and bindings.
 
 ## Registration and delivery
 

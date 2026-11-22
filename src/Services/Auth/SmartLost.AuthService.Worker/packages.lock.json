@@ -106,6 +106,11 @@
           "Npgsql": "10.0.3"
         }
       },
+      "RabbitMQ.Client": {
+        "type": "Transitive",
+        "resolved": "7.2.2",
+        "contentHash": "k4b6RnTXpLbsF96V93ooNYxgPMnoA2tEm24B6AXNJr1mG8wwNYdA1XJtgU66L5xqeGyveS7SJriRzlX3cbqQNA=="
+      },
       "System.IdentityModel.Tokens.Jwt": {
         "type": "Transitive",
         "resolved": "8.17.0",
@@ -158,6 +163,13 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
+          "SmartLost.BuildingBlocks.Application": "[1.0.0, )"
+        }
+      },
+      "smartlost.buildingblocks.messaging.rabbitmq": {
+        "type": "Project",
+        "dependencies": {
+          "RabbitMQ.Client": "[7.2.2, )",
           "SmartLost.BuildingBlocks.Application": "[1.0.0, )"
         }
       }

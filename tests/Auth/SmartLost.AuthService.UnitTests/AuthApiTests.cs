@@ -196,6 +196,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             ["ConnectionStrings:AuthDatabase"] = "Host=localhost;Database=test-only",
             ["Jwt:Issuer"] = "AuthServiceTests",
             ["Jwt:Audience"] = "AuthServiceTests",
+            ["EmailConfirmation:EncryptionKey"] = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
             ["Jwt:SigningKey"] = "test-only-signing-key-at-least-32-characters",
             ["Jwt:ExpiryMinutes"] = "60"
         }));

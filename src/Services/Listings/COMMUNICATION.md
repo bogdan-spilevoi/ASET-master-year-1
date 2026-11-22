@@ -406,6 +406,18 @@ publishes metadata to RabbitMQ; full snapshot production/consumption remains pla
 
 ## Review notes
 
+- 2026-11-20: Reviewed shared BuildingBlocks `OutboxOptions.MessageTypes` filtering and root
+  Compose / Kubernetes additions (`auth-email-worker` in Compose, `auth-outbox-worker` in K8s).
+  Listings leaves `OutboxOptions.MessageTypes` null so its worker behavior, database ownership,
+  RabbitMQ topology, API routes and `./k8s.sh` Listings flows remain unchanged.
+
+- 2026-11-18: Reviewed shared BuildingBlocks `IEmailSender` / `SmtpEmailSender`, root Compose
+  `mailpit` container, and local Kubernetes Auth/Mailpit manifests plus `./k8s.sh` targets.
+  Listings does not register `IEmailSender`, does not communicate with Mailpit or Auth at
+  runtime, and preserves its API/database/RabbitMQ/worker arrows. `./k8s.sh deploy` with no
+  argument now defaults to `all`, while `./k8s.sh deploy listings` and `listings-nodeport`
+  (`30081` -> `5082`) preserve existing Listings cluster behavior.
+
 - 2026-11-17: Split Program construction and execution so seed-only tests can own the
   application's lifetime without WebApplicationFactory's deferred-start/disposal race.
   HTTP tests still execute Main. Current seed, persistence and HTTP arrows are unchanged:

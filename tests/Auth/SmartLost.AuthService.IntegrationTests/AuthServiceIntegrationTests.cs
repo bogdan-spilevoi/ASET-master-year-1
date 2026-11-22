@@ -7,17 +7,24 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using SmartLost.AuthService.Api.Contracts;
 using SmartLost.AuthService.Application.Contracts;
+using SmartLost.AuthService.Application.IntegrationEvents;
 using SmartLost.AuthService.Application.Interfaces;
 using SmartLost.AuthService.Domain.Entities;
 using SmartLost.AuthService.Domain.Errors;
+using SmartLost.AuthService.Infrastructure;
 using SmartLost.AuthService.Infrastructure.Authentication;
+using SmartLost.AuthService.Infrastructure.Outbox;
 using SmartLost.AuthService.Infrastructure.Persistence;
 using SmartLost.AuthService.IntegrationTests.Fixtures;
 using SmartLost.AuthService.IntegrationTests.Helpers;
+using SmartLost.BuildingBlocks.Application.Emails;
 using SmartLost.BuildingBlocks.Application.Outbox;
 using SmartLost.BuildingBlocks.Core.Exceptions;
 using SmartLost.BuildingBlocks.Core.Results;
@@ -82,8 +89,9 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
         Assert.Equal("Npgsql.EntityFrameworkCore.PostgreSQL", context.Database.ProviderName);
         Assert.Equal("authservice_tests", context.Database.GetDbConnection().Database);
         string[] migrations = [.. await context.Database.GetAppliedMigrationsAsync()];
-        Assert.Equal(3, migrations.Length);
+        Assert.Equal(4, migrations.Length);
         Assert.Contains(migrations, migration => migration.EndsWith("_AddAuthOutbox", StringComparison.Ordinal));
+        Assert.Contains(migrations, migration => migration.EndsWith("_AddEmailConfirmation", StringComparison.Ordinal));
         Assert.Empty(await context.Database.GetPendingMigrationsAsync());
         Assert.Empty(await context.Users.ToListAsync());
     }
@@ -108,7 +116,9 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
         Assert.Equal("MARIA@EXAMPLE.COM", user.NormalizedEmail);
         Assert.Equal(2, await context.RefreshSessions.CountAsync());
         Assert.Equal(2, await context.RefreshTokens.CountAsync());
-        SmartLost.BuildingBlocks.Infrastructure.Outbox.OutboxMessage message = await context.OutboxMessages.SingleAsync();
+        Assert.Equal(2, await context.OutboxMessages.CountAsync());
+        SmartLost.BuildingBlocks.Infrastructure.Outbox.OutboxMessage message = await context.OutboxMessages
+            .SingleAsync(item => item.Type == AuthIntegrationEventTypes.UserCreated);
         using var payload = JsonDocument.Parse(message.Payload);
         Assert.Equal("auth.user.created", message.Type);
         Assert.Equal(user.Id, payload.RootElement.GetProperty("userId").GetGuid());
@@ -116,6 +126,7 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
         Assert.False(payload.RootElement.TryGetProperty("email", out _));
         Assert.False(payload.RootElement.TryGetProperty("passwordHash", out _));
         Assert.Null(message.ProcessedOn);
+        Assert.True(await context.OutboxMessages.AnyAsync(item => item.Type == AuthOutboxMessageTypes.ConfirmationEmailRequested));
         Assert.Empty(user.DomainEvents);
     }
 
@@ -181,6 +192,39 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
         AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
         Assert.Equal(1, await context.Users.CountAsync());
         Assert.Equal(1, await context.RefreshSessions.CountAsync());
+    }
+
+    [Fact]
+    public async Task IdentityDeliveryProcessesBothProfileEventsAndLeavesConfirmationForEmailWorker()
+    {
+        await RegisterAsync();
+        await using AsyncServiceScope api = _factory.Services.CreateAsyncScope();
+        AuthDbContext db = api.ServiceProvider.GetRequiredService<AuthDbContext>();
+        UserAccount user = await db.Users.SingleAsync();
+        user.ChangeIdentity("updated-name", user.Email);
+        await db.SaveChangesAsync();
+
+        ServiceCollection worker = [];
+        worker.AddLogging();
+        worker.AddAuthIdentityOutboxDelivery(_factory.Services.GetRequiredService<IConfiguration>());
+        RecordingPublisher publisher = new();
+        worker.AddSingleton<IOutboxMessagePublisher>(publisher);
+        await using ServiceProvider provider = worker.BuildServiceProvider();
+        await using AsyncServiceScope scope = provider.CreateAsyncScope();
+        IOutboxProcessor processor = scope.ServiceProvider.GetRequiredService<IOutboxProcessor>();
+        Assert.Equal(2, await processor.ProcessBatchAsync(CancellationToken.None));
+
+        OutboxMessage[] rows = await db.OutboxMessages.AsNoTracking().ToArrayAsync();
+        foreach (string type in new[] { AuthIntegrationEventTypes.UserCreated, AuthIntegrationEventTypes.UserIdentityChanged })
+        {
+            OutboxMessage row = Assert.Single(rows, row => row.Type == type);
+            Assert.NotNull(row.ProcessedOn);
+            Assert.Equal(1, publisher.Deliveries[row.Id]);
+        }
+
+        OutboxMessage email = Assert.Single(rows, row => row.Type == AuthOutboxMessageTypes.ConfirmationEmailRequested);
+        Assert.Null(email.ProcessedOn);
+        Assert.Equal(0, email.AttemptCount);
     }
 
     [Fact]
@@ -337,6 +381,172 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
             }
 
             _factory.RefreshInterceptor.Disarm();
+        }
+    }
+
+    [Fact]
+    public async Task RegisterCommitsEmailOutboxAndWorkerDeliversWithRetryBeforePostConfirmationOnPostgreSql()
+    {
+        AuthResponse registered = await RegisterAsync();
+
+        RecordingEmailSender emailSender = new();
+        ManualClock clock = new();
+        await using (AsyncServiceScope scope = _factory.Services.CreateAsyncScope())
+        {
+            AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+            Assert.Equal(2, await context.OutboxMessages.CountAsync());
+
+            IOptions<EmailConfirmationOptions> options = scope.ServiceProvider.GetRequiredService<IOptions<EmailConfirmationOptions>>();
+            AuthEmailComposer composer = new(new ConfirmationTokenProtector(options), options);
+            OutboxProcessor<AuthDbContext> failingProcessor = new(
+                context,
+                new AuthOutboxEmailPublisher(new FailingEmailSender(), composer, clock),
+                Options.Create(new OutboxOptions { MessageTypes = [AuthOutboxMessageTypes.ConfirmationEmailRequested] }),
+                clock,
+                NullLogger<OutboxProcessor<AuthDbContext>>.Instance);
+            Assert.Equal(0, await failingProcessor.ProcessBatchAsync(CancellationToken.None));
+
+            OutboxMessage failedEmail = await context.OutboxMessages.AsNoTracking()
+                .SingleAsync(message => message.Type == AuthOutboxMessageTypes.ConfirmationEmailRequested);
+            OutboxMessage untouchedProfile = await context.OutboxMessages.AsNoTracking()
+                .SingleAsync(message => message.Type == AuthIntegrationEventTypes.UserCreated);
+            Assert.Equal(1, failedEmail.AttemptCount);
+            Assert.Equal("outbox.delivery_failed", failedEmail.LastError);
+            Assert.Equal(0, untouchedProfile.AttemptCount);
+
+            clock.Advance(TimeSpan.FromSeconds(2));
+            OutboxProcessor<AuthDbContext> retryProcessor = new(
+                context,
+                new AuthOutboxEmailPublisher(emailSender, composer, clock),
+                Options.Create(new OutboxOptions { MessageTypes = [AuthOutboxMessageTypes.ConfirmationEmailRequested] }),
+                clock,
+                NullLogger<OutboxProcessor<AuthDbContext>>.Instance);
+            Assert.Equal(1, await retryProcessor.ProcessBatchAsync(CancellationToken.None));
+
+            OutboxMessage deliveredEmail = await context.OutboxMessages.AsNoTracking()
+                .SingleAsync(message => message.Type == AuthOutboxMessageTypes.ConfirmationEmailRequested);
+            Assert.NotNull(deliveredEmail.ProcessedOn);
+        }
+
+        EmailMessage sentEmail = Assert.Single(emailSender.Messages);
+        Assert.Equal("Maria@Example.com", sentEmail.ToAddress);
+        const string Marker = "token=";
+        int start = sentEmail.TextBody.IndexOf(Marker, StringComparison.Ordinal);
+        Assert.True(start >= 0);
+        start += Marker.Length;
+        int end = start;
+        while (end < sentEmail.TextBody.Length && !char.IsWhiteSpace(sentEmail.TextBody[end]))
+        {
+            end++;
+        }
+
+        string token = Uri.UnescapeDataString(sentEmail.TextBody[start..end]);
+
+        using HttpResponseMessage pageResponse = await _client.GetAsync($"/api/auth/confirm-email?token={Uri.EscapeDataString(token)}");
+        Assert.Equal(HttpStatusCode.OK, pageResponse.StatusCode);
+        Assert.Equal("text/html", pageResponse.Content.Headers.ContentType!.MediaType);
+
+        await using (AsyncServiceScope scope = _factory.Services.CreateAsyncScope())
+        {
+            AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+            Assert.False((await context.Users.SingleAsync()).EmailConfirmed);
+            Assert.Null((await context.EmailConfirmationTokens.SingleAsync()).UsedAtUtc);
+        }
+
+        using HttpResponseMessage confirmResponse = await _client.PostAsJsonAsync(
+            "/api/auth/confirm-email",
+            new ConfirmEmailRequest { Token = token });
+        Assert.Equal(HttpStatusCode.OK, confirmResponse.StatusCode);
+        EmailConfirmationResponse confirmed = (await confirmResponse.Content.ReadFromJsonAsync<EmailConfirmationResponse>())!;
+        Assert.Equal(registered.UserId, confirmed.UserId);
+        Assert.True(confirmed.EmailConfirmed);
+
+        await using (AsyncServiceScope scope = _factory.Services.CreateAsyncScope())
+        {
+            AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+            UserAccount persistedUser = await context.Users.SingleAsync();
+            EmailConfirmationToken persistedToken = await context.EmailConfirmationTokens.SingleAsync();
+            Assert.True(persistedUser.EmailConfirmed);
+            Assert.NotNull(persistedUser.EmailConfirmedAtUtc);
+            Assert.NotNull(persistedToken.UsedAtUtc);
+        }
+
+        using HttpResponseMessage replay = await _client.PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest { Token = token });
+        Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
+    }
+
+    [Fact]
+    public async Task FailureAfterStagingEmailOutboxRollsBackAllRowsInPostgreSql()
+    {
+        using WebApplicationFactory<Program> failingFactory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                services.AddScoped<EmailConfirmationService>();
+                services.RemoveAll<IEmailConfirmationService>();
+                services.AddScoped<IEmailConfirmationService, FlushThenFailConfirmationService>();
+            }));
+        using HttpClient client = failingFactory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+
+        using HttpResponseMessage response = await client.PostAsJsonAsync("/api/auth/register",
+            TestRequestFactory.ValidRegisterRequest());
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+
+        await using AsyncServiceScope scope = _factory.Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+        Assert.Equal(0, await context.Users.CountAsync());
+        Assert.Equal(0, await context.RefreshSessions.CountAsync());
+        Assert.Equal(0, await context.RefreshTokens.CountAsync());
+        Assert.Equal(0, await context.EmailConfirmationTokens.CountAsync());
+        Assert.Equal(0, await context.OutboxMessages.CountAsync());
+    }
+
+    private sealed class RecordingEmailSender : IEmailSender
+    {
+        public ConcurrentQueue<EmailMessage> Messages { get; } = new();
+
+        public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+        {
+            Messages.Enqueue(message);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FailingEmailSender : IEmailSender
+    {
+        public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+        {
+            throw new InvalidOperationException("Simulated SMTP outage.");
+        }
+    }
+
+    private sealed class FlushThenFailConfirmationService(EmailConfirmationService inner, AuthDbContext context)
+        : IEmailConfirmationService
+    {
+        public async Task EnqueueConfirmationAsync(UserAccount user, CancellationToken cancellationToken)
+        {
+            await inner.EnqueueConfirmationAsync(user, cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
+            throw new InvalidOperationException("Simulated failure before commit.");
+        }
+
+        public Task<Result<EmailConfirmationResponse>> ConfirmAsync(string token, CancellationToken cancellationToken)
+        {
+            return inner.ConfirmAsync(token, cancellationToken);
+        }
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        private DateTimeOffset _now = DateTimeOffset.UtcNow;
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            return _now;
+        }
+
+        public void Advance(TimeSpan duration)
+        {
+            _now = _now.Add(duration);
         }
     }
 

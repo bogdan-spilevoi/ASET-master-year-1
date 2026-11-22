@@ -23,6 +23,16 @@ public sealed class UserAccount : AggregateRoot<Guid>
         get; private set;
     } = 1;
 
+    public bool EmailConfirmed
+    {
+        get; private set;
+    }
+
+    public DateTime? EmailConfirmedAtUtc
+    {
+        get; private set;
+    }
+
     public DateTime CreatedAtUtc
     {
         get; private set;
@@ -55,12 +65,25 @@ public sealed class UserAccount : AggregateRoot<Guid>
         string previousUserName = UserName;
         string previousEmail = Email;
         SetIdentity(userName, email);
+        if (!string.Equals(previousEmail, Email, StringComparison.Ordinal))
+        {
+            EmailConfirmed = false;
+            EmailConfirmedAtUtc = null;
+        }
+
         if (!string.Equals(previousUserName, UserName, StringComparison.Ordinal) ||
             !string.Equals(previousEmail, Email, StringComparison.Ordinal))
         {
             IdentityVersion++;
             AddDomainEvent(new UserIdentityChanged(Id, UserName, Email, IdentityVersion, DateTimeOffset.UtcNow));
         }
+    }
+
+    public void ConfirmEmail(DateTime confirmedAtUtc)
+    {
+        Guard.Against(confirmedAtUtc == default || confirmedAtUtc.Kind != DateTimeKind.Utc, AuthErrors.InvalidUtcTimestamp);
+        EmailConfirmed = true;
+        EmailConfirmedAtUtc ??= confirmedAtUtc;
     }
 
     public void SetPasswordHash(string passwordHash)

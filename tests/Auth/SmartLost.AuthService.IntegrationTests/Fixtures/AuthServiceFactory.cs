@@ -64,7 +64,8 @@ public sealed class AuthServiceFactory : WebApplicationFactory<Program>, IAsyncL
         RefreshInterceptor.Disarm();
         using IServiceScope scope = Services.CreateScope();
         AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE \"OutboxMessages\", \"RefreshTokens\", \"RefreshSessions\", \"Users\";");
+        await context.Database.ExecuteSqlRawAsync(
+            "TRUNCATE TABLE \"OutboxMessages\", \"EmailConfirmationTokens\", \"RefreshTokens\", \"RefreshSessions\", \"Users\";");
     }
 
     protected override IHost CreateHost(IHostBuilder builder)
@@ -95,6 +96,7 @@ public sealed class AuthServiceFactory : WebApplicationFactory<Program>, IAsyncL
             ["ConnectionStrings:AuthDatabase"] = _database.GetConnectionString(),
             ["Jwt:Issuer"] = "AuthServiceIntegrationTests",
             ["Jwt:Audience"] = "AuthServiceIntegrationTests",
+            ["EmailConfirmation:EncryptionKey"] = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
             ["Jwt:SigningKey"] = "test-only-signing-key-at-least-32-characters",
             ["Jwt:ExpiryMinutes"] = "60",
             ["Jwt:RefreshTokenExpiryDays"] = "7"

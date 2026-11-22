@@ -38,3 +38,18 @@ Content-Type: application/json
 }
 
 ###
+
+# 1) Open the link delivered to Mailpit (http://localhost:8025) to render the safe GET confirmation page.
+GET {{SmartLost.AuthService.Api_HostAddress}}/api/auth/confirm-email?token=paste-the-confirmation-token-here
+
+###
+
+# 2) Submitting the page button (or calling POST directly) consumes the confirmation token.
+POST {{SmartLost.AuthService.Api_HostAddress}}/api/auth/confirm-email
+Content-Type: application/json
+
+{
+  "token": "paste-the-confirmation-token-here"
+}
+
+###

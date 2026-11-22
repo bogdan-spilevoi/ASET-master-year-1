@@ -20,6 +20,14 @@ services:
       timeout: 5s
       retries: 10
 
+  mailpit:
+    image: axllent/mailpit:v1.34.0
+    container_name: aset-mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
   auth-service:
     container_name: aset-auth-service
     build:
@@ -40,6 +48,29 @@ services:
           create_host_path: false
     ports:
       - "8080:8080"
+
+  auth-email-worker:
+    container_name: aset-auth-email-worker
+    build:
+      context: .
+      dockerfile: src/Services/Auth/SmartLost.AuthService.Worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      Worker__Mode: Email
+      OutboxDelivery__PollInterval: "00:00:02"
+    volumes:
+      - type: bind
+        source: ./src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.json
+        target: /app/outboxsettings.json
+        read_only: true
+        bind:
+          create_host_path: false
 
   auth-outbox-worker:
     profiles: [workers]

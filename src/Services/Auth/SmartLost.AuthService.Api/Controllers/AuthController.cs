@@ -3,6 +3,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartLost.AuthService.Api.Contracts;
+using SmartLost.AuthService.Api.Pages;
+using SmartLost.AuthService.Application.Commands.ConfirmEmail;
 using SmartLost.AuthService.Application.Commands.Login;
 using SmartLost.AuthService.Application.Commands.Refresh;
 using SmartLost.AuthService.Application.Commands.Register;
@@ -48,6 +50,42 @@ public sealed class AuthController(ISender sender, IMapper mapper) : ControllerB
     {
         LoginUserCommand command = mapper.Map<LoginUserCommand>(request);
         Result<AuthResponse> result = await sender.Send(command, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [HttpGet("confirm-email")]
+    [Produces("text/html")]
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK, "text/html")]
+    [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest, "text/html")]
+    public IActionResult ConfirmEmailPage([FromQuery] string? token = null)
+    {
+        Response.Headers["Referrer-Policy"] = "no-referrer";
+        Response.Headers.XContentTypeOptions = "nosniff";
+        Response.Headers.XFrameOptions = "DENY";
+        Response.Headers.ContentSecurityPolicy =
+            "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'";
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return new ContentResult
+            {
+                StatusCode = StatusCodes.Status400BadRequest,
+                ContentType = "text/html; charset=utf-8",
+                Content = EmailConfirmationPageRenderer.RenderMissingTokenPage()
+            };
+        }
+
+        return Content(EmailConfirmationPageRenderer.RenderConfirmationPage(token), "text/html; charset=utf-8");
+    }
+
+    [HttpPost("confirm-email")]
+    [ProducesResponseType<EmailConfirmationResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailRequest request, CancellationToken cancellationToken)
+    {
+        ConfirmEmailCommand command = mapper.Map<ConfirmEmailCommand>(request);
+        Result<EmailConfirmationResponse> result = await sender.Send(command, cancellationToken);
         return this.ToActionResult(result);
     }
 

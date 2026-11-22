@@ -1,12 +1,44 @@
 # Auth Outbox worker
 
-A finite .NET 10 console job belonging to AuthService. It reads Auth's `OutboxMessages`
-table and delivers profile integration events through configurable HTTP POST routes.
-It exposes no HTTP endpoint or port. No cloud job or deployment is configured.
+A .NET 10 console host belonging to AuthService with three modes selected by `Worker:Mode`.
 
-See the [Auth communication diagrams](../COMMUNICATION.md#durable-profile-notification-and-delivery)
-for atomic message staging, leased worker delivery and the receiver boundary. Keep
-that diagram current when worker or delivery behavior changes.
+- **`Publish`** continuously forwards `auth.user.created` and `auth.user.identity_changed`
+  to the durable RabbitMQ topic exchange `smartlost.events`. Queue `smartlost.auth.identity`
+  binds both exact routing keys. A broker confirmation completes the Outbox row. Failed
+  deliveries use the shared retry and dead-letter policy. Consumers should deduplicate by message ID.
+- **`Batch` (default)**: finite job reading `auth.user.created` and
+  `auth.user.identity_changed` rows from `OutboxMessages` and delivering them to
+  configured HTTP POST routes, then exiting cleanly.
+- **`Email`**: continuous delivery host (`OutboxDeliveryService`) polling every 2 seconds
+  for `auth.email.confirmation_requested` messages and sending confirmation emails with
+  retry/backoff via `IEmailSender` (`SmtpEmailSender`, targeting Mailpit in local dev).
+
+Run `Email` alongside one profile transport. `Batch` and `Publish` claim the same rows
+and share one delivery status, so choose exactly one of them per database. Kubernetes runs
+`Publish` in `auth-identity-worker` and `Email` in `auth-outbox-worker`. The worker exposes no HTTP endpoint or port. No cloud deployment is
+configured.
+
+See the [Auth communication diagrams](../COMMUNICATION.md#post-commit-confirmation-email-worker-delivery)
+for atomic message staging, post-commit email delivery, leased worker delivery and the
+receiver boundary. Keep that diagram current when worker or delivery behavior changes.
+
+## Confirmation email delivery
+
+Auth writes contract version 2 with exactly `recipient`, `encryptedToken` and `expiresAtUtc`.
+The API encrypts each token with AES-256-GCM and a fresh nonce. The message ID, recipient
+and expiration are authenticated together. The worker uses the same key to decrypt the
+token, and `AuthEmailComposer` builds the public link and both email bodies. Retries use
+the original token and expiration. Expired requests finish without sending mail.
+
+For native processes set `EmailConfirmation:EncryptionKey` in both ignored settings files
+to the same Base64-encoded 32 random bytes (generate once with `openssl rand -base64 32`).
+Configure the worker's `EmailConfirmation:ConfirmationBaseUrl` for the recipient's browser.
+Compose mounts the Auth Docker settings for both processes. In Kind the local helper
+creates and reuses the dedicated `auth-email-protection` Secret. Keep the key separate
+from the JWT signing key, and preserve it when restoring pending messages.
+Drain pending v2 messages before rotating the key. Upgrade the worker before switching
+producers. The worker can still deliver queued v1 emails; historical v1 rows retain their
+original payload until removed under the database retention policy.
 
 ## Messages and receiver contract
 
@@ -22,7 +54,7 @@ identity version. Email, passwords, hashes, access/refresh tokens and session ev
 are not exported. These messages can maintain a public-profile projection; they do
 not authenticate requests or implement token/session revocation at other services.
 
-The publisher sends `Idempotency-Key: <message ID>` and
+In HTTP Batch mode the publisher sends `Idempotency-Key: <message ID>` and
 `X-SmartLost-Service-Key: <configured service key>`. The receiver must validate the
 service key, validate the allowed type/version/payload, and atomically persist its
 deduplication record and projection update **before** acknowledging with 2xx.
@@ -42,7 +74,11 @@ cp src/Services/Auth/SmartLost.AuthService.Worker/outboxsettings.example.json sr
 cp src/Services/Auth/SmartLost.AuthService.Worker/outboxsettings.Docker.example.json src/Services/Auth/SmartLost.AuthService.Worker/outboxsettings.Docker.json
 ```
 
-Edit the ignored files. Replace the `.invalid` route placeholders with the actual
+For `Publish`, supply `RabbitMq__UserName` and `RabbitMq__Password`, the broker address and
+virtual host from the settings example. In Kind the Auth and Listings publishers use the
+same broker Secret. The Auth identity worker needs no confirmation-token key.
+
+For `Batch`, edit the ignored files. Replace the `.invalid` route placeholders with the actual
 receiver URL(s) and set a random service key of at least 32 printable non-space ASCII
 characters. The receiver needs the same key. HTTPS is required except for loopback HTTP
 development endpoints. Redirects and cookies are disabled. Placeholders deliberately
@@ -91,8 +127,14 @@ completed, not that all messages have been delivered. Inspect queue state and lo
 ## Containers
 
 The [Dockerfile](Dockerfile) builds from the repository root with locked restore and
-runs as a non-root user. The [Compose worker profile](../../../../docker-compose.yml)
-mounts `outboxsettings.Docker.json` read-only and starts only when explicitly requested:
+runs as a non-root user (`app`, UID/GID `1654`). In [docker-compose.yml](../../../../docker-compose.yml):
+
+- `auth-email-worker` runs continuously in the default stack (`Worker:Mode=Email`,
+  `OutboxDelivery:PollInterval=00:00:02`), mounting
+  `src/Services/Auth/SmartLost.AuthService.Api/appsettings.Docker.json` at
+  `/app/outboxsettings.json` to deliver confirmation emails to `mailpit:1025`.
+- `auth-outbox-worker` remains under the optional `workers` profile (`Worker:Mode=Batch`),
+  mounting `outboxsettings.Docker.json` read-only and starting only when explicitly requested:
 
 ```sh
 docker compose --profile workers config --quiet
@@ -117,8 +159,7 @@ docker compose --profile workers down
 ```
 
 `stop` preserves containers and data. `down` removes the stack/network while preserving
-the database volume; adding `-v` destroys local database data. The worker is a job and
-does not restart/poll continuously. Azure scale-to-zero hosting will need an external
+the database volume; adding `-v` destroys local database data. The optional Compose Batch worker exits after its bounded run. Azure scale-to-zero hosting will need an external
 schedule; the existing deployment workflow remains inactive.
 
 ## Verification status

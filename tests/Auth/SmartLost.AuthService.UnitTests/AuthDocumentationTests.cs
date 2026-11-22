@@ -27,6 +27,7 @@ public sealed class AuthDocumentationTests
         JsonElement paths = json.RootElement.GetProperty("paths");
         Assert.True(paths.TryGetProperty("/api/auth/register", out _));
         Assert.True(paths.TryGetProperty("/api/auth/login", out _));
+        Assert.True(paths.TryGetProperty("/api/auth/confirm-email", out _));
     }
 
     [Theory]

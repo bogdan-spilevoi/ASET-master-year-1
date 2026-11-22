@@ -4,7 +4,10 @@ namespace: smartlost
 resources:
   - ../../base
 patches:
+  - path: auth-nodeport.yaml
   - path: listings-nodeport.yaml
 replicas:
+  - name: auth-service
+    count: 3
   - name: listings-service
     count: 3

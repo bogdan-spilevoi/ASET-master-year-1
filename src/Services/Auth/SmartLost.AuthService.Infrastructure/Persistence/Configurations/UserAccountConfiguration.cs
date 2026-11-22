@@ -19,6 +19,8 @@ public sealed class UserAccountConfiguration : IEntityTypeConfiguration<UserAcco
         builder.HasIndex(user => user.NormalizedEmail).IsUnique();
         builder.Property(user => user.PasswordHash).IsRequired();
         builder.Property(user => user.IdentityVersion).HasDefaultValue(1L).IsConcurrencyToken();
+        builder.Property(user => user.EmailConfirmed).HasDefaultValue(false).IsRequired();
+        builder.Property(user => user.EmailConfirmedAtUtc);
         builder.Property(user => user.CreatedAtUtc).IsRequired();
     }
 }
