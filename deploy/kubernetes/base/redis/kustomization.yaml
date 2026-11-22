@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Shared query cache for Listings and Matching. Objects carry smartlost/service=redis so
+# k8s.sh applies them separately from both services.
+resources:
+  - deployment.yaml
+  - service.yaml

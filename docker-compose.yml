@@ -117,9 +117,13 @@ services:
     depends_on:
       matching-db:
         condition: service_healthy
+      # The cache degrades to the handler while Redis is starting or down.
+      redis:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Redis: redis:6379,password=${REDIS_PASSWORD:?Set REDIS_PASSWORD in the root .env file}
     volumes:
       - type: bind
         source: ./src/Services/Matching/SmartLost.MatchingService.Api/appsettings.Docker.json
@@ -158,9 +162,12 @@ services:
     depends_on:
       listings-db:
         condition: service_healthy
+      redis:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Redis: redis:6379,password=${REDIS_PASSWORD:?Set REDIS_PASSWORD in the root .env file}
     volumes:
       - type: bind
         source: ./src/Services/Listings/SmartLost.ListingsService.Api/appsettings.Docker.json
@@ -170,6 +177,23 @@ services:
           create_host_path: false
     ports:
       - "127.0.0.1:5081:8080"
+
+  # Shared MediatR query cache for Listings and Matching. Cache only: no persistence,
+  # bounded memory, password from the root .env and no host port.
+  redis:
+    image: redis:8.8.4-alpine
+    container_name: aset-redis
+    restart: unless-stopped
+    user: redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the root .env file}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the root .env file}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --save '' --appendonly no --maxmemory 64mb --maxmemory-policy allkeys-lru"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 volumes:
   auth-db-data:

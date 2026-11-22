@@ -205,7 +205,7 @@ See [Application CQRS](../SmartLost.ListingsService.Application/README.md),
 [communication diagrams](../COMMUNICATION.md) and [service overview](../README.md).
 
 [Query cache details and observation commands](../../../../docs/QUERY_CACHING.md) describe
-the opt-in pipeline, cache debug logs and per-process/TTL consistency.
+the opt-in pipeline, cache debug logs, the shared Redis store and TTL consistency.
 
 ## Local verification
 

@@ -251,6 +251,14 @@ on `http://localhost:8025` through `./k8s.sh ui mailpit`.
 
 ## Review notes
 
+- 2026-11-21: Reviewed the shared Redis-backed query cache and the new root Compose
+  `redis` service. Auth now calls `AddBuildingBlocksQueryCache(configuration, "auth")`
+  because the registration requires a service name. No Auth request has
+  CacheableQueryAttribute, and Compose gives Auth no `ConnectionStrings__Redis`, so its
+  process-local store stays empty. Auth makes no Redis connection, and no identity, token
+  or credential result is cached. HTTP, database, Outbox worker and receiver arrows are
+  unchanged.
+
 - 2026-11-20: Moved confirmation email dispatch from synchronous in-transaction SMTP calls inside `RegisterUserCommandHandler` into the shared `OutboxMessages` table (`auth.email.confirmation_requested`), delivered after commit with retry by `SmartLost.AuthService.Worker` (`Worker:Mode=Email`, filtered via `OutboxOptions.MessageTypes` so `Batch` profile delivery remains isolated). Added Compose service `auth-email-worker` and Kubernetes Deployment `auth-outbox-worker`. Changed `GET /api/auth/confirm-email` to render an interactive HTML confirmation page (`EmailConfirmationPageRenderer` with `Referrer-Policy`/`CSP`/`X-Frame-Options` headers) whose button triggers `POST /api/auth/confirm-email`, preventing link-scanner GET requests from consuming tokens. `/api/auth/me` and refresh rotation are unchanged.
 
 - 2026-11-18: Added Auth email confirmation (`GET`/`POST /api/auth/confirm-email`), hashed single-use `EmailConfirmationTokens` table (`20261118121203_AddEmailConfirmation` migration), `Mailpit` SMTP integration in root `docker-compose.yml` (`1025`/`8025`), shared BuildingBlocks `IEmailSender` / `SmtpEmailSender`, pinned Auth Dockerfiles (`migrations` target + `USER app`), and local Kubernetes manifests + `./k8s.sh` targets (`auth`, `mailpit`, NodePort `30080` -> `localhost:5080`). Updated registration, email confirmation and local Kubernetes flows; `/api/auth/me`, refresh rotation and finite HTTP worker outbox flows remain unchanged.

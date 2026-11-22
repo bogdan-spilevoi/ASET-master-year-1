@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using SmartLost.BuildingBlocks.Application.Transactions;
 using SmartLost.Contracts.Listings;
@@ -159,6 +160,31 @@ public sealed class MatchingInfrastructureTests
         Assert.Null(await reader.ReadAsync(Guid.NewGuid(), new PhotoReference(Guid.NewGuid(), 1), CancellationToken.None));
         Assert.True(new MockPhotoCatalog().TryGet(MatchingDemoSeeder.DemoPhotos.Keys.First(), out _));
         Assert.Equal(MockAiBehavior.Timeout, MockAppearance.Parse(Encoding.UTF8.GetBytes(" Timeout:bag")).Behavior);
+    }
+
+    [Fact]
+    public async Task DatabaseHealthCheckReportsUnreachableDatabaseWithoutWriting()
+    {
+        DbContextOptions<MatchingDbContext> options = new DbContextOptionsBuilder<MatchingDbContext>()
+            .UseNpgsql("Host=127.0.0.1;Port=1;Database=unreachable;Username=test-only;Timeout=1")
+            .Options;
+        await using var context = new MatchingDbContext(options);
+        var check = new MatchingDatabaseHealthCheck(context);
+
+        HealthCheckResult result = await check.CheckHealthAsync(new HealthCheckContext());
+
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+        Assert.Equal("The Matching database is unreachable.", result.Description);
+    }
+
+    [Fact]
+    public void DatabaseHealthCheckRequiresEveryMigrationToBeApplied()
+    {
+        Assert.Equal(HealthStatus.Healthy, MatchingDatabaseHealthCheck.FromPendingMigrations([]).Status);
+        HealthCheckResult pending = MatchingDatabaseHealthCheck.FromPendingMigrations(["20261105130215_InitialCreate"]);
+        Assert.Equal(HealthStatus.Unhealthy, pending.Status);
+        Assert.Equal("The Matching database has 1 pending migration(s).", pending.Description);
+        Assert.Throws<ArgumentNullException>(() => MatchingDatabaseHealthCheck.FromPendingMigrations(null!));
     }
 
     private static PhotoContent Photo(string appearance)

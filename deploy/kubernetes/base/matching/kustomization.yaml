@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Each object's metadata carries smartlost/service=matching; k8s.sh selects it so Listings and
+# Matching rollouts apply only their own objects. Pod selectors and templates do not use it.
+resources:
+  - api-deployment.yaml
+  - api-service.yaml
+  - configmap.yaml
+  - environment.yaml
+  - db-statefulset.yaml
+  - db-service.yaml

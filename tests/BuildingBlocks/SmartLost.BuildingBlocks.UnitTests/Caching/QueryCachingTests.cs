@@ -1,8 +1,12 @@
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using SmartLost.BuildingBlocks.Application;
 using SmartLost.BuildingBlocks.Application.Authorization;
 using SmartLost.BuildingBlocks.Application.Behaviors;
@@ -18,6 +22,7 @@ namespace SmartLost.BuildingBlocks.UnitTests.Caching;
 
 public sealed class QueryCachingTests
 {
+    private static readonly IConfiguration _emptyConfiguration = new ConfigurationBuilder().Build();
     [Fact]
     public void AttributeAndKeysValidatePolicyAndSeparateParametersRequestAndResponseTypes()
     {
@@ -41,7 +46,7 @@ public sealed class QueryCachingTests
     public async Task SuccessfulResultsHitAndExpireAtAbsoluteLifetimeWithoutSliding()
     {
         ManualClock clock = new();
-        using MemoryQueryCache cache = new(clock);
+        using DistributedQueryCache cache = CreateCache(clock);
         CachingBehavior<CachedQuery, Result<string>> behavior = Create(cache);
         int calls = 0;
         Task<Result<string>> Next(CancellationToken _) => Task.FromResult(Result<string>.Success((++calls).ToString(System.Globalization.CultureInfo.InvariantCulture)));
@@ -57,7 +62,7 @@ public sealed class QueryCachingTests
     [Fact]
     public async Task UnattributedRequestsAlwaysReachTheHandler()
     {
-        using MemoryQueryCache cache = new(TimeProvider.System);
+        using DistributedQueryCache cache = CreateCache(TimeProvider.System);
         var behavior = new CachingBehavior<PlainQuery, Result<string>>(cache, NullLogger<CachingBehavior<PlainQuery, Result<string>>>.Instance);
         int calls = 0;
         Task<Result<string>> Next(CancellationToken _) => Task.FromResult(Result<string>.Success((++calls).ToString(System.Globalization.CultureInfo.InvariantCulture)));
@@ -70,7 +75,7 @@ public sealed class QueryCachingTests
     [Fact]
     public async Task FailuresAndThrownExceptionsAreNotCachedAndReleaseTheMissLock()
     {
-        using MemoryQueryCache cache = new(TimeProvider.System);
+        using DistributedQueryCache cache = CreateCache(TimeProvider.System);
         CachingBehavior<CachedQuery, Result<string>> behavior = Create(cache);
         int calls = 0;
         Task<Result<string>> Failure(CancellationToken _)
@@ -90,7 +95,7 @@ public sealed class QueryCachingTests
     [Fact]
     public async Task ConcurrentRequestsForOneKeyPopulateOnlyOnce()
     {
-        using MemoryQueryCache cache = new(TimeProvider.System);
+        using DistributedQueryCache cache = CreateCache(TimeProvider.System);
         CachingBehavior<CachedQuery, Result<string>> behavior = Create(cache);
         TaskCompletionSource<Result<string>> complete = new(TaskCreationOptions.RunContinuationsAsynchronously);
         int calls = 0;
@@ -113,7 +118,7 @@ public sealed class QueryCachingTests
     {
         ManualClock time = new();
         using PausingClock clock = new(time);
-        using MemoryQueryCache cache = new(clock);
+        using DistributedQueryCache cache = CreateCache(clock);
         int calls = 0;
         Task<string> Factory(CancellationToken _)
         {
@@ -149,7 +154,7 @@ public sealed class QueryCachingTests
     [Fact]
     public async Task CancellingAWaiterDoesNotCancelAnotherRequestsPopulation()
     {
-        using MemoryQueryCache cache = new(TimeProvider.System);
+        using DistributedQueryCache cache = CreateCache(TimeProvider.System);
         CachingBehavior<CachedQuery, Result<string>> behavior = Create(cache);
         TaskCompletionSource<Result<string>> complete = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var query = new CachedQuery("same");
@@ -166,7 +171,7 @@ public sealed class QueryCachingTests
     [Fact]
     public async Task CancellationEvenAfterFactoryCompletionDoesNotStoreTheResult()
     {
-        using MemoryQueryCache cache = new(TimeProvider.System);
+        using DistributedQueryCache cache = CreateCache(TimeProvider.System);
         CachingBehavior<CachedQuery, Result<string>> behavior = Create(cache);
         using CancellationTokenSource cancellation = new();
         var query = new CachedQuery("a");
@@ -185,8 +190,8 @@ public sealed class QueryCachingTests
         ServiceCollection services = new();
         services.AddLogging();
         services.AddBuildingBlocksApplication(typeof(QueryCachingTests).Assembly, useCaching: true);
-        services.AddBuildingBlocksQueryCache();
-        services.AddBuildingBlocksQueryCache();
+        services.AddBuildingBlocksQueryCache(_emptyConfiguration, "tests");
+        services.AddBuildingBlocksQueryCache(_emptyConfiguration, "tests");
         ProbeState state = new();
         services.AddSingleton(state);
         InlineValidator<PipelineQuery> validator = [];
@@ -216,7 +221,7 @@ public sealed class QueryCachingTests
         services.AddBuildingBlocksApi();
         services.AddBuildingBlocksApplication(typeof(QueryCachingTests).Assembly,
             useAuthorization: true, useProfiling: true, useCaching: true);
-        services.AddBuildingBlocksQueryCache();
+        services.AddBuildingBlocksQueryCache(_emptyConfiguration, "tests");
         ProbeState state = new();
         services.AddSingleton(state);
         InlineValidator<PipelineQuery> validator = [];
@@ -262,7 +267,7 @@ public sealed class QueryCachingTests
     [Fact]
     public async Task CacheGuardsRejectInvalidArguments()
     {
-        using MemoryQueryCache cache = new(TimeProvider.System);
+        using DistributedQueryCache cache = CreateCache(TimeProvider.System);
         static Task<string> Factory(CancellationToken _) => Task.FromResult("value");
         await Assert.ThrowsAsync<ArgumentException>(() => cache.GetOrCreateAsync(" ", TimeSpan.FromSeconds(1), Factory, _ => true, CancellationToken.None));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => cache.GetOrCreateAsync("key", TimeSpan.Zero, Factory, _ => true, CancellationToken.None));
@@ -274,6 +279,12 @@ public sealed class QueryCachingTests
     private static CachingBehavior<CachedQuery, Result<string>> Create(IQueryCache cache)
     {
         return new CachingBehavior<CachedQuery, Result<string>>(cache, NullLogger<CachingBehavior<CachedQuery, Result<string>>>.Instance);
+    }
+
+    internal static DistributedQueryCache CreateCache(TimeProvider clock, IDistributedCache? store = null)
+    {
+        return new DistributedQueryCache(store ?? new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions())),
+            QueryCacheScope.For("tests", "Testing"), clock, NullLogger<DistributedQueryCache>.Instance, "process-local");
     }
 
     [CacheableQuery("probe")]

@@ -12,16 +12,21 @@ The suite covers the NMF model and the runtime Matching code. Runtime tests live
 - `PhotoAnalysisCachingTests`: real MediatR cache hits, photo-access rechecks, validation
   before reads, photo/version/content/media-type isolation, absolute expiration,
   correlation-ID reuse, retry after inference failures and immutable nested snapshots.
+  They run through the serialized process-local store, so hits are compared by content;
+  real Redis is covered by the integration suite.
 - `MatchingProfilingTests`: stage and AI decorators, timeouts, cancellations, failures,
   slow-call warnings, correlation-ID sanitization and the MediatR pipeline order.
 - `MatchingInfrastructureTests`: the `InitialCreate` migration against the PostgreSQL model
   (no connection), EF repositories and unit of work on the EF InMemory provider, the demo
-  seeder and the mock photo/DINOv3/Qwen adapters.
+  seeder, the mock photo/DINOv3/Qwen adapters and the read-only database readiness check
+  (refused loopback connection and pending-migration result mapping).
 - `MatchingApiTests`: the HTTP test endpoints through `WebApplicationFactory` with EF InMemory.
-  This covers the seeded flow, the recent-logs endpoint and buffer, 400/404/409/503 mapping, the Development-only restriction and
-  the startup checks for the mock opt-in and connection string.
+  This covers the seeded flow, the recent-logs endpoint and buffer, 400/404/409/503 mapping, the Development-only restriction,
+  the startup checks for the mock opt-in and connection string, and `/health/live` (200
+  without database checks) versus `/health/ready` (503 without relational migration history).
 
-No network, real database, AI runtime or Docker is used. Key sets are stored as PostgreSQL
+No real database, AI runtime or Docker is used. The readiness test only attempts a refused
+connection to `127.0.0.1:1`. Key sets are stored as PostgreSQL
 `text[]` in production and as a delimited string on the InMemory provider.
 
 MatchingRegressionTests covers ignored AI cancellation/late results, deadline classification,

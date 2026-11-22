@@ -1,6 +1,6 @@
 # SmartLost.BuildingBlocks.Infrastructure
 
-Reusable .NET 10 EF Core transaction/Outbox support and opt-in process-local query caching. Depends on BuildingBlocks.Application;
+Reusable .NET 10 EF Core transaction/Outbox support and an opt-in Redis-backed query cache. Depends on BuildingBlocks.Application;
 no service-specific context, database connection, provider or business model is included.
 
 - `Transactions/EfUnitOfWork<TContext>`: begin/save boundary shared by Auth, Matching and Listings seeding.
@@ -45,13 +45,22 @@ competing claims and transactional rollback on PostgreSQL. Existing CI gates rem
 
 ## Query caching
 
-AddBuildingBlocksQueryCache registers singleton IQueryCache / MemoryQueryCache and an
-optional TimeProvider default. The dedicated IMemoryCache has a 1024-entry capacity,
-absolute TTL and 32 bounded semaphore stripes for miss coalescing. It stores immutable
-successful snapshots supplied by the Application behavior; failures/cancellation are
-not stored. Listings uses it only for its public categories query.
-Expired lookups do not remove entries by key: a delayed reader cannot evict a concurrent
-refresh. Misses recheck under the stripe lock, and native MemoryCache expiration handles eviction.
+`AddBuildingBlocksQueryCache(configuration, serviceName)` registers a singleton
+`IQueryCache` (`Caching/DistributedQueryCache`) and an overridable TimeProvider default.
+- **Store.** `ConnectionStrings:Redis` selects the StackExchange.Redis store
+  (`RedisQueryCacheStore`), which reconnects in the background, fails commands fast and
+  defaults to 2-second connect and 1-second command timeouts. Without that setting, a
+  process-local `MemoryDistributedCache` is used.
+- **Keys.** `QueryCacheScope` prefixes keys with `smartlost:<service>:<environment>:`.
+- **Serialization.** `QueryCacheSerializer` writes a versioned JSON envelope with the
+  absolute deadline. The `Result` and read-only-list converters rebuild values as
+  immutable snapshots, and strict reads treat drifted shapes as unreadable.
+- **Failure handling.** Store failures and unreadable entries run the factory once and
+  never fail the request. Caller cancellation propagates. 32 semaphore stripes coalesce
+  same-key misses within one process.
+
+Only successful Results that the Application behavior supplies are stored. The MediatR
+cache policy stays in Application. See [query caching](../../../docs/QUERY_CACHING.md).
 
 See [query cache integration and AOP flow](../../../docs/QUERY_CACHING.md).
 

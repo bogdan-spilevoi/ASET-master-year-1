@@ -239,7 +239,7 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Auth Outbox worker with RabbitMQ profile publication (`Publish`), confirmation delivery over SMTP (`Email`), and an alternative bounded HTTP transport (`Batch`) | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
 | [`src/Services/Listings/`](src/Services/Listings/) | Manually maintained Domain aggregates/entities with guarded listing, decision, recovery and credibility behavior; separate NMF/XMI models; EF migrations and atomic Outbox persistence; public GET categories/listings/details through CQRS | [Module README](src/Services/Listings/README.md), [API](src/Services/Listings/SmartLost.ListingsService.Api/README.md), [Application](src/Services/Listings/SmartLost.ListingsService.Application/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md), [Domain and behavior](src/Services/Listings/SmartLost.ListingsService.Domain/README.md), [Infrastructure](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md) |
 | [`src/Services/Listings/SmartLost.ListingsService.Worker/`](src/Services/Listings/SmartLost.ListingsService.Worker/) | Inspect/Publish host for service-owned Outbox; Kubernetes uses persistent RabbitMQ publishing with confirms and retries | [Worker README](src/Services/Listings/SmartLost.ListingsService.Worker/README.md) |
-| [`src/Services/Matching/`](src/Services/Matching/) | Suggestion ranking, embedding preparation and photo-analysis use cases with `ProfilingBehavior` and AI-call profiling decorators, a Matching-only PostgreSQL database, mock photo/AI adapters and development-only test endpoints; real Listings/AI integration and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md) |
+| [`src/Services/Matching/`](src/Services/Matching/) | Suggestion ranking, embedding preparation and photo-analysis use cases with `ProfilingBehavior` and AI-call profiling decorators, a Matching-only PostgreSQL database, mock photo/AI adapters, development-only test endpoints and liveness/readiness endpoints; real Listings/AI integration and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md), [Communication](src/Services/Matching/COMMUNICATION.md), [Kubernetes](deploy/kubernetes/README.md#matching-api-and-postgresql) |
 | [`SmartLost.BuildingBlocks.*`](src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | Reusable domain/event/result/pagination primitives, application behaviors, HTTP adapters and opt-in EF Core Outbox | [Building blocks guide](docs/BUILDING_BLOCKS.md) |
 | [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen CPU/NVIDIA CUDA label extraction and DINOv3 CPU/NVIDIA CUDA normalized image embeddings | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
 
@@ -255,7 +255,7 @@ will be logical references, without foreign keys between service databases.
 | `SmartLost.BuildingBlocks.Core` | Type-aware `Entity<TId>`, `AggregateRoot<TId>`, domain-event contracts, domain `Guard`, immutable `Result`/`Result<T>`, errors, explicit domain exceptions, `PageSlice<T>`/`PagedResult<T>` and pagination defaults; no framework dependencies |
 | `SmartLost.BuildingBlocks.Application` | Sequential FluentValidation pipeline, reusable `BasePaginatedValidator<T>`/`IPaginatedRequest`, explicit domain-exception mapping, optional transaction/cache/authorization/profiling behaviors and shared profiling contexts, query cache metadata/contract, transaction/Outbox contracts, `EmailMessage`/`IEmailSender` contract and `ICurrentUser` |
 | `SmartLost.BuildingBlocks.AspNetCore` | `ToActionResult`, HTTP `ProblemDetails`, sanitized unexpected-error handler, scoped HTTP current-user adapter and API registration |
-| `SmartLost.BuildingBlocks.Infrastructure` | Generic EF unit-of-work/transaction adapters, optional OutboxDbContext with separate event coordinator; process-local query cache; `SmtpEmailOptions`/`SmtpEmailSender`; EF Outbox mapping/staging, leased delivery/retry/dead letters with `OutboxOptions.MessageTypes` filtering, and opt-in read-only inspection/continuous delivery hosts; each service owns its table and delivery adapter |
+| `SmartLost.BuildingBlocks.Infrastructure` | Generic EF unit-of-work/transaction adapters, optional OutboxDbContext with separate event coordinator; Redis-backed query cache with service/environment-scoped keys and a process-local store when Redis is unconfigured; `SmtpEmailOptions`/`SmtpEmailSender`; EF Outbox mapping/staging, leased delivery/retry/dead letters with `OutboxOptions.MessageTypes` filtering, and opt-in read-only inspection/continuous delivery hosts; each service owns its table and delivery adapter |
 | [`SmartLost.BuildingBlocks.Messaging.RabbitMq`](src/BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/README.md) | Opt-in persistent mandatory publishing, durable topic topology and publisher confirms; no database dependency |
 
 The root, Listings and Matching solutions include the contracts project. Both runtime
@@ -370,10 +370,13 @@ containers, each with its own PostgreSQL container, image and data volume, plus
 `mailpit` (`axllent/mailpit:v1.34.0`) for local SMTP email capture (`127.0.0.1:1025` SMTP
 and `http://localhost:8025` Web UI) and `auth-email-worker` (`Worker:Mode=Email`,
 polling every 2s for `auth.email.confirmation_requested` after registration commits).
+An internal Redis container provides the Listings and Matching query cache.
 The optional `workers` profile adds the finite `Batch` Auth Outbox job (`auth-outbox-worker`)
 without an exposed port. Matching setup, migration and test-flow commands are in the
 [Matching README](src/Services/Matching/README.md#local-development); copy its two
-`appsettings*.example.json` files before starting `matching-service`.
+`appsettings*.example.json` files before starting `matching-service`. The Matching
+Dockerfile's default `runtime` target is the Compose image; its opt-in `migrations`
+target builds an EF bundle used only by the local Kubernetes Job.
 Listings uses its own [API Dockerfile](src/Services/Listings/SmartLost.ListingsService.Api/Dockerfile)
 and the same root Compose file. There is no separate Listings Compose stack.
 The API image uses locked restore and excludes local settings from its build context.
@@ -421,7 +424,9 @@ cp -n src/Services/Listings/SmartLost.ListingsService.Api/appsettings.Docker.exa
 Each service uses appsettings.json for local API/EF commands (`Host=localhost`) and
 appsettings.Docker.json for its container (`Host=auth-db`, `listings-db` or `matching-db`).
 Set LISTINGS_POSTGRES_PASSWORD in the root `.env` and use the same password in Listings
-JSON connection strings. Compose loads the root `.env` automatically. PowerShell uses the same paths with `Copy-Item` instead of `cp`.
+JSON connection strings. Also replace the `REDIS_PASSWORD` placeholder in `.env`. Compose
+passes it to Redis and builds `ConnectionStrings__Redis` for `listings-service` and
+`matching-service` from it. `docker compose config` fails until both variables are set. Compose loads the root `.env` automatically. PowerShell uses the same paths with `Copy-Item` instead of `cp`.
 Local `appsettings*.json` files are ignored by Git; only `appsettings*.example.json` files
 are versioned. Replace the JWT signing-key placeholder in local files. For Auth, generate a separate
 32-byte key once with `openssl rand -base64 32` and set `EmailConfirmation:EncryptionKey`
@@ -541,7 +546,7 @@ categories and six listings on sequential runs, including hidden Draft/Closed ex
 it is off by default, Development-only and never applies migrations. See the
 [API setup and seed guide](src/Services/Listings/SmartLost.ListingsService.Api/README.md).
 
-### Local Kubernetes alternative: Auth and Listings
+### Local Kubernetes for Auth, Listings and Matching
 
 Use the [local helper](k8s.sh) to avoid repeating Docker/Kind/kubectl commands:
 
@@ -552,16 +557,15 @@ Use the [local helper](k8s.sh) to avoid repeating Docker/Kind/kubectl commands:
 ./k8s.sh deploy listings  # Update Listings API + worker + migration bundle
 ./k8s.sh migrate auth     # Rebuild/load/apply Auth migrations (or: listings / all)
 ./k8s.sh ui mailpit       # Port-forward Mailpit UI to http://localhost:8025
+./k8s.sh deploy matching  # Update Matching database schema and API
+./k8s.sh ui matching      # Matching Swagger on localhost:5083
 ./k8s.sh status
 ./k8s.sh stop             # Retain all database/broker PVCs; no volume deletion
 ```
 
-For first setup, run `./k8s.sh config` and edit the ignored credential placeholders in
-`deploy/kubernetes/local/.env`, `deploy/kubernetes/local/rabbitmq/.env`, and
-[`deploy/kubernetes/local/auth/.env.example`](deploy/kubernetes/local/auth/.env.example)
-(copied to `.env`) before `up`. Separate image build/load (`auth`, `listings`, `mailpit`,
-`rabbitmq`, `all`), local migration generation (`./k8s.sh migration-add <listings|auth> <Name>`),
-logs and UI shortcuts (`./k8s.sh ui <rabbitmq|mailpit>`) are documented in the
+For first setup run `./k8s.sh config` and edit the five ignored `.env` files under
+`deploy/kubernetes/local` (Listings at the root, plus `auth`, `matching`, `rabbitmq` and `redis`).
+Build, migration, log and UI commands are documented in the
 [runbook](deploy/kubernetes/README.md#short-local-commands). The helper uses only
 the explicit local Kind context; it is not invoked by CI or a deployment workflow.
 
@@ -578,13 +582,23 @@ Both Auth and Listings API/worker Dockerfiles build separate images (`runtime` a
 `migrations` targets) alongside the [patched broker Dockerfile](deploy/kubernetes/images/rabbitmq/Dockerfile).
 The broker image runs RabbitMQ directly and removes the unused Pebble executable affected by CVE-2026-97054.
 
+Matching runs [three API pods and its own PostgreSQL StatefulSet](deploy/kubernetes/README.md#matching-api-and-postgresql)
+in the same `smartlost-local` cluster and `smartlost` namespace. The API has an internal
+ClusterIP Service (port 80 to container port 8080). PostgreSQL is internal at
+`matching-db:5432`, with PVC `database-data-matching-db-0`. A `matching-migrate` Job must
+succeed before the API rolls out. The local overlay enables `Development` and
+`MockAdapters__Enabled=true`. Readiness uses `/health/ready` and liveness uses
+`/health/live`. Swagger and the Development-only routes are reached through the
+port-forward at `http://localhost:5083/swagger`, so Kind port mappings are unchanged. The
+photo-analysis cache uses the shared Redis. If Redis readiness times out, the local deploy
+helper warns and continues. Both APIs can serve queries while the cache is unavailable. Matching's demo seed deletes all Matching
+rows; use it only on a disposable Kubernetes database.
+
 Auth is exposed at `http://localhost:5080/swagger` (NodePort `30080`) and Listings at
 `http://localhost:5082/swagger` (NodePort `30081`) through the Kind port mappings. PostgreSQL,
 Mailpit (`1025` SMTP / `8025` UI) and RabbitMQ remain internal; Mailpit and RabbitMQ UI
 access use optional `./k8s.sh ui` port-forwards. Root Compose remains independent and starts
-neither RabbitMQ nor Kubernetes Jobs. Matching, Redis, public ingress and Azure deployment are
-not included in Kubernetes; no deployment workflow is activated. The category cache remains
-per API process.
+neither RabbitMQ nor Kubernetes Jobs. Azure deployment remains inactive.
 
 Auth publishes `auth.user.created` and `auth.user.identity_changed` to the shared
 `smartlost.events` exchange with exact bindings to `smartlost.auth.identity`. Confirmation
@@ -671,6 +685,10 @@ starting `matching-db`:
 dotnet ef database update --project src/Services/Matching/SmartLost.MatchingService.Infrastructure --startup-project src/Services/Matching/SmartLost.MatchingService.Infrastructure --context MatchingDbContext
 ```
 
+In local Kubernetes, Matching owns a separate `matchingservice` database in the
+`matching-db` StatefulSet. It is not the Compose volume. `./k8s.sh migrate matching` applies the
+same checked-in migrations through the `matching-migrate` bundle Job.
+
 See [Matching tables and migration commands](src/Services/Matching/README.md#data-and-integration-ownership).
 
 ## API surface
@@ -729,7 +747,7 @@ Listings also exposes public read endpoints:
 and `categoryId=<guid>` combine with AND. Validation failures return 400. No BlobKey,
 image URL or bytes are returned. These endpoints need no JWT; authenticated mutations,
 image delivery and listing/detail cache behavior remain pending. GET /api/categories
-uses a 300-second process-local MediatR cache; failures/cancellation are not stored. Development-only OpenAPI/Swagger and
+uses a 300-second MediatR cache in Redis (Compose/Kind), shared by all replicas; failures/cancellation are not stored. Development-only OpenAPI/Swagger and
 [full HTTP examples](src/Services/Listings/SmartLost.ListingsService.Api/README.md) are documented separately.
 
 `SmartLost.MatchingService.Api` exposes **development-only test endpoints**. They return 404 outside
@@ -744,7 +762,14 @@ Development and have no service authentication. They are not the final Listings-
 | `POST` | `/api/matching/photo-analysis` | Mock Qwen labels for a listing photo |
 | `GET` | `/api/matching/demo/logs?count=10` | Last Matching log entries (in-memory, newest first) |
 
-Photo and AI calls use mock adapters. Swagger is available at `http://localhost:8081/swagger` in Development.
+Photo and AI calls use mock adapters. Swagger is available at `http://localhost:8081/swagger` in Development
+with Compose, or at `http://localhost:5083/swagger` while `./k8s.sh ui matching` forwards the local Kubernetes Service.
+Matching also exposes health endpoints in every environment:
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `GET` | `/health/live` | Process liveness; runs no checks |
+| `GET` | `/health/ready` | Read-only database connectivity and applied-migration check; 200 or 503 |
 See the [Matching README](src/Services/Matching/README.md#test-endpoints-development-only) and
 [test requests](src/Services/Matching/SmartLost.MatchingService.Api/MatchingService.Api.http).
 
@@ -803,7 +828,7 @@ dotnet test tests/Listings/SmartLost.ListingsService.IntegrationTests/SmartLost.
 dotnet test tests/Matching/SmartLost.MatchingService.IntegrationTests/SmartLost.MatchingService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger trx --results-directory artifacts/tests/integration/SmartLost.MatchingService.IntegrationTests
 ```
 
-All three APIs enable the shared BuildingBlocks profiling, authorization and caching behaviors; the shared registration defaults remain opt-in. Only attributed requests require authorization or use query caching. Matching photo analysis caches successful immutable labels for five minutes after every photo-access check; suggestions and Auth identity remain uncached. Stage/AI decorators and AI policies stay in Matching. The [PostgreSQL integration suite](tests/Matching/SmartLost.MatchingService.IntegrationTests/README.md) verifies HTTP 409 for competing xmin claims and durable failure after an exhausted lease. AI deadlines reject late results; real adapters must still cooperate with cancellation to stop underlying work. No database schema changes are required.
+All three APIs enable the shared BuildingBlocks profiling, authorization and caching behaviors; the shared registration defaults remain opt-in. Only attributed requests require authorization or use query caching. Matching photo analysis caches successful immutable labels for five minutes after every photo-access check; suggestions and Auth identity remain uncached. Cached results are stored in Redis when `ConnectionStrings:Redis` is set; unit tests use the process-local store, and the Listings/Matching integration suites start a real Redis 8.8 container to verify cross-instance hits, expiry, unreadable entries, outages and photo-access checks on hits (see [query caching](docs/QUERY_CACHING.md)). Stage/AI decorators and AI policies stay in Matching. The [PostgreSQL integration suite](tests/Matching/SmartLost.MatchingService.IntegrationTests/README.md) verifies HTTP 409 for competing xmin claims and durable failure after an exhausted lease. AI deadlines reject late results; real adapters must still cooperate with cancellation to stop underlying work. No database schema changes are required.
 
 Coverlet configuration and the inline coverage/test gates are documented in the
 [CI guide](.github/README.md#local-net-commands).
@@ -892,7 +917,7 @@ change as code/configuration, using relative links and verified, secret-safe exa
 ## Further reading
 
 - [Attribute-driven query cache: implementation, flow, AOP explanation and observation commands](docs/QUERY_CACHING.md)
-- [Local Kubernetes Listings/PostgreSQL setup, migration Job and lifecycle](deploy/kubernetes/README.md)
+- [Local Kubernetes Listings/Matching/PostgreSQL/Redis setup, migration Jobs and lifecycle](deploy/kubernetes/README.md)
 
 - [Listings Domain / EF Core verification and historical NMF findings](docs/LISTINGS_EF_COMPATIBILITY.md)
 - [BPMN process models for three teams of two: editable diagrams, previews and responsibilities](docs/bpmn/README.md)

@@ -201,7 +201,8 @@ public sealed class MatchingProfilingTests
         var services = new ServiceCollection();
         services.AddLogging(builder => builder.AddProvider(provider));
         SmartLost.BuildingBlocks.AspNetCore.DependencyInjection.AddBuildingBlocksApi(services);
-        SmartLost.BuildingBlocks.Infrastructure.DependencyInjection.AddBuildingBlocksQueryCache(services);
+        SmartLost.BuildingBlocks.Infrastructure.DependencyInjection.AddBuildingBlocksQueryCache(services,
+            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(), "matching");
         services.AddApplication();
         services.AddSingleton<ISearchListingRepository>(listings);
         services.AddSingleton<IImageEmbeddingRepository>(new FakeEmbeddings());

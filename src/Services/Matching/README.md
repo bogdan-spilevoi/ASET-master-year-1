@@ -23,8 +23,8 @@ in its review notes. CI checks document changes; reviewers check diagram accurac
 | --- | --- |
 | Domain | `Entities/`: `SearchListing`, `ImageEmbedding` (finite L2-normalized vectors, cosine similarity only for compatible versions), `EmbeddingPreparationTask` (lease, retry, Failed/Obsolete transitions). `ValueObjects/`: `PhotoReference`, `EmbeddingVersion`. `Enums/`: `EmbeddingPreparationState`; shared `ListingType` comes from Contracts.Listings. `Suggestions/`: `CandidatePolicy`, `RelevanceScorer`, `RankingPolicy`, `MatchSuggestion`. `Errors/`: `MatchingErrors` |
 | Application | Same layout as Auth. `Commands/PrepareImageEmbedding/` and `Queries/GetMatchSuggestions/`, `Queries/AnalyzeListingPhoto/` each hold their request, handler and validator. `Contracts/` holds responses and AI data; `Interfaces/` holds repository, photo, AI, selector and ranker ports; `Services/` holds `CandidateSelector`, `RelevanceRanker` and `MatchingOptions`; `Exceptions/` holds `AiInferenceException`; `Profiling/` holds `MatchingProfiler`, AI options, stage names and the decorators; the common behavior lives in BuildingBlocks |
-| Infrastructure | `MatchingDbContext` (EF Core/Npgsql) with the `InitialCreate` migration, three repositories and `MatchingUnitOfWork`. **Mock** Listings photo reader and mock DINOv3/Qwen adapters (`Mock/`), plus the development `MatchingDemoSeeder` (`Demo/`) |
-| Api | ASP.NET Core entry point, development-only test endpoints, OpenAPI/Swagger in Development, Dockerfile |
+| Infrastructure | `MatchingDbContext` (EF Core/Npgsql) with the `InitialCreate` migration, three repositories, `MatchingUnitOfWork` and the read-only `MatchingDatabaseHealthCheck`. **Mock** Listings photo reader and mock DINOv3/Qwen adapters (`Mock/`), plus the development `MatchingDemoSeeder` (`Demo/`) |
+| Api | ASP.NET Core entry point, development-only test endpoints, `/health/live` and `/health/ready`, OpenAPI/Swagger in Development, Dockerfile with a default `runtime` and an opt-in `migrations` target |
 
 No real Listings photo client or local AI HTTP client exists yet. Startup fails unless
 `MockAdapters:Enabled` is `true`, so the mocks are never enabled silently. The service has
@@ -94,6 +94,11 @@ then dispatches an input-only cacheable query. Successful labels are immutable s
 with a five-minute absolute TTL. The key covers photo identifiers/revision, bytes and
 media type; correlation IDs do not create separate entries. Missing/no-longer-permitted
 photos and inference failures are not cached. The current adapters remain mocks.
+Compose and Kind store entries in the shared internal Redis under
+`smartlost:matching:<environment>:...`, so a cached analysis survives API restarts and is
+shared by replicas. Every hit is deserialized into new read-only lists, and photo access
+is still checked first. Without `ConnectionStrings:Redis` (unit tests, plain `dotnet run`)
+a process-local store is used. A Redis outage only means the analyzer runs again.
 See [cache policy and limitations](../../../docs/QUERY_CACHING.md#matching-photo-analysis).
 
 ## Projects and dependency direction
@@ -163,6 +168,41 @@ dotnet ef migrations list --no-connect --project src/Services/Matching/SmartLost
 dotnet ef migrations has-pending-model-changes --project src/Services/Matching/SmartLost.MatchingService.Infrastructure --startup-project src/Services/Matching/SmartLost.MatchingService.Infrastructure --context MatchingDbContext
 ```
 
+## Local Kubernetes
+
+Compose remains available. Kubernetes is an alternative for the same local workflow: three
+API pods and a Matching-only PostgreSQL StatefulSet in the shared `smartlost-local` Kind
+cluster and `smartlost` namespace. The full procedure, manifests and verification record
+are in the [Kubernetes runbook](../../../deploy/kubernetes/README.md#matching-api-and-postgresql).
+From the repository root:
+
+```sh
+./k8s.sh config            # once: creates the ignored deploy/kubernetes/local/matching/.env
+./k8s.sh deploy matching   # build/load images, wait for matching-db, run matching-migrate, roll out
+./k8s.sh ui matching       # port-forward; Swagger at http://localhost:5083/swagger
+./k8s.sh migrate matching  # rerun only the migration Job
+./k8s.sh logs matching-api --follow
+```
+
+Replace both password placeholders in `deploy/kubernetes/local/matching/.env` before the
+first deploy. The helper creates Secret `matching-credentials` from it. The image comes
+from this service's Dockerfile, and `--target migrations` builds an EF bundle for
+`MatchingDbContext`. The API rolls out only after the migration Job succeeds. The local
+overlay sets `Development` and `MockAdapters__Enabled=true`. PostgreSQL stays internal at
+`matching-db:5432`. `deploy matching` starts the shared Redis cache and continues with a warning if readiness times out.
+`POST /api/matching/demo/seed` deletes every Matching row. Run it only against a
+disposable Kubernetes database.
+
+## Health endpoints (all environments)
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `GET` | `/health/live` | Runs no checks; 200 `Healthy` while the process serves HTTP. Kubernetes startup/liveness probe |
+| `GET` | `/health/ready` | Connects to `matchingservice` and compares EF migration history with the checked-in migrations; 200 `Healthy` or 503 `Unhealthy`. Kubernetes readiness probe |
+
+Readiness only reads. It never creates the schema, applies migrations or seeds data, and a
+database outage does not fail liveness. Responses contain only the status text.
+
 ## Test endpoints (Development only)
 
 All routes return 404 outside Development. They are test endpoints, not the final internal
@@ -211,11 +251,11 @@ dotnet test tests/Matching/SmartLost.MatchingService.UnitTests/SmartLost.Matchin
 ```
 
 The [unit suite](../../../tests/Matching/SmartLost.MatchingService.UnitTests/README.md) covers the NMF
-model, Domain, Application, Infrastructure (EF InMemory, migration model) and the HTTP
+model, Domain, Application, Infrastructure (EF InMemory, migration model, readiness check) and the HTTP
 endpoints through `WebApplicationFactory`. It needs no database or Docker. The
 [integration suite](../../../tests/Matching/SmartLost.MatchingService.IntegrationTests/README.md)
-uses disposable PostgreSQL 16 to verify concurrent claims through HTTP and persisted
-attempt-limit recovery. Both suites are included in Matching.slnx and the root solution.
+uses disposable PostgreSQL 16 to verify concurrent claims through HTTP, persisted
+attempt-limit recovery and that readiness fails until migration without creating tables. Both suites are included in Matching.slnx and the root solution.
 
 Infrastructure translates EF concurrency failures to `matching.concurrent_update`
 (HTTP 409) without adding EF dependencies to Application. Before another claim, expired
@@ -223,6 +263,15 @@ work at MaximumAttempts becomes Failed with `matching.attempts_exhausted`; activ
 remain protected. No schema migration is needed for these behavior changes.
 
 ## Local verification
+
+On 2026-11-20, the Kubernetes setup was verified on a local Kind cluster: migration Job
+reruns, the active-Job guard, readiness, Swagger through the port-forward, suggestions
+after seeding a disposable database, data retained across PostgreSQL pod replacement, and
+unready-without-restart while the database was down. See the
+[runbook record](../../../deploy/kubernetes/README.md#matching-verification-on-2026-11-20).
+The same day, the Matching unit suite (100 tests) and PostgreSQL integration suite (3 tests)
+passed, with 17/17 changed executable lines covered. The Aset.slnx restore, build and format
+checks also passed. These are local checks, not a hosted CI run.
 
 On 2026-11-08, locked restore with NuGet audit, Release build with warnings as errors,
 info-severity format verification, 248 solution unit tests and 18 integration tests passed.

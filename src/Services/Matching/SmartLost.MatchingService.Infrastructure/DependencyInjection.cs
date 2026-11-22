@@ -16,7 +16,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        services.AddBuildingBlocksQueryCache();
+        services.AddBuildingBlocksQueryCache(configuration, "matching");
         string? connectionString = configuration.GetConnectionString(MatchingDbContextFactory.ConnectionStringName);
         if (string.IsNullOrWhiteSpace(connectionString))
         {
@@ -28,6 +28,8 @@ public static class DependencyInjection
         services.AddScoped<IImageEmbeddingRepository, ImageEmbeddingRepository>();
         services.AddScoped<IEmbeddingPreparationTaskRepository, EmbeddingPreparationTaskRepository>();
         services.AddScoped<IUnitOfWork, MatchingUnitOfWork>();
+        services.AddHealthChecks().AddCheck<MatchingDatabaseHealthCheck>(MatchingDatabaseHealthCheck.Name,
+            tags: [MatchingDatabaseHealthCheck.ReadinessTag]);
 
         // Only mock photo/AI adapters exist; require an explicit opt-in so they are never enabled silently.
         IConfigurationSection mockSection = configuration.GetSection(MockAdapterOptions.SectionName);

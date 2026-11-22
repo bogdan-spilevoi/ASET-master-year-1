@@ -13,6 +13,9 @@ LISTINGS_WORKER_DOCKERFILE=src/Services/Listings/SmartLost.ListingsService.Worke
 LISTINGS_INFRA_PROJECT=src/Services/Listings/SmartLost.ListingsService.Infrastructure
 AUTH_API_DOCKERFILE=src/Services/Auth/SmartLost.AuthService.Api/Dockerfile
 AUTH_WORKER_DOCKERFILE=src/Services/Auth/SmartLost.AuthService.Worker/Dockerfile
+MATCHING_DOCKERFILE=src/Services/Matching/SmartLost.MatchingService.Api/Dockerfile
+MATCHING_INFRA_PROJECT=src/Services/Matching/SmartLost.MatchingService.Infrastructure
+MATCHING_LOCAL_PORT=5083
 AUTH_INFRA_PROJECT=src/Services/Auth/SmartLost.AuthService.Infrastructure
 
 fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
@@ -28,25 +31,25 @@ help_text() {
 Usage: ./k8s.sh COMMAND [TARGET]
 
   up                        Create/reuse local Kind; build/load all; infra, migrate, rollout
-  deploy [listings|auth|rabbitmq|mailpit|all]
+  deploy [listings|auth|matching|rabbitmq|mailpit|all]
                             Rebuild/load and update an existing local cluster (default: all)
   build [TARGET]            Build images only (default: all)
   load [TARGET]             Load existing Docker images into Kind (default: all)
-  migrate [listings|auth|all]
+  migrate [listings|auth|matching|all]
                             Build/load EF bundle(s); recreate finished Job(s); wait and show logs
   migration-add [SERVICE] NAME
-                            Generate a local EF migration (SERVICE: listings or auth, default: listings)
-  restart [TARGET]          Restart auth-api/auth-worker/auth-identity/listings-api/listings-worker/auth/listings/mailpit/rabbitmq/all
-  stop                      Stop workloads, Mailpit, RabbitMQ and PostgreSQL; retain PVCs
+                            Generate a local EF migration (SERVICE: listings, auth or matching, default: listings)
+  restart [TARGET]          Restart auth-api/auth-worker/auth-identity/listings-api/listings-worker/auth/listings/matching/mailpit/rabbitmq/redis/all
+  stop                      Stop workloads, Mailpit, Redis, RabbitMQ and PostgreSQL; retain PVCs
   status                    Show local workloads, Services, Jobs and PVCs
-  logs [TARGET] [--follow]  Show api/worker/db/rabbitmq/mailpit/auth-api/auth-worker/auth-identity/auth-db/migrations logs
-  ui [rabbitmq|mailpit]     Forward RabbitMQ (15672) or Mailpit (8025) UI; Ctrl+C stops (default: rabbitmq)
+  logs [TARGET] [--follow]  Show api/worker/db/rabbitmq/mailpit/auth-api/auth-worker/auth-identity/auth-db/matching-api/matching-db/matching-migrations/redis/migrations logs
+  ui [rabbitmq|mailpit|matching]     Forward RabbitMQ (15672), Mailpit (8025) or Matching (5083) UI; Ctrl+C stops (default: rabbitmq)
   config                    Create missing ignored .env files from examples; edit placeholders
   validate                  Render/check the local Kustomize overlay without applying it
   help                      Show this help
 
 Build/load targets: listings-api (api), listings-worker (worker), listings-migrations (migrations),
-auth-api, auth-worker, auth-migrations, rabbitmq, listings, auth, all.
+auth-api, auth-worker, auth-migrations, matching-api, matching-migrations, rabbitmq, listings, matching, auth, all.
 All cluster commands explicitly use kind-smartlost-local / namespace smartlost.
 No command deletes database volumes, the namespace, or the cluster. No seed runs automatically.
 HELP
@@ -70,7 +73,7 @@ create_cluster() {
 
 config_files() {
     local file
-    for file in "$KUBE_DIR/local/.env" "$KUBE_DIR/local/rabbitmq/.env" "$KUBE_DIR/local/auth/.env"; do
+    for file in "$KUBE_DIR/local/.env" "$KUBE_DIR/local/rabbitmq/.env" "$KUBE_DIR/local/auth/.env" "$KUBE_DIR/local/matching/.env" "$KUBE_DIR/local/redis/.env"; do
         if [[ ! -e "$file" ]]; then
             (umask 077; cp "$file.example" "$file")
             printf 'Created %s; replace its placeholders before first startup.\n' "$file"
@@ -89,7 +92,8 @@ ensure_secret() {
         fail "Replace the placeholders in $file before creating $name."
     fi
     case "$name" in
-        listings-credentials) keys='postgres-password connection-string' ;;
+        redis-credentials) keys='password connection-string' ;;
+        listings-credentials|matching-credentials) keys='postgres-password connection-string' ;;
         rabbitmq-credentials) keys='username password erlang-cookie' ;;
         auth-credentials) keys='postgres-password connection-string jwt-signing-key' ;;
         *) fail "No local credential schema is configured for $name." ;;
@@ -112,12 +116,13 @@ targets() {
         migrations|listings-migrations) printf '%s\n' listings-migrations ;;
         auth-api) printf '%s\n' auth-api ;;
         auth-worker) printf '%s\n' auth-worker ;;
-        auth-migrations) printf '%s\n' auth-migrations ;;
+        auth-migrations|matching-api|matching-migrations) printf '%s\n' "$1" ;;
+        matching) printf '%s\n' matching-api matching-migrations ;;
         rabbitmq) printf '%s\n' rabbitmq ;;
         listings) printf '%s\n' listings-api listings-worker listings-migrations ;;
         auth) printf '%s\n' auth-api auth-worker auth-migrations ;;
-        all) printf '%s\n' listings-api listings-worker listings-migrations auth-api auth-worker auth-migrations rabbitmq ;;
-        *) fail "Unknown image target '$1'. Use listings-api, listings-worker, listings-migrations, auth-api, auth-worker, auth-migrations, rabbitmq, listings, auth or all." ;;
+        all) printf '%s\n' listings-api listings-worker listings-migrations auth-api auth-worker auth-migrations matching-api matching-migrations rabbitmq ;;
+        *) fail "Unknown image target '$1'. Use listings-api, listings-worker, listings-migrations, auth-api, auth-worker, auth-migrations, matching-api, matching-migrations, rabbitmq, listings, matching, auth or all." ;;
     esac
 }
 
@@ -129,6 +134,7 @@ image_for_target() {
         auth-api) printf '%s\n' smartlost-auth-api:local ;;
         auth-worker) printf '%s\n' smartlost-auth-worker:local ;;
         auth-migrations) printf '%s\n' smartlost-auth-migrations:local ;;
+        matching-api|matching-migrations) printf 'smartlost-%s:local\n' "$1" ;;
         rabbitmq) printf '%s\n' smartlost-rabbitmq:local ;;
         *) fail "Unknown image target '$1'." ;;
     esac
@@ -147,6 +153,10 @@ build_images() {
                 docker build --provenance=false --file "$LISTINGS_API_DOCKERFILE" --target migrations --tag "$image" . ;;
             listings-worker)
                 docker build --provenance=false --file "$LISTINGS_WORKER_DOCKERFILE" --tag "$image" . ;;
+            matching-api)
+                docker build --provenance=false --file "$MATCHING_DOCKERFILE" --tag "$image" . ;;
+            matching-migrations)
+                docker build --provenance=false --file "$MATCHING_DOCKERFILE" --target migrations --tag "$image" . ;;
             auth-api)
                 docker build --provenance=false --file "$AUTH_API_DOCKERFILE" --tag "$image" . ;;
             auth-worker)
@@ -194,6 +204,30 @@ start_mailpit() {
     kube rollout status deployment/mailpit --timeout=180s
 }
 
+start_redis() {
+    local status
+    kube apply -f "$KUBE_DIR/base/namespace.yaml"
+    ensure_secret redis-credentials "$KUBE_DIR/local/redis/.env"
+    kube apply -k "$KUBE_DIR/base/redis"
+    if status=$(kube rollout status deployment/redis --timeout=180s 2>&1); then
+        printf '%s\n' "$status"
+    else
+        printf '%s\n' "$status" >&2
+        case "${status##*$'\n'}" in
+            *'timed out waiting for the condition'*|'error: context deadline exceeded'|*'deployment "redis" exceeded its progress deadline'*)
+                printf 'Warning: Redis did not become Ready in time. Continuing deployment. Queries can run without the cache.\n' >&2 ;;
+            *) return 1 ;;
+        esac
+    fi
+}
+
+start_matching_database() {
+    kube apply -f "$KUBE_DIR/base/namespace.yaml"
+    ensure_secret matching-credentials "$KUBE_DIR/local/matching/.env"
+    kube apply -f "$KUBE_DIR/base/matching/db-service.yaml" -f "$KUBE_DIR/base/matching/db-statefulset.yaml"
+    kube rollout status statefulset/matching-db --timeout=180s
+}
+
 start_listings_infrastructure() {
     kube apply -f "$KUBE_DIR/base/namespace.yaml"
     ensure_secret listings-credentials "$KUBE_DIR/local/.env"
@@ -237,27 +271,24 @@ run_migration_job() {
 run_migration() {
     case "$1" in
         listings) run_migration_job listings-migrate "$KUBE_DIR/migrations/listings-job.yaml" listings-migrations ;;
+        matching) run_migration_job matching-migrate "$KUBE_DIR/migrations/matching-job.yaml" matching-migrations ;;
         auth) run_migration_job auth-migrate "$KUBE_DIR/migrations/auth-job.yaml" auth-migrations ;;
-        *) fail "Unknown migration target '$1'. Use listings, auth or all." ;;
+        *) fail "Unknown migration target '$1'. Use listings, matching, auth or all." ;;
     esac
 }
 
 migrate_target() {
     case "$1" in
-        listings)
-            build_images listings-migrations
-            load_images listings-migrations
-            kube rollout status statefulset/listings-db --timeout=180s
-            run_migration listings ;;
-        auth)
-            build_images auth-migrations
-            load_images auth-migrations
-            kube rollout status statefulset/auth-db --timeout=180s
-            run_migration auth ;;
+        listings|auth|matching)
+            build_images "$1-migrations"
+            load_images "$1-migrations"
+            kube rollout status "statefulset/$1-db" --timeout=180s
+            run_migration "$1" ;;
         all)
             migrate_target listings
-            migrate_target auth ;;
-        *) fail "Unknown migrate target '$1'. Use listings, auth or all." ;;
+            migrate_target auth
+            migrate_target matching ;;
+        *) fail "Unknown migrate target '$1'. Use listings, matching, auth or all." ;;
     esac
 }
 
@@ -269,17 +300,19 @@ restart_target() {
         auth-identity) kube rollout restart deployment/auth-identity-worker; kube rollout status deployment/auth-identity-worker --timeout=180s ;;
         auth-worker) kube rollout restart deployment/auth-outbox-worker; kube rollout status deployment/auth-outbox-worker --timeout=180s ;;
         rabbitmq) kube rollout restart statefulset/rabbitmq; kube rollout status statefulset/rabbitmq --timeout=300s ;;
+        matching|matching-api) kube rollout restart deployment/matching-service; kube rollout status deployment/matching-service --timeout=180s ;;
+        redis) kube rollout restart deployment/redis; kube rollout status deployment/redis --timeout=180s ;;
         mailpit) kube rollout restart deployment/mailpit; kube rollout status deployment/mailpit --timeout=180s ;;
         listings) restart_target listings-api; restart_target listings-worker ;;
         auth) restart_target auth-api; restart_target auth-worker; restart_target auth-identity ;;
-        all) restart_target rabbitmq; restart_target mailpit; restart_target listings; restart_target auth ;;
-        *) fail "Unknown restart target '$1'. Use listings-api (api), listings-worker (worker), auth-api, auth-worker, auth-identity, listings, auth, rabbitmq, mailpit or all." ;;
+        all) restart_target rabbitmq; restart_target mailpit; restart_target listings; restart_target auth; restart_target matching ;;
+        *) fail "Unknown restart target '$1'. Use listings-api (api), listings-worker (worker), auth-api, auth-worker, auth-identity, matching, redis, listings, auth, rabbitmq, mailpit or all." ;;
     esac
 }
 
 deploy_target() {
     local target=$1
-    case "$target" in listings|auth|rabbitmq|mailpit|all) ;; *) fail "Deploy target must be listings, auth, rabbitmq, mailpit or all." ;; esac
+    case "$target" in listings|auth|matching|rabbitmq|mailpit|all) ;; *) fail "Deploy target must be listings, auth, matching, rabbitmq, mailpit or all." ;; esac
     check_cluster
     if [[ "$target" == mailpit ]]; then
         kube apply -f "$KUBE_DIR/base/namespace.yaml"
@@ -293,6 +326,15 @@ deploy_target() {
         all) start_broker yes ;;
         listings|auth) start_broker no ;;
     esac
+    case "$target" in listings|matching|all) start_redis ;; esac
+    if [[ "$target" == matching ]]; then
+        start_matching_database
+        run_migration matching
+        kube apply -k "$KUBE_DIR/overlays/local" --selector smartlost/service=matching
+        restart_target matching
+        printf 'Matching Swagger: ./k8s.sh ui matching, then http://localhost:%s/swagger\n' "$MATCHING_LOCAL_PORT"
+        return
+    fi
     if [[ "$target" == listings ]]; then
         start_listings_infrastructure
         run_migration listings
@@ -317,13 +359,16 @@ deploy_target() {
     fi
     start_listings_infrastructure
     start_auth_infrastructure yes
+    start_matching_database
     run_migration listings
     run_migration auth
+    run_migration matching
     kube apply -k "$KUBE_DIR/overlays/local"
     # Local tags and subPath ConfigMap mounts require replacing existing pods.
     restart_target listings
     restart_target auth
-    printf 'Auth Swagger: http://localhost:5080/swagger\nListings Swagger: http://localhost:5082/swagger\nMailpit UI: ./k8s.sh ui mailpit\nRabbitMQ UI: ./k8s.sh ui rabbitmq\n'
+    restart_target matching
+    printf 'Auth Swagger: http://localhost:5080/swagger\nListings Swagger: http://localhost:5082/swagger\nMatching Swagger: ./k8s.sh ui matching\nMailpit UI: ./k8s.sh ui mailpit\nRabbitMQ UI: ./k8s.sh ui rabbitmq\n'
 }
 
 scale_if_exists() {
@@ -340,6 +385,10 @@ logs_target() {
         worker|listings-worker) resource=deployment/listings-outbox-worker ;;
         db|listings-db) resource=statefulset/listings-db ;;
         migrations|listings-migrations) resource=job/listings-migrate ;;
+        redis) resource=deployment/redis ;;
+        matching-api) resource=deployment/matching-service ;;
+        matching-db) resource=statefulset/matching-db ;;
+        matching-migrations) resource=job/matching-migrate ;;
         auth|auth-api) resource=deployment/auth-service ;;
         auth-identity) resource=deployment/auth-identity-worker ;;
         auth-worker) resource=deployment/auth-outbox-worker ;;
@@ -347,7 +396,7 @@ logs_target() {
         auth-migrations) resource=job/auth-migrate ;;
         mailpit) resource=deployment/mailpit ;;
         rabbitmq) resource=statefulset/rabbitmq ;;
-        *) fail "Unknown log target '$1'. Use listings-api (api), listings-worker (worker), listings-db (db), listings-migrations (migrations), auth-api (auth), auth-worker, auth-db, auth-migrations, mailpit or rabbitmq." ;;
+        *) fail "Unknown log target '$1'. Use listings-api (api), listings-worker (worker), listings-db (db), listings-migrations (migrations), auth-api (auth), auth-worker, auth-db, auth-migrations, matching-api, matching-db, matching-migrations, redis, mailpit or rabbitmq." ;;
     esac
     case "$2" in
         '') kube logs "$resource" --tail=100 ;;
@@ -376,8 +425,10 @@ case "$command_name" in
         local_service=listings
         local_migration_name=${1:-}
         if [[ $# -eq 2 ]]; then
-            local_service=$1
-            local_migration_name=$2
+            case "$1" in
+                listings|auth|matching) local_service=$1; local_migration_name=$2 ;;
+                *) local_service=$2; local_migration_name=$1 ;; # Legacy NAME SERVICE order
+            esac
         fi
         [[ -n "$local_migration_name" && "$local_migration_name" =~ ^[A-Za-z][A-Za-z0-9_]*$ ]] || fail 'Provide a valid migration name, e.g. ./k8s.sh migration-add auth AddUserLockout'
         need dotnet; dotnet tool restore
@@ -386,12 +437,15 @@ case "$command_name" in
                 dotnet ef migrations add "$local_migration_name" --project "$LISTINGS_INFRA_PROJECT" --startup-project "$LISTINGS_INFRA_PROJECT" --context ListingsDbContext --output-dir Persistence/Migrations ;;
             auth)
                 dotnet ef migrations add "$local_migration_name" --project "$AUTH_INFRA_PROJECT" --startup-project "$AUTH_INFRA_PROJECT" --context AuthDbContext --output-dir Persistence/Migrations ;;
-            *) fail "Unknown service '$local_service'. Use listings or auth." ;;
+            matching)
+                dotnet ef migrations add "$local_migration_name" --project "$MATCHING_INFRA_PROJECT" --startup-project "$MATCHING_INFRA_PROJECT" --context MatchingDbContext --output-dir Persistence/Migrations ;;
+            *) fail "Unknown service '$local_service'. Use listings, auth or matching." ;;
         esac ;;
     restart) check_cluster; restart_target "${1:-all}" ;;
     stop)
         [[ $# -eq 0 ]] || fail 'stop takes no arguments.'
         check_cluster
+        scale_if_exists deployment/matching-service 0
         scale_if_exists deployment/auth-service 0
         scale_if_exists deployment/auth-identity-worker 0
         scale_if_exists deployment/auth-outbox-worker 0
@@ -402,6 +456,9 @@ case "$command_name" in
         kube wait --for=delete pod -l app.kubernetes.io/name=auth-outbox-worker --timeout=180s
         kube wait --for=delete pod -l app.kubernetes.io/name=listings-service --timeout=180s
         kube wait --for=delete pod -l app.kubernetes.io/name=listings-outbox-worker --timeout=180s
+        kube wait --for=delete pod -l app.kubernetes.io/name=matching-service --timeout=180s
+        scale_if_exists deployment/redis 0
+        scale_if_exists statefulset/matching-db 0
         scale_if_exists deployment/mailpit 0
         scale_if_exists statefulset/rabbitmq 0
         scale_if_exists statefulset/auth-db 0
@@ -419,7 +476,10 @@ case "$command_name" in
             mailpit)
                 printf 'Mailpit: http://localhost:8025 (captures Auth confirmation emails). Ctrl+C stops forwarding.\n'
                 kube port-forward service/mailpit 8025:8025 ;;
-            *) fail "Unknown UI target '$1'. Use rabbitmq or mailpit." ;;
+            matching)
+                printf 'Matching Swagger: http://localhost:%s/swagger (Ctrl+C stops forwarding).\n' "$MATCHING_LOCAL_PORT"
+                kube port-forward service/matching-service "$MATCHING_LOCAL_PORT:80" ;;
+            *) fail "Unknown UI target '$1'. Use rabbitmq, mailpit or matching." ;;
         esac ;;
     validate)
         [[ $# -eq 0 ]] || fail 'validate takes no arguments.'

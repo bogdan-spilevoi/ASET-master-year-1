@@ -1,19 +1,25 @@
 # Attribute-driven MediatR query caching
 
 Listings `GetCategoriesQuery` and Matching `AnalyzePhotoContentQuery` use a
-**300-second absolute TTL**. List/detail queries remain uncached, so their Open-only visibility is read from
-the database on each request. No mutation invalidation, distributed cache, HTTP response
-cache or additional Azure resource is configured.
+**300-second absolute TTL**. Only successful Results are stored. In the local Compose stack
+and Kind cluster, entries live in one internal **Redis** instance per environment, which
+both services share. List/detail queries remain uncached, so their Open-only visibility is read from
+the database on each request. No mutation invalidation, HTTP response cache or
+additional Azure resource is configured.
 
 ## Components and registration
 
 | Component | Responsibility |
 | --- | --- |
 | [CacheableQueryAttribute](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/Caching/CacheableQueryAttribute.cs) | Declarative opt-in, key prefix and positive TTL in seconds. |
-| [QueryCacheKey](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/Caching/QueryCacheKey.cs) | Combines prefix/version, request/response type identity and SHA256 of serialized query properties. |
+| [QueryCacheKey](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/Caching/QueryCacheKey.cs) | Combines prefix/version, request/response type identity and SHA256 of serialized query properties (unchanged). |
 | [IQueryCache](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/Caching/IQueryCache.cs) | Framework-free cache contract for awaited population and conditional storage. |
-| [CachingBehavior](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/Behaviors/CachingBehavior.cs) | Reads the attribute, bypasses unmarked requests and caches only successful Results. |
-| [MemoryQueryCache](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/Caching/MemoryQueryCache.cs) | Per-process IMemoryCache, absolute expiration and bounded miss coordination. |
+| [CachingBehavior](../src/BuildingBlocks/SmartLost.BuildingBlocks.Application/Behaviors/CachingBehavior.cs) | Reads the attribute, bypasses unmarked requests and caches only successful Results (unchanged). |
+| [DistributedQueryCache](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/Caching/DistributedQueryCache.cs) | The `IQueryCache` implementation: scoped keys, serialized envelopes, absolute expiry, in-process miss coordination and fail-open store errors. |
+| [RedisQueryCacheStore](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/Caching/RedisQueryCacheStore.cs) | Creates the StackExchange.Redis `IDistributedCache` from `ConnectionStrings:Redis`, with background reconnect, fail-fast commands and short timeouts. |
+| [QueryCacheScope](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/Caching/QueryCacheScope.cs) | Prefixes stored keys with `smartlost:<service>:<environment>:`. |
+| [QueryCacheSerializer](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/Caching/QueryCacheSerializer.cs) | Versioned JSON envelope; strict reads turn unknown or changed shapes into misses. |
+| [ResultJsonConverterFactory](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/Caching/ResultJsonConverterFactory.cs) / [ReadOnlyListJsonConverterFactory](../src/BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/Caching/ReadOnlyListJsonConverterFactory.cs) | Rebuild `Result`/`Result<T>` through their factories and `IReadOnlyList<T>` members as read-only snapshots. |
 
 ```csharp
 [CacheableQuery("listings:categories", TtlSeconds = 300)]
@@ -21,14 +27,22 @@ public sealed record GetCategoriesQuery
     : IRequest<Result<IReadOnlyList<CategoryDto>>>;
 ```
 
-Listings calls `AddBuildingBlocksApplication(..., useCaching: true)` through its
-Application extension. Its Infrastructure registration calls `AddBuildingBlocksQueryCache()`
-for the singleton implementation and an overridable TimeProvider. Shared registration
-defaults to `useCaching: false`. All three APIs now enable the behavior and register
-the backend. Listings GetCategoriesQuery and Matching AnalyzePhotoContentQuery carry
-the cache attribute. Auth identity/token requests and Matching suggestions bypass the cache; there is no shared
-cache between processes.
-No service-specific type is referenced by BuildingBlocks.
+Each service registers the backend with its own name:
+
+```csharp
+services.AddBuildingBlocksQueryCache(configuration, "listings"); // also "matching" and "auth"
+```
+
+With `ConnectionStrings:Redis` (environment variable `ConnectionStrings__Redis`) the
+store is Redis. Without it, for example in unit tests or a plain `dotnet run`, the same
+serializing cache uses a process-local `MemoryDistributedCache`. Its first use logs event
+2102, `Query cache uses the Redis store.` or `... the process-local store.`, so the
+active store is visible in the logs. The former object-reference `MemoryQueryCache` has
+been removed. Shared registration still defaults to `useCaching: false`.
+All three APIs enable the behavior and register the backend. Auth has no attributed
+request and receives no Redis setting, so its process-local store stays empty. Auth
+identity/token requests and Matching suggestions bypass the cache. No service-specific
+type is referenced by BuildingBlocks.
 
 Auth, Listings and Matching use **Profiling → ExceptionToResult → Authorization
 → Validation → Caching → Handler**. Authorization and validation always
@@ -41,25 +55,26 @@ MediatR; validators still run before every cache lookup, including hits.
 
 AnalyzeListingPhotoQuery remains uncached. Its handler reads the exact requested photo
 revision through IListingPhotoReader on every request; missing or no-longer-permitted
-photos return 404 even when labels were cached earlier. Only after that check does it
+photos return 404 even when labels are cached in Redis. Only after that check does it
 send [AnalyzePhotoContentQuery](../src/Services/Matching/SmartLost.MatchingService.Application/Queries/AnalyzeListingPhoto/AnalyzePhotoContentQuery.cs)
-through the same MediatR pipeline. The inner query has CacheableQueryAttribute and uses
-the existing process-local backend. No endpoint or database schema is added.
+through the same MediatR pipeline. The inner query has CacheableQueryAttribute.
 
 The key includes listing ID, photo ID/revision, media type and a SHA256 fingerprint of
 the serialized input, including the photo bytes. Raw bytes are not retained as keys or
 logged. CorrelationId has JsonIgnore for key serialization: tracing still uses each
 call's ID, while different trace IDs reuse the same analysis. A different revision or
-content cannot reuse the older result. Successful results are copied into read-only
-snapshots, including every nested label list. Failures and cancellation are not stored.
-The original AI timeout/error mapping and profiling decorator remain in effect on misses.
+content cannot reuse the older result. The handler copies successful results into
+read-only lists, and every cache hit is deserialized again with read-only nested lists.
+Failures and cancellation are not stored. The original AI timeout/error mapping and
+profiling decorator remain in effect on misses.
 
 The 300-second cache stores advisory labels from the currently fixed mock analyzer.
-API restart/deployment clears it. A future live adapter with hot-swappable model/prompt
-versions must include those versions in the cache input or policy prefix before use.
-Suggestions remain uncached because eligibility, candidate pools and embeddings can
-change independently. Auth's only query reads JWT claims directly, so no Auth request
-is opted into caching. No user identity, credential or token result is stored.
+Restarting an API no longer clears it; entries expire by TTL or when Redis restarts. A
+future live adapter with hot-swappable model/prompt versions must include those versions
+in the cache input or policy prefix before use. Suggestions remain uncached because
+eligibility, candidate pools and embeddings can change independently. Auth's only query
+reads JWT claims directly, so no Auth request is opted into caching. No user identity,
+credential or token result is stored.
 
 ## Request flow
 
@@ -69,111 +84,161 @@ sequenceDiagram
     participant API as CategoriesController
     participant Validation as MediatR validation
     participant Aspect as CachingBehavior
-    participant Cache as IQueryCache / MemoryQueryCache
+    participant Cache as DistributedQueryCache
+    participant Redis as Redis (internal, shared)
     participant Handler as GetCategoriesQueryHandler
     participant DB as ListingsReadStore / EF / PostgreSQL
     Client->>API: 1. GET /api/categories
     API->>Validation: 2. Send GetCategoriesQuery
     Validation->>Aspect: 3. Continue after validation
     Aspect->>Cache: 4. Get or populate typed key with TTL
-    alt Unexpired hit
-        Cache-->>Aspect: 5. Reuse successful immutable snapshot
-    else Missing or expired
-        Cache->>Cache: 5. Await key stripe; recheck cache
-        Cache->>Handler: 6. Await next handler using caller cancellation
-        Handler->>DB: 7. SELECT ordered category DTOs
-        DB-->>Handler: 8. Category values
-        Handler-->>Cache: 9. Result with read-only collection snapshot
-        Cache->>Cache: 10. Store only success if not cancelled
-        Cache-->>Aspect: 11. Result
+    Cache->>Redis: 5. Read smartlost:listings:<env>:<key>
+    alt Readable, unexpired entry
+        Redis-->>Cache: 6. Envelope bytes
+        Cache-->>Aspect: 7. Deserialized Result with read-only lists
+    else Missing, expired or unreadable
+        Cache->>Cache: 6. Await key stripe; reread Redis
+        Cache->>Handler: 7. Await next handler using caller cancellation
+        Handler->>DB: 8. SELECT ordered category DTOs
+        DB-->>Handler: 9. Category values
+        Handler-->>Cache: 10. Result
+        Cache->>Redis: 11. Success only, not cancelled: write envelope with 300-second expiry
+        Cache-->>Aspect: 12. Result (also when the write fails)
+    else Redis unavailable
+        Redis--xCache: 6. Fast connection failure (warning 2103)
+        Cache->>Handler: 7. Run the handler once; skip the write
+        Cache-->>Aspect: 8. Result
     end
-    Aspect-->>API: 12. Result through existing HTTP adapter
-    API-->>Client: 13. HTTP 200 JSON category array
+    Aspect-->>API: 13. Result through existing HTTP adapter
+    API-->>Client: 14. HTTP 200 JSON category array
 ```
 
-Only the request that populates a key executes its handler. Requests waiting for the
-same key recheck after acquiring the lock. The factory runs inside the caller's awaited
-request scope; it is not retained or run in the background after DbContext disposal.
-A cancelled waiter does not cancel another request's factory. If the populating request
-fails or is cancelled, its lock is released and another request can populate the key.
-Exceptions and cancellation propagate; failure Results are returned without storage.
+Within one process, only the request that populates a key executes its handler. Requests
+waiting for the same key reread Redis after acquiring the lock. Different processes are
+not coordinated, so two replicas missing at the same moment can each run the handler once.
+The factory runs inside the caller's awaited request scope. It is not retained or run in
+the background after DbContext disposal. A cancelled waiter does not cancel another
+request's factory. If the populating request fails or is cancelled, its lock is released
+and another request can populate the key. Exceptions and cancellation propagate; failure
+Results are returned without storage.
 
-## Storage and consistency
+## Storage, failure handling and consistency
 
-- Entries live inside the current process; restart/scale-to-zero drops them. Replicas
-  have independent caches. No Redis/shared backend or cross-process invalidation exists.
-- A dedicated MemoryCache is bounded to **1024 entries**, each with size weight 1.
-  This bounds entry count, not the byte size of arbitrary result objects. Its capacity
-  limit can prevent admission; a successful read is still returned to its caller.
-- **32 semaphore stripes** coordinate misses without an unbounded per-key lock registry.
-  Same-key misses coalesce; unrelated keys hashing to the same stripe can briefly wait.
-  Cache hits do not acquire a stripe.
-- Expiration is absolute, measured from successful population, never extended by hits.
-  Native MemoryCache expiration also releases expired entries; TimeProvider makes the
-  deadline check testable without real-time sleeps. An expired lookup does not remove
-  the key: its captured entry may have already been replaced by a concurrent refresh.
-  Rechecking under the stripe lock reuses that fresh value instead of reloading it again.
-- Types and query properties participate in keys, so different parameters/types do not
-  accidentally share an entry. Raw parameter text is hashed and is not logged.
-- Cache values are object references. Mark only public read-only queries with immutable
-  result snapshots. GetCategoriesQueryHandler copies the DTO list into a read-only
-  wrapper, and CategoryDto is an immutable record. No EF entity or scoped service is cached.
-- Principal-dependent queries need an explicit identity scope in their key before opt-in;
-  this first phase enables only the public, parameterless categories query.
-- Direct catalog changes can remain invisible until TTL expires. There are no category
-  write endpoints or invalidation behaviors yet. Add save/commit-aware invalidation before
-  extending this to mutable listing/detail queries; TTL alone does not enforce immediate
-  listing visibility after closure.
+- **Shared store.** Every Listings or Matching replica in one environment reads the same
+  Redis. A value written by one API pod is a hit for another pod and survives API restarts.
+  Redis runs without RDB/AOF persistence, so restarting Redis empties the cache.
+- **Key scope.** Stored keys are `smartlost:<service>:<environment>:` followed by the
+  unchanged `QueryCacheKey`. Examples: `smartlost:listings:development:listings:categories:v1:...`
+  and `smartlost:matching:development:matching:photo-analysis:v1:...`. The environment is
+  the host environment name, lowercased; Production is used when none is registered.
+- **Absolute TTL.** Redis receives the 300-second absolute expiration and never slides it.
+  The envelope also stores `expiresAtUtc` from TimeProvider, so a copy is never returned
+  after its deadline even before Redis evicts it, and tests can control time.
+  Redis's `maxmemory 64mb` with `allkeys-lru` can evict entries earlier.
+- **Serialization.** Envelopes are UTF-8 JSON (`v`, `expiresAtUtc`, `value`). `Result`
+  values are rebuilt through `Success`/`Failure`, and `IReadOnlyList<T>` members come back
+  as read-only collections. Reads reject unknown members, missing constructor values and
+  nulls in non-nullable members. A changed result shape therefore counts as an unreadable
+  entry instead of a partly filled object. Bump the attribute prefix version (`:v1`) when a
+  cached result type changes incompatibly.
+- **Unreadable entries.** These are logged as warning 2104. The handler runs once and its
+  successful result replaces the entry.
+- **Redis unavailable.** A failed read logs warning 2103 with only the exception type
+  name. The request runs its handler once and returns its result. The write is skipped
+  because the store just failed. A failed write after a successful read also logs 2103 and
+  never fails the request. The client uses `abortConnect=false`, a fail-fast backlog,
+  a 2-second connect timeout and 1-second command timeouts by default. It reconnects in the
+  background. In the Kind check, the first request after Redis stopped took about 2 seconds
+  and later ones took milliseconds.
+- **Cancellation.** Store calls are awaited with the caller's token, so cancellation
+  propagates even while a Redis call is in flight. A result completed after cancellation is
+  not stored. An `OperationCanceledException` that does not come from the caller's token,
+  such as a client timeout, is a store failure.
+- **Hashed inputs.** Types and query properties participate in keys, so different
+  parameters/types do not share an entry. Raw parameter text is hashed and is not logged.
+- **Opt-in scope.** Mark only public read-only queries whose results are immutable
+  snapshots. No EF entity or scoped service is cached. Principal-dependent queries need
+  an explicit identity scope in their key before opt-in.
+- **Stale reads.** Direct catalog changes can remain invisible until TTL expires, now
+  across every replica. There are no category write endpoints or invalidation behaviors
+  yet. Add save/commit-aware invalidation before extending caching to mutable
+  listing/detail queries.
+
+## Local Redis
+
+| Environment | Redis | Connection setting | Credentials |
+| --- | --- | --- | --- |
+| Compose ([docker-compose.yml](../docker-compose.yml)) | Service `redis` (`redis:8.8.4-alpine`), no host port | `ConnectionStrings__Redis=redis:6379,password=${REDIS_PASSWORD}` on `listings-service` and `matching-service` | `REDIS_PASSWORD` in the ignored root `.env` ([template](../.env.example)) |
+| Kind ([runbook](../deploy/kubernetes/README.md#redis-query-cache)) | Deployment/ClusterIP Service `redis:6379`, no NodePort | Secret `redis-credentials`, key `connection-string`, mapped to `ConnectionStrings__Redis` | Ignored `deploy/kubernetes/local/redis/.env` ([template](../deploy/kubernetes/local/redis/.env.example)) |
+
+Both run as the image's non-root `redis` user with `requirepass`, no persistence and a
+64 MB LRU limit. The APIs start even when Redis is not ready yet, because the cache
+degrades to the handler.
 
 ## Observe it locally
 
-Apply the existing migration and use the shared local settings as described in the
-[Listings API guide](../src/Services/Listings/SmartLost.ListingsService.Api/README.md).
-Enable the development fixtures and cache debug logs:
+With the Kind cluster from the [runbook](../deploy/kubernetes/README.md#redis-query-cache):
+
+```sh
+curl --fail http://localhost:5082/api/categories
+kubectl -n smartlost exec deploy/redis -- redis-cli --scan --pattern 'smartlost:*'
+kubectl -n smartlost exec deploy/redis -- redis-cli info stats | grep keyspace_
+```
+
+The first request reads PostgreSQL and writes the key; later requests from any Listings
+pod increase `keyspace_hits`. For the process-local store, run the API without
+`ConnectionStrings:Redis` and enable debug logs:
 
 ```sh
 dotnet run --project src/Services/Listings/SmartLost.ListingsService.Api --launch-profile http -- --SeedData:Enabled=true --Logging:LogLevel:SmartLost.BuildingBlocks.Application.Behaviors=Debug
 ```
 
-Call twice:
-
-```sh
-curl http://localhost:5081/api/categories
-curl http://localhost:5081/api/categories
-```
-
-The first uncached request logs `Query cache miss` and executes SELECT Categories;
-the next logs `Query cache hit` and skips the handler/read store. Debug event IDs are
-2101 (miss) and 2100 (hit), with only the query type as context. JSON properties/routes
+Debug event IDs are 2101 (miss) and 2100 (hit), with only the query type as context.
+Warnings 2103/2104 report store failures and unreadable entries. JSON properties/routes
 are unchanged. Empty successful arrays are cached too. Errors are never cached.
 
 ## Verification and AOP explanation
 
-[BuildingBlocks tests](../tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/Caching/QueryCachingTests.cs)
-cover hit/miss, absolute TTL, request/response/parameter key isolation, uncached requests,
-failure/exception retry, cancellation, single population for concurrent callers, singleton
-registration and validation before hits. A deterministic expiration regression pauses
-a reader holding an old entry, refreshes the key through another request, then resumes
-the first reader and verifies both reuse the new value with only one refresh.
-[HTTP/EF tests](../tests/Listings/SmartLost.ListingsService.UnitTests/CategoryCachingTests.cs)
-count actual category SELECTs: two HTTP requests produce one read; a direct catalog change
-remains hidden until the controlled clock reaches the TTL; the next request reloads it.
-The cached DTO collection rejects mutation. No real-time sleep or development DB is used.
+Unit tests need no Redis server; they use the process-local store or fake stores.
 
-Local verification on 2026-11-04 passed: Release build with warnings as errors,
-format verification at info severity, locked restore with NuGet audit, **237 unit tests**
-and **19 integration tests**. Merged Coverlet unit reports measured **94.72% overall**,
-**100% of covered executable changed lines** and **100% of cache implementation lines**.
-A separate HTTP smoke check against the existing local PostgreSQL database, with seeding
-disabled, recorded one cache miss, one hit and one category SELECT for two requests.
-These are local results; no hosted GitHub Actions or Azure run was performed here.
+- [BuildingBlocks query-caching tests](../tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/Caching/QueryCachingTests.cs)
+  keep the earlier behavior checks against the new implementation: hit/miss, absolute TTL,
+  key isolation, uncached requests, failure/exception retry, cancellation, single
+  population for concurrent callers, the expired-reader race, singleton registration and
+  validation/authorization before hits.
+- [DistributedQueryCacheTests](../tests/BuildingBlocks/SmartLost.BuildingBlocks.UnitTests/Caching/DistributedQueryCacheTests.cs)
+  cover:
+  - round trips of empty and nested read-only results, plus `Result` failures
+  - rejection of corrupt, versioned, extra-member and missing-value payloads
+  - unavailable stores, failed writes, unreadable entries and cancellation during a store call
+  - key scoping, Redis client options and store selection
+- The Listings and Matching unit suites still verify one database/AI call per TTL, read-only
+  snapshots and photo-access checks on hits through the serialized store.
+- [Listings Redis integration tests](../tests/Listings/SmartLost.ListingsService.IntegrationTests/RedisQueryCacheIntegrationTests.cs)
+  use real Redis and PostgreSQL:
+  - Two API instances: the second serves an empty category list, then a repopulated
+    list, without a category SELECT.
+  - The stored TTL is 290–300 seconds, and a corrupt entry is replaced after one handler run.
+  - Redis removes a 1-second entry even under a frozen clock.
+  - An unreachable or stopped Redis still returns HTTP 200 with one read per request.
+- [Matching Redis integration test](../tests/Matching/SmartLost.MatchingService.IntegrationTests/PhotoAnalysisRedisCacheTests.cs):
+  a second instance returns the first instance's nested labels without calling the
+  analyzer, still reads the photo, and returns 404 after access is revoked.
 
-Local expiration-race verification on 2026-11-08: the new regression failed before the
-fix (an extra refresh) and passed afterward. All **240 unit tests**, the Release build
-with warnings as errors and format verification at info severity passed. Fresh Coverlet
-reports measured **94.73% overall** (6798/7176) and **100% changed executable lines**
-(1449/1449), comparing the PR base to the working tree. Integration tests and hosted
-GitHub Actions were not rerun for this cache-only fix.
+Local verification on 2026-11-21:
+- Locked restore with NuGet audit and the Release build of `Aset.slnx` with warnings as
+  errors passed.
+- Format verification at info severity passed for every changed project. The whole-solution
+  format command did not finish within 25 minutes on this host.
+- Unit tests: BuildingBlocks 111, Listings 85, Matching 100 and Auth 90 passed.
+- Integration tests: Listings 10, Matching 4 and Auth 17 passed.
+- Coverlet over the four unit suites measured 96.09% overall (9340/9720) and 210/210
+  changed executable production lines.
+- Compose and Kind smoke results are in the [runbook](../deploy/kubernetes/README.md#redis-cache-verification-on-2026-11-21).
+
+These are local results; no hosted GitHub Actions or Azure run was performed. Earlier
+records (2026-11-04: 237 unit and 19 integration tests; 2026-11-08: the expiration-race
+fix) refer to the removed in-memory implementation.
 
 For the laboratory: CachingBehavior is the reusable **aspect**, the request handler
 invocation through MediatR is the **join point**, and CacheableQueryAttribute selects the

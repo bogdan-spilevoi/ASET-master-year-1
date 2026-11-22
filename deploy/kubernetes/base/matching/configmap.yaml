@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: matching-settings
+  labels:
+    smartlost/service: matching
+data:
+  appsettings.json: |
+    {
+      "MockAdapters": { "SlowDelay": "00:00:03" },
+      "Matching": {
+        "Profiling": {
+          "SlowOperationThreshold": "00:00:02",
+          "SlowAiCallThreshold": "00:00:02",
+          "AiCallTimeout": "00:00:05"
+        }
+      },
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft.AspNetCore": "Warning",
+          "Microsoft.EntityFrameworkCore": "Warning"
+        }
+      },
+      "AllowedHosts": "*"
+    }

@@ -104,18 +104,18 @@ mounted read-only as `/app/appsettings.json`, like Auth and Matching. Create it 
 `appsettings.Docker.example.json` and match its password to the root `.env` value.
 All three APIs and their databases now share one Compose project; databases stay separate.
 
-An alternative [local Kubernetes setup](../../../deploy/kubernetes/README.md) runs only
-Listings: three API replicas, a separate PostgreSQL/PVC and an explicit migration-bundle
+An alternative [local Kubernetes setup](../../../deploy/kubernetes/README.md) runs the Listings module with three API replicas, a separate PostgreSQL/PVC and an explicit migration-bundle
 Job. It keeps Compose data separate. The existing API Dockerfile has an opt-in
 `migrations` target; the default target remains the API. A one-replica Publish worker
 has its own Dockerfile/Deployment and no network port. RabbitMQ runs as a separate
 StatefulSet with a retained PVC and internal Service.
 Use [the local helper](../../../k8s.sh): `./k8s.sh deploy listings` rebuilds/loads API,
 worker and migration images, runs the migration Job, then updates both Deployments.
-`./k8s.sh migrate` applies the latest rebuilt bundle alone; `migration-add <Name>`
+`./k8s.sh migrate listings` applies the latest rebuilt bundle alone; `migration-add <Name>`
 generates a new local migration. See the [command guide](../../../deploy/kubernetes/README.md#short-local-commands).
-Kubernetes also retains the current per-process category cache.
-Its local overlay exposes only Listings at `http://localhost:5082` through NodePort
+`deploy listings` starts the shared internal Redis query cache. All three API replicas share cached
+categories. A Redis readiness timeout warns and allows deployment to continue.
+The local overlay exposes Listings at `http://localhost:5082` through NodePort
 30081 and a loopback Kind host mapping; no port-forward process is required.
 
 For Compose, Swagger remains at `http://localhost:5081/swagger`; the container connects to
@@ -134,5 +134,9 @@ See [container setup, seed and lifecycle commands](SmartLost.ListingsService.Api
 ## Category query caching
 
 GetCategoriesQuery uses the shared attribute-driven MediatR cache with a 300-second
-absolute TTL and process-local memory backend. List/detail reads still execute their
+absolute TTL. Compose and Kind store it in the internal Redis (`ConnectionStrings__Redis`),
+shared by all replicas under keys `smartlost:listings:<environment>:...`. Without that
+setting, for example in unit tests or a plain `dotnet run`, a process-local store is used.
+Only successful results are cached, and a Redis outage falls back to the database read.
+List/detail reads still execute their
 Open-only SQL queries. See [flow, policy and AOP explanation](../../../docs/QUERY_CACHING.md).

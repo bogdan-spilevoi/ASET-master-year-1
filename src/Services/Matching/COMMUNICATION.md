@@ -49,9 +49,10 @@ flowchart LR
     Handler -->|"7.1 Read photo revision"| MockPhotos
     Handler -->|"7.2 Embedding call on pending task"| AiDecorators
     Handler -->|"8.1 Analysis: recheck requested photo access every time"| MockPhotos
-    Handler -->|"8.2 After photo read succeeds, dispatch AnalyzePhotoContentQuery"| AnalysisCache["MediatR CachingBehavior / process-local IQueryCache"]
-    AnalysisCache -->|"8.3 Cache miss: analyze permitted photo bytes"| AiDecorators
-    AnalysisCache -->|"8.4 Success: reuse immutable labels for 300 seconds"| Handler
+    Handler -->|"8.2 After photo read succeeds, dispatch AnalyzePhotoContentQuery"| AnalysisCache["MediatR CachingBehavior / DistributedQueryCache"]
+    AnalysisCache -->|"8.2.1 Read/write smartlost:matching:<env>:... (300-second absolute TTL)"| Redis[("Redis (Compose/Kind; process-local store without ConnectionStrings:Redis)")]
+    AnalysisCache -->|"8.3 Miss, unreadable entry or Redis unavailable: analyze permitted photo bytes"| AiDecorators
+    AnalysisCache -->|"8.4 Success: deserialized read-only labels, also on other replicas"| Handler
     AiDecorators -->|"7.3 Bounded call with AI timeout"| MockAi
     AiDecorators -->|"7.4 Record duration, timeout, cancellation or failure"| Profiler
     Handler -->|"7.5 Commit vector + Ready, or retry/exhausted Failed with sanitized code"| DB
@@ -87,8 +88,63 @@ Failure and retry paths that are implemented:
   lookup. Missing/no-longer-permitted photos return 404; AI failures return 503 and are
   not cached. Only input-only inference is cached: photo identifiers/revision, bytes and
   media type form the key, excluding correlation ID. Hits skip inference, while misses
-  retain the bounded AI call and error mapping. Successful nested label lists are frozen;
-  absolute expiry is 300 seconds. Current adapters are mocks, with no outgoing network call.
+  retain the bounded AI call and error mapping. Successful nested label lists are frozen
+  and come back from Redis as read-only lists; absolute expiry is 300 seconds. If Redis is
+  unavailable or an entry is unreadable, inference runs once and the request still
+  succeeds; write failures are only logged (warning 2103/2104). Current adapters are mocks;
+  the only outgoing network call is the Redis cache connection.
+
+## Local Kubernetes alternative
+
+The [local Kubernetes runbook](../../../deploy/kubernetes/README.md#matching-api-and-postgresql)
+runs three Matching API pods and a Matching-only PostgreSQL StatefulSet in the shared
+`smartlost-local` Kind cluster and `smartlost` namespace. Root Compose remains available;
+its `matching-db-data` volume is not adopted. Solid arrows show the configured local deployment.
+
+```mermaid
+flowchart LR
+    Operator["Developer / k8s.sh in explicit kind-smartlost-local context"]
+    Build["Matching Dockerfile: default runtime + opt-in migrations target"]
+    Images["Kind node image store"]
+    Config["ConfigMaps matching-settings + matching-environment; Secret matching-credentials"]
+    Database["Headless matching-db:5432 / one PostgreSQL pod"]
+    Storage[("PVC: database-data-matching-db-0")]
+    Migration["Job matching-migrate: EF bundle"]
+    Pod["Deployment matching-service: 3 API pods on :8080 (Development, mocks on)"]
+    Service["ClusterIP matching-service:80"]
+    Forward["kubectl port-forward: localhost:5083"]
+    Client["Browser / HTTP client"]
+    Operator -->|"1. Build API and migration images"| Build
+    Build -->|"2. Load both images into Kind"| Images
+    Operator -->|"3. Create namespace, Secret, DB Service and StatefulSet; wait for pg_isready"| Database
+    Database -->|"3.1 Initialize or reopen PostgreSQL data"| Storage
+    Config -->|"3.2 PostgreSQL password"| Database
+    Operator -->|"4. Recreate finished Job; refuse while one is active"| Migration
+    Config -->|"4.1 ConnectionStrings__MatchingDatabase"| Migration
+    Migration -->|"4.2 Apply checked-in migrations; exit success or failure"| Database
+    Operator -->|"5. Apply Matching overlay objects only after Job success; restart pods"| Pod
+    Config -->|"5.1 JSON at /app/appsettings.json, envFrom environment, connection Secret"| Pod
+    Pod -->|"6. Readiness /health/ready: connect + read migration history"| Database
+    Pod -->|"6.1 Use-case reads/writes (numbered flow above)"| Database
+    Client -->|"7. HTTP localhost:5083 (Swagger, Development-only routes)"| Forward
+    Forward -->|"7.1 Tunnel through the Kubernetes API"| Service
+    Service -->|"8. Select a ready API endpoint on 8080"| Pod
+    Redis["Shared redis:6379 Deployment (with Listings); no PVC or host port"]
+    Operator -->|"9. Apply Redis with its Secret, warn and continue on readiness timeout"| Redis
+    Pod -->|"9.1 Photo-analysis cache via ConnectionStrings__Redis"| Redis
+```
+
+Failure paths: a failed migration Job exits nonzero, is retained for its logs and stops the
+helper before arrow 5; `backoffLimit: 0` means it is not retried automatically. Startup
+and liveness call `/health/live`, which runs no checks, so a PostgreSQL outage marks the
+pod unready (arrow 6 returns 503) without restarting it. Readiness never runs a mutating
+endpoint, the demo seed or a migration. Kubernetes restarts crashed containers and recreates
+deleted pods; the PVC survives database pod replacement but not namespace or cluster
+deletion. Swagger and the test endpoints exist only because the local overlay patches
+`matching-environment` to `Development` and `MockAdapters__Enabled=true`. The photo-analysis cache is the shared Redis
+(arrow 9.1), so entries survive API pod replacement. Redis readiness is not part of the
+API readiness probe, and a Redis outage only reruns inference. Matching
+still has no NodePort, Kind host mapping, RabbitMQ connection or calls to Listings.
 
 ## Current model-test interactions
 
@@ -130,10 +186,26 @@ category synonym normalization are not implemented.
   and [profiler](SmartLost.MatchingService.Application/Profiling/MatchingProfiler.cs)
 - [Persistence](SmartLost.MatchingService.Infrastructure/Persistence/MatchingDbContext.cs)
   and [migration](SmartLost.MatchingService.Infrastructure/Persistence/Migrations/)
+- [Readiness check](SmartLost.MatchingService.Infrastructure/Persistence/MatchingDatabaseHealthCheck.cs),
+  [Kubernetes manifests](../../../deploy/kubernetes/base/matching/),
+  [migration Job](../../../deploy/kubernetes/migrations/matching-job.yaml) and [helper](../../../k8s.sh)
 - [Proposed matching sequence](../../../docs/diagrams/member-5/smartlost-matching-sequence.puml)
 - [Proposed matching components](../../../docs/diagrams/member-5/smartlost-matching-components.puml)
 
 ## Review notes
+
+- 2026-11-21: Replaced the process-local photo-analysis cache with the shared Redis-backed
+  `DistributedQueryCache` (arrows 8.2.1–8.4 and Kubernetes 9–9.1; Compose passes
+  `ConnectionStrings__Redis`). The outer photo-access check, cache key inputs,
+  300-second TTL, success-only storage and uncached suggestions are unchanged. Reviewed
+  together with the Auth and Listings diagrams because shared BuildingBlocks and root
+  Compose changed.
+
+- 2026-11-20: Added the local Kubernetes flow (arrows 1-8 in "Local Kubernetes
+  alternative"): Matching API Deployment/ClusterIP Service, its own PostgreSQL
+  StatefulSet/PVC, migration-bundle Job and localhost port-forward. Added
+  `/health/live` (no checks) and `/health/ready` (read-only connectivity and migration
+  history). Existing use-case, mock-adapter, cache and Compose arrows are unchanged.
 
 - 2026-11-20: Reviewed shared BuildingBlocks `OutboxOptions.MessageTypes` filtering and root
   Compose / Kubernetes additions (`auth-email-worker` in Compose, `auth-outbox-worker` in K8s).

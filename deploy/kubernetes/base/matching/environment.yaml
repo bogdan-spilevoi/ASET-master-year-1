@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: matching-environment
+  labels:
+    smartlost/service: matching
+# Loaded through envFrom. Only mock adapters exist, so the base fails startup until an
+# overlay opts in; the local overlay switches both values.
+data:
+  ASPNETCORE_ENVIRONMENT: Production
+  MockAdapters__Enabled: "false"

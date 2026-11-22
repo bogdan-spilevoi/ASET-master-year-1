@@ -17,7 +17,7 @@ public static class DependencyInjection
     public static IServiceCollection AddListingsPersistence(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddListingsDatabase(configuration);
-        services.AddBuildingBlocksQueryCache();
+        services.AddBuildingBlocksQueryCache(configuration, "listings");
         services.AddScoped<IListingsReadStore, ListingsReadStore>();
         services.AddScoped<ListingsDevelopmentSeeder>();
         return services;
