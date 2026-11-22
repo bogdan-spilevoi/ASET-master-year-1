@@ -97,10 +97,9 @@ Failure and retry paths that are implemented:
 ## Local Kubernetes alternative
 
 The [local Kubernetes runbook](../../../deploy/kubernetes/README.md#matching-api-and-postgresql)
-runs one Matching API pod and a Matching-only PostgreSQL StatefulSet in the shared
+runs three Matching API pods and a Matching-only PostgreSQL StatefulSet in the shared
 `smartlost-local` Kind cluster and `smartlost` namespace. Root Compose remains available;
-its `matching-db-data` volume is not adopted. Solid arrows are implemented and were
-exercised on the local Kind cluster.
+its `matching-db-data` volume is not adopted. Solid arrows show the configured local deployment.
 
 ```mermaid
 flowchart LR
@@ -111,7 +110,7 @@ flowchart LR
     Database["Headless matching-db:5432 / one PostgreSQL pod"]
     Storage[("PVC: database-data-matching-db-0")]
     Migration["Job matching-migrate: EF bundle"]
-    Pod["Deployment matching-service: 1 API pod on :8080 (Development, mocks on)"]
+    Pod["Deployment matching-service: 3 API pods on :8080 (Development, mocks on)"]
     Service["ClusterIP matching-service:80"]
     Forward["kubectl port-forward: localhost:5083"]
     Client["Browser / HTTP client"]
@@ -123,15 +122,15 @@ flowchart LR
     Operator -->|"4. Recreate finished Job; refuse while one is active"| Migration
     Config -->|"4.1 ConnectionStrings__MatchingDatabase"| Migration
     Migration -->|"4.2 Apply checked-in migrations; exit success or failure"| Database
-    Operator -->|"5. Apply Matching overlay objects only after Job success; restart pod"| Pod
+    Operator -->|"5. Apply Matching overlay objects only after Job success; restart pods"| Pod
     Config -->|"5.1 JSON at /app/appsettings.json, envFrom environment, connection Secret"| Pod
     Pod -->|"6. Readiness /health/ready: connect + read migration history"| Database
     Pod -->|"6.1 Use-case reads/writes (numbered flow above)"| Database
     Client -->|"7. HTTP localhost:5083 (Swagger, Development-only routes)"| Forward
     Forward -->|"7.1 Tunnel through the Kubernetes API"| Service
-    Service -->|"8. Select the ready API endpoint on 8080"| Pod
+    Service -->|"8. Select a ready API endpoint on 8080"| Pod
     Redis["Shared redis:6379 Deployment (with Listings); no PVC or host port"]
-    Operator -->|"9. Before the DB: ensure redis-credentials Secret and Redis rollout"| Redis
+    Operator -->|"9. Apply Redis with its Secret, warn and continue on readiness timeout"| Redis
     Pod -->|"9.1 Photo-analysis cache via ConnectionStrings__Redis"| Redis
 ```
 

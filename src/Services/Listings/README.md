@@ -114,8 +114,8 @@ Use [the local helper](../../../k8s.sh): `./k8s.sh deploy listings` rebuilds/loa
 worker and migration images, runs the migration Job, then updates both Deployments.
 `./k8s.sh migrate` applies the latest rebuilt bundle alone; `migration-add <Name>`
 generates a new local migration. See the [command guide](../../../deploy/kubernetes/README.md#short-local-commands).
-`deploy listings` also ensures the shared internal Redis query cache; all three API
-replicas read the same cached categories.
+`deploy listings` starts the shared internal Redis query cache. All three API replicas share cached
+categories. A Redis readiness timeout warns and allows deployment to continue.
 Its local overlay exposes only Listings at `http://localhost:5082` through NodePort
 30081 and a loopback Kind host mapping; no port-forward process is required.
 

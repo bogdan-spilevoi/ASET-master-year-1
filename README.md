@@ -561,7 +561,7 @@ the applications. The Listings Dockerfile has API and optional `migrations` targ
 the [worker Dockerfile](src/Services/Listings/SmartLost.ListingsService.Worker/Dockerfile)
 and [patched broker Dockerfile](deploy/kubernetes/images/rabbitmq/Dockerfile) build separate images.
 
-Matching runs [one API pod and its own PostgreSQL StatefulSet](deploy/kubernetes/README.md#matching-api-and-postgresql)
+Matching runs [three API pods and its own PostgreSQL StatefulSet](deploy/kubernetes/README.md#matching-api-and-postgresql)
 in the same `smartlost-local` cluster and `smartlost` namespace. The API has an internal
 ClusterIP Service (port 80 to container port 8080). PostgreSQL is internal at
 `matching-db:5432`, with PVC `database-data-matching-db-0`. A `matching-migrate` Job must
@@ -569,7 +569,8 @@ succeed before the API rolls out. The local overlay enables `Development` and
 `MockAdapters__Enabled=true`. Readiness uses `/health/ready` and liveness uses
 `/health/live`. Swagger and the Development-only routes are reached through the
 port-forward at `http://localhost:5083/swagger`, so Kind port mappings are unchanged. The
-photo-analysis cache uses the shared Redis. Matching's demo seed deletes all Matching
+photo-analysis cache uses the shared Redis. If Redis readiness times out, the local deploy
+helper warns and continues. Both APIs can serve queries while the cache is unavailable. Matching's demo seed deletes all Matching
 rows; use it only on a disposable Kubernetes database.
 
 Only Listings is exposed at `http://localhost:5082/swagger` through the local NodePort/Kind

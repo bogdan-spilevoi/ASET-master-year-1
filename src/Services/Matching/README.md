@@ -170,8 +170,8 @@ dotnet ef migrations has-pending-model-changes --project src/Services/Matching/S
 
 ## Local Kubernetes
 
-Compose remains available. Kubernetes is an alternative for the same local workflow: one
-API pod and a Matching-only PostgreSQL StatefulSet in the shared `smartlost-local` Kind
+Compose remains available. Kubernetes is an alternative for the same local workflow: three
+API pods and a Matching-only PostgreSQL StatefulSet in the shared `smartlost-local` Kind
 cluster and `smartlost` namespace. The full procedure, manifests and verification record
 are in the [Kubernetes runbook](../../../deploy/kubernetes/README.md#matching-api-and-postgresql).
 From the repository root:
@@ -189,7 +189,7 @@ first deploy. The helper creates Secret `matching-credentials` from it. The imag
 from this service's Dockerfile, and `--target migrations` builds an EF bundle for
 `MatchingDbContext`. The API rolls out only after the migration Job succeeds. The local
 overlay sets `Development` and `MockAdapters__Enabled=true`. PostgreSQL stays internal at
-`matching-db:5432`. `deploy matching` also ensures the shared internal Redis query cache.
+`matching-db:5432`. `deploy matching` starts the shared Redis cache and continues with a warning if readiness times out.
 `POST /api/matching/demo/seed` deletes every Matching row. Run it only against a
 disposable Kubernetes database.
 

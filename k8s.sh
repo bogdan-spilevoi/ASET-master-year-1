@@ -168,17 +168,26 @@ start_broker() {
 
 # Shared by Listings and Matching; both deploy paths call this, so either can run alone.
 start_redis() {
+    local status
     kube apply -f "$KUBE_DIR/base/namespace.yaml"
     ensure_secret redis-credentials "$KUBE_DIR/local/redis/.env"
     kube apply -k "$KUBE_DIR/base/redis"
-    kube rollout status deployment/redis --timeout=180s
+    if status=$(kube rollout status deployment/redis --timeout=180s 2>&1); then
+        printf '%s\n' "$status"
+    else
+        printf '%s\n' "$status" >&2
+        case "${status##*$'\n'}" in
+            *'timed out waiting for the condition'*|'error: context deadline exceeded'|*'deployment "redis" exceeded its progress deadline'*)
+                printf 'Warning: Redis did not become Ready in time. Continuing deployment. Queries can run without the cache.\n' >&2 ;;
+            *) return 1 ;;
+        esac
+    fi
 }
 
 start_infrastructure() {
     kube apply -f "$KUBE_DIR/base/namespace.yaml"
     ensure_secret listings-credentials "$KUBE_DIR/local/.env"
     ensure_secret rabbitmq-credentials "$KUBE_DIR/local/rabbitmq/.env"
-    start_redis
     kube apply -f "$KUBE_DIR/base/listings/db-service.yaml" -f "$KUBE_DIR/base/listings/db-statefulset.yaml"
     kube rollout status statefulset/listings-db --timeout=180s
     start_broker "$1"
@@ -230,7 +239,6 @@ restart_target() {
 }
 
 deploy_matching() {
-    start_redis
     start_matching_database
     run_migration matching
     # Applied only after the migration Job succeeded; Listings objects are not touched.
@@ -251,6 +259,7 @@ deploy_target() {
         start_broker yes
         return
     fi
+    start_redis
     if [[ "$target" == matching ]]; then
         deploy_matching
         printf 'Matching Swagger: ./k8s.sh ui matching, then http://localhost:%s/swagger\n' "$MATCHING_LOCAL_PORT"

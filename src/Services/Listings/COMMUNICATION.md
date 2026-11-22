@@ -92,7 +92,7 @@ flowchart LR
     Inspector -->|"11. Persistent mandatory publish; wait for confirm"| Broker
     Broker -->|"11.1 Store durable queue/messages; no consumer yet"| BrokerStorage
     Redis["Shared redis:6379 Deployment; no PVC or host port"]
-    Operator -->|"12. Before migration: ensure redis-credentials Secret and Redis rollout"| Redis
+    Operator -->|"12. Apply Redis with its Secret, warn and continue on readiness timeout"| Redis
     Pods -->|"12.1 Category cache read/write via ConnectionStrings__Redis, shared by all 3 pods"| Redis
 ```
 

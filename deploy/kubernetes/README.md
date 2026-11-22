@@ -1,7 +1,7 @@
 # Local Kubernetes: Listings, Matching, PostgreSQL and RabbitMQ
 
-This setup runs three Listings API replicas, one Outbox Publish worker, one Matching API
-replica, a separate PostgreSQL 16 StatefulSet for each service, RabbitMQ 4.4 and one
+This setup runs three Listings API replicas, one Outbox Publish worker, three Matching API
+replicas, a separate PostgreSQL 16 StatefulSet for each service, RabbitMQ 4.4 and one
 shared Redis query cache in namespace `smartlost`. Each StatefulSet has a separate 1 GiB
 PVC; Redis keeps no data on disk. Explicit EF migration-bundle Jobs prepare each database.
 Auth, Ingress and Azure deployment are not included. Root Compose remains independent.
@@ -103,7 +103,7 @@ or GitHub workflow was changed by adding this helper; .NET suites were not rerun
 | [local/redis/.env.example](local/redis/.env.example) | Placeholder password and `ConnectionStrings__Redis` value for the ignored `local/redis/.env`. |
 | [images/rabbitmq/Dockerfile](images/rabbitmq/Dockerfile) | Digest-pinned broker base with patched Ubuntu apt libraries; non-root runtime. |
 | [local/rabbitmq/.env.example](local/rabbitmq/.env.example) | Separate ignored broker credentials/cookie file. |
-| [overlays/local/kustomization.yaml](overlays/local/kustomization.yaml) | `smartlost` namespace, three Listings API replicas, the Listings-only NodePort patch and the Matching Development patch. |
+| [overlays/local/kustomization.yaml](overlays/local/kustomization.yaml) | `smartlost` namespace, three API replicas each for Listings and Matching, the Listings-only NodePort patch and the Matching Development patch. |
 | [overlays/local/listings-nodeport.yaml](overlays/local/listings-nodeport.yaml) | Local Service override: NodePort 30081; the base Service remains ClusterIP. |
 | [overlays/local/matching-development.yaml](overlays/local/matching-development.yaml) | Patches ConfigMap `matching-environment` to `Development` and `MockAdapters__Enabled=true`. |
 | [migrations/listings-job.yaml](migrations/listings-job.yaml) | Explicit migration bundle; one attempt, five-minute deadline. |
@@ -336,8 +336,8 @@ automatic cache invalidation.
 
 ## Matching API and PostgreSQL
 
-Matching reuses the `smartlost-local` cluster and `smartlost` namespace. It adds one
-`matching-service` API pod (container port 8080) behind an internal ClusterIP Service on
+Matching reuses the `smartlost-local` cluster and `smartlost` namespace. It adds three
+`matching-service` API pods (container port 8080) behind an internal ClusterIP Service on
 port 80, and its own `matching-db` PostgreSQL 16 StatefulSet with PVC
 `database-data-matching-db-0`. PostgreSQL is reachable only inside the namespace at
 `matching-db:5432`; it has no NodePort, host mapping or port-forward command. Only
@@ -459,6 +459,10 @@ To back up Matching before recreating the cluster, use the
 separate `matching.dump` file. Keep the ignored `local/matching/.env` as well.
 
 ## Redis query cache
+
+The deploy helper waits up to 180 seconds for Redis once per deployment. A readiness
+timeout prints a warning and deployment continues. Secret, manifest and Kubernetes
+access errors still stop the helper. Each API rolls out after its database and migration are ready.
 
 One Redis Deployment (`redis:8.8.4-alpine`) serves the MediatR query cache of every
 Listings and Matching pod in the namespace. It is reachable only inside the cluster at
