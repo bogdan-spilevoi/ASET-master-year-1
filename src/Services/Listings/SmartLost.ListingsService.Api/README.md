@@ -1,10 +1,61 @@
-# Listings public read API
+# Listings API
 
 The executable .NET 10 API exposes three public read endpoints. It composes Application
 queries, the existing MediatR exception/validation pipeline and Infrastructure EF reads.
 Only GET /api/categories uses server-side query caching (300-second absolute TTL);
-listing list/details remain uncached. There are no JWT-protected mutation endpoints. Public listing reads
+listing list/details remain uncached. Draft uploads require an Auth access token. Public listing reads
 always filter to Open; callers cannot request Draft/Closed data through these endpoints.
+
+## Upload a draft from Swagger
+
+1. Deploy Listings and Matching to local Kind with `./k8s.sh deploy listings` and `./k8s.sh deploy matching`. Log in to Auth and copy the access token.
+2. Open [Listings Swagger](http://localhost:5082/swagger), choose **Authorize**, and paste the raw token. Open **POST /api/listings/drafts** and choose **Try it out**.
+3. Choose `Lost` or `Found` and select a JPEG or PNG (up to 10 MiB and 16 megapixels). Execute. The server decodes the file and takes the author ID from the verified JWT subject.
+4. A successful upload returns 201 with `listingId`, `revision`, `photoId` and `photoRevision`. The draft and original image bytes are saved in the same database transaction. Drafts stay hidden from public reads.
+
+Matching can retrieve the original bytes from `GET /internal/listings/{listingId}/photos/{photoId}/revisions/{revision}` through ClusterIP `http://listings-photos`. Only the private listener on container port 8082 serves this route. It requires the dedicated `X-Listings-Photo-Key` header. An unknown reference returns 404. Seeded metadata has no uploaded bytes. Uploading a draft does not start inference.
+
+Kind reuses the Auth JWT signing key and provisions the shared photo-reader Secret with `k8s.sh`. For Compose, set `Jwt:SigningKey` in the ignored Listings Docker settings to the Auth value, match `Jwt:Issuer` and `Jwt:Audience` if customized, and set a random `LISTINGS_PHOTO_API_KEY` in the ignored root `.env`. For direct host runs set `ListingsPhotos__ApiKey` for both processes and `Jwt__SigningKey` for Listings. The default local photo-client origin is `http://localhost:8082`.
+
+## Analyze the uploaded draft
+
+Keep the Auth token in Swagger and use the `listingId` from the upload. These operations take no request body.
+
+| Operation | Result |
+| --- | --- |
+| `POST /api/listings/drafts/{listingId}/traits` | Queues Qwen trait extraction. |
+| `POST /api/listings/drafts/{listingId}/embedding` | Queues DINO embedding independently. |
+| `GET /api/listings/drafts/{listingId}/analysis` | Returns the current photo reference, separate `traits` and `embedding` states, and Qwen `suggestions` when ready. The embedding result includes its model and dimensions. |
+
+Each POST returns 202 with a Location pointing to the GET. Poll GET until the requested state becomes `Ready` or `Failed`. A missing draft, missing upload or another owner's draft returns 404. Successful results survive pod restarts. Duplicate requests reuse the same job, including its terminal outcome. Save the traits selected by the owner through PATCH on the draft.
+
+Kind enables the pipeline and sets broker credentials, routing and internal service URLs. Start the AI laptop and HTTPS tunnel, then deploy Matching and Listings. Default standalone and Compose settings disable the enqueue endpoints (503). Enabling them requires a running Listings Outbox publisher bound to `smartlost.matching.draft-analysis`, Matching with `DraftAnalysis:WorkerEnabled=true` and the private photo service credential.
+
+## Publish and recover from Swagger
+
+1. Use the owner's bearer token. Read `GET /api/listings/drafts/{id}` for private content, photo metadata and the current revision.
+2. Get category IDs from `GET /api/categories`. Send `PATCH /api/listings/drafts/{id}` with the current revision. You can save partial drafts before AI finishes. For example, supply a real category ID in this body:
+
+   ```json
+   {
+     "expectedRevision": 2,
+     "title": "Blue backpack",
+     "description": "Canvas backpack with a front pocket",
+     "location": "Campus library",
+     "occurredOn": "2026-01-15",
+     "colour": "blue",
+     "traits": ["front pocket"],
+     "categoryIds": ["00000000-0000-0000-0000-000000000001"]
+   }
+   ```
+
+   Omitted or null fields keep their current values. Supply `[]` to clear a collection or an empty string to clear colour. Each successful patch returns the saved draft and its new revision. A stale revision returns 409.
+3. Send `POST /api/listings/drafts/{id}/publish` with `{"expectedRevision": 3}`, substituting the latest revision. Publication requires title, description, location, a valid occurrence date and at least one catalog category. A 204 makes the listing available on the public detail route. The AI host may be offline.
+4. For a manual match, publish an opposite-type listing using a second account. Read both public details for the current revisions. As the Lost owner, send `POST /api/listings/{lostId}/match-decisions` with `foundListingId`, `lostRevision`, `foundRevision` and `choice` ("Accept" or "Reject"). The response includes `decisionId`. A reservation conflict or stale revision returns 409. A rejected decision applies to that reviewed pair.
+5. With the same token, send `POST /api/match-decisions/{decisionId}/cancel-acceptance` to release a reservation, or `POST /api/match-decisions/{decisionId}/confirm-recovery` after the physical return. These operations take no body. Confirmation returns a recovery ID, closes Lost and credits the finder once. Found stays Open and becomes ineligible for another recovery.
+6. The owner of an Open listing can call `POST /api/listings/{id}/withdraw` with its expected revision. Withdrawal closes the listing and invalidates outstanding decisions without creating a recovery or award.
+
+`GET /api/listings/{id}/suggestions` requires a bearer token and returns **501 Not Implemented**. The manual decision endpoints accept the two listing IDs without requiring a generated suggestion.
 
 ## HTTP contract
 
@@ -34,7 +85,7 @@ For three API replicas and PostgreSQL in local Kubernetes, use the
 image build/load, Secret/configuration setup, migration Job, optional seed, fixed-port access,
 pod recovery and data removal. The default Dockerfile target still builds the API;
 `--target migrations` builds the EF bundle used only by the explicit Job.
-No API startup migration or new endpoint is added.
+Apply migrations before running the API.
 Apply AddListingsOutbox before updated seeding. The seed now commits new fixtures and
 notification metadata atomically through the shared unit of work; unchanged fixtures
 do not generate historical Outbox rows. A separate

@@ -10,6 +10,12 @@ public sealed record MatchingOptions
     public static readonly EmbeddingVersion Dinov3Version = new(
         "onnx-community/dinov3-vitl16-pretrain-lvd1689m-ONNX", "rgb-rescale-bilinear-antialias-f32-v2");
 
+    // Older demo databases label synthetic vectors with Dinov3Version. Keep HTTP evidence in a distinct namespace.
+    public static EmbeddingVersion FromRuntime(string model, string preprocessing)
+    {
+        return new EmbeddingVersion("onnx:" + model, preprocessing);
+    }
+
     public EmbeddingVersion EmbeddingVersion { get; init; } = Dinov3Version;
 
     public int FoundBeforeLostToleranceDays { get; init; } = CandidatePolicy.DefaultFoundBeforeLostToleranceDays;

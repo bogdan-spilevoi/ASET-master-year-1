@@ -169,6 +169,10 @@ public sealed class ListingsQueryFlowTests
         {
             using var schema = JsonDocument.Parse(await openApi.Content.ReadAsStringAsync());
             Assert.True(schema.RootElement.GetProperty("paths").TryGetProperty("/api/listings/{id}", out _));
+            JsonElement schemas = schema.RootElement.GetProperty("components").GetProperty("schemas");
+            Assert.Equal("binary", schemas.GetProperty("IFormFile").GetProperty("format").GetString());
+            Assert.Equal(["Lost", "Found"], schemas.GetProperty("ListingType").GetProperty("enum").EnumerateArray()
+                .Where(value => value.ValueKind == JsonValueKind.String).Select(value => value.GetString()));
             Assert.Equal("SmartLost Listings API", schema.RootElement.GetProperty("info").GetProperty("title").GetString());
             using HttpResponseMessage swaggerConfiguration = await client.GetAsync("/swagger/index.js");
             swaggerConfiguration.EnsureSuccessStatusCode();

@@ -1,5 +1,6 @@
 using MediatR;
 using SmartLost.BuildingBlocks.Core.Results;
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Application.Contracts;
 using SmartLost.MatchingService.Application.Interfaces;
 using SmartLost.MatchingService.Domain.Errors;

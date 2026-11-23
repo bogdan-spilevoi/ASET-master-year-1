@@ -11,6 +11,13 @@ public static class RabbitMqServiceCollectionExtensions
 {
     public static IServiceCollection AddRabbitMqOutboxPublisher(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddRabbitMqTransport(configuration);
+        services.AddSingleton<IOutboxMessagePublisher, RabbitMqOutboxPublisher>();
+        return services;
+    }
+
+    public static IServiceCollection AddRabbitMqTransport(this IServiceCollection services, IConfiguration configuration)
+    {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
         services.AddOptions<RabbitMqOptions>().Bind(configuration.GetSection("RabbitMq"))
@@ -33,7 +40,6 @@ public static class RabbitMqServiceCollectionExtensions
                 Ssl = new SslOption { Enabled = settings.UseTls, ServerName = settings.HostName }
             };
         });
-        services.AddSingleton<IOutboxMessagePublisher, RabbitMqOutboxPublisher>();
         return services;
     }
 }

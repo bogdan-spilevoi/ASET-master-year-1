@@ -340,3 +340,7 @@ on `http://localhost:8025` through `./k8s.sh ui mailpit`.
   Added the opt-in attribute-based AuthorizationBehavior and `/api/auth/me`. Endpoint and
   Application attributes admit the same bearer-authenticated caller; this adds no persistence,
   outgoing call, worker or message interaction.
+
+- Draft photo upload review: Listings validates tokens already issued by Auth. Compose adds photo-reader configuration only to Listings and Matching. Auth routes and outgoing calls are unchanged.
+
+- Draft inference review: Listings validates the JWT locally. Auth has no new call or message in the analysis flow.

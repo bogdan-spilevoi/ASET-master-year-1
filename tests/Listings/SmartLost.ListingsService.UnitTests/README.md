@@ -63,3 +63,5 @@ Worker mode tests verify Publish registers the shared processor/continuous host 
 publisher without the inspection reader, and rejects unknown modes. BuildingBlocks tests
 cover mandatory persistent properties, waiting for confirms, connection reuse/recovery,
 serialized concurrent calls, configuration, continuous polling and scoped cancellation.
+
+ListingLifecycleTests exercises private partial edits, category validation, publication without AI, manual reservations, cancellation, withdrawal and retrying recovery through HTTP and relational SQLite.

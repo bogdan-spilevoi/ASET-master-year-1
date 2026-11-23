@@ -1,8 +1,7 @@
 # Matching service
 
 The Matching service owns the derived search projection, cached image embeddings,
-model versions and suggestion ranking. It will coordinate Qwen/DINOv3 requests to the local
-AI runtime through an authenticated HTTPS tunnel; it will not load model weights in Azure.
+model versions and suggestion ranking. It can send photo bytes to the [laptop inference API](../../../AIModels/SmartLost.Ai.Api/README.md) over an authenticated HTTPS tunnel.
 
 Shared profiling, authorization and caching behaviors are registered for MediatR. Current
 demo requests have no authorization attributes: their routes remain Development-only
@@ -14,8 +13,7 @@ there is no runtime Listings-to-Matching synchronization yet.
 
 ## Current state
 
-The [communication diagrams](COMMUNICATION.md) show the implemented flow and mark
-real adapters and service integrations as planned. Update that document with service code,
+The [communication diagrams](COMMUNICATION.md) show the implemented flow and identify the optional inference client and the planned Listings integration. Update that document with service code,
 configuration or test changes. If communication is unchanged, record a specific explanation
 in its review notes. CI checks document changes; reviewers check diagram accuracy.
 
@@ -23,13 +21,10 @@ in its review notes. CI checks document changes; reviewers check diagram accurac
 | --- | --- |
 | Domain | `Entities/`: `SearchListing`, `ImageEmbedding` (finite L2-normalized vectors, cosine similarity only for compatible versions), `EmbeddingPreparationTask` (lease, retry, Failed/Obsolete transitions). `ValueObjects/`: `PhotoReference`, `EmbeddingVersion`. `Enums/`: `EmbeddingPreparationState`; shared `ListingType` comes from Contracts.Listings. `Suggestions/`: `CandidatePolicy`, `RelevanceScorer`, `RankingPolicy`, `MatchSuggestion`. `Errors/`: `MatchingErrors` |
 | Application | Same layout as Auth. `Commands/PrepareImageEmbedding/` and `Queries/GetMatchSuggestions/`, `Queries/AnalyzeListingPhoto/` each hold their request, handler and validator. `Contracts/` holds responses and AI data; `Interfaces/` holds repository, photo, AI, selector and ranker ports; `Services/` holds `CandidateSelector`, `RelevanceRanker` and `MatchingOptions`; `Exceptions/` holds `AiInferenceException`; `Profiling/` holds `MatchingProfiler`, AI options, stage names and the decorators; the common behavior lives in BuildingBlocks |
-| Infrastructure | `MatchingDbContext` (EF Core/Npgsql) with the `InitialCreate` migration, three repositories, `MatchingUnitOfWork` and the read-only `MatchingDatabaseHealthCheck`. **Mock** Listings photo reader and mock DINOv3/Qwen adapters (`Mock/`), plus the development `MatchingDemoSeeder` (`Demo/`) |
+| Infrastructure | `MatchingDbContext` (EF Core/Npgsql) with the `InitialCreate` migration, three repositories, `MatchingUnitOfWork` and the read-only `MatchingDatabaseHealthCheck`. HTTP inference and read-only test image directory, or demo adapters (`Mock/`), plus the development `MatchingDemoSeeder` (`Demo/`) |
 | Api | ASP.NET Core entry point, development-only test endpoints, `/health/live` and `/health/ready`, OpenAPI/Swagger in Development, Dockerfile with a default `runtime` and an opt-in `migrations` target |
 
-No real Listings photo client or local AI HTTP client exists yet. Startup fails unless
-`MockAdapters:Enabled` is `true`, so the mocks are never enabled silently. The service has
-no service-to-service authentication; its test endpoints therefore return 404 outside
-Development.
+Set `AiRuntime:BaseUrl` and supply `AiRuntime__ApiKey` for HTTP inference. Follow the [macOS and Windows shared key setup](../../../AIModels/SmartLost.Ai.Api/README.md#shared-api-key-setup-on-macos-and-windows) when connecting a new device. With an empty URL, enable `MockAdapters:Enabled` explicitly to use the simulated adapters. The inbound demo endpoints remain Development-only. Trusted workflows can resolve ListingsPhotoClient to read private uploaded revisions using ListingsPhotos:BaseUrl and ListingsPhotos:ApiKey. Anonymous demo endpoints continue to use test photos. After upload, separate authenticated Listings POSTs enqueue draft photo work. In Kind, Matching consumes the dedicated RabbitMQ queue, stores work and Qwen suggestions in PhotoAnalyses, and commits DINO vectors to ImageEmbeddings. Drafts remain outside the candidate pool.
 
 The Domain entities reproduce the structure of the [NMF model](SmartLost.MatchingService.Modeling/README.md)
 as DDD aggregates with runtime guards. Like the ecore model, entities store the photo and
@@ -41,7 +36,7 @@ Rules that are not yet implemented:
 - application of snapshot `ChangeSequence` checkpoints
 - revision-specific pair rejections
 - category synonym normalization (D01)
-- a worker that claims due embedding tasks automatically
+- automatic processing of the older search-projection EmbeddingPreparationTasks (draft work uses the separate PhotoAnalyses worker)
 
 The ranking weights and threshold in `RankingPolicy.Baseline` are an uncalibrated
 baseline, not validated values.
@@ -93,7 +88,7 @@ The existing `POST /api/matching/photo-analysis` flow checks the photo on every 
 then dispatches an input-only cacheable query. Successful labels are immutable snapshots
 with a five-minute absolute TTL. The key covers photo identifiers/revision, bytes and
 media type; correlation IDs do not create separate entries. Missing/no-longer-permitted
-photos and inference failures are not cached. The current adapters remain mocks.
+photos and inference failures are not cached. The selected adapter handles cache misses.
 Compose and Kind store entries in the shared internal Redis under
 `smartlost:matching:<environment>:...`, so a cached analysis survives API restarts and is
 shared by replicas. Every hit is deserialized into new read-only lists, and photo access
@@ -108,7 +103,7 @@ See [cache policy and limitations](../../../docs/QUERY_CACHING.md#matching-photo
 | [SmartLost.MatchingService.Api](SmartLost.MatchingService.Api/SmartLost.MatchingService.Api.csproj) | Entry point, development test endpoints and composition root. | Own Application and Infrastructure; BuildingBlocks.AspNetCore. |
 | [SmartLost.MatchingService.Application](SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj) | Matching use cases, ports, options and profiling. | Own Domain; BuildingBlocks.Application. |
 | [SmartLost.MatchingService.Domain](SmartLost.MatchingService.Domain/SmartLost.MatchingService.Domain.csproj) | Search projection, embeddings, preparation tasks, eligibility and relevance rules. | BuildingBlocks.Core; Contracts.Listings. |
-| [SmartLost.MatchingService.Infrastructure](SmartLost.MatchingService.Infrastructure/SmartLost.MatchingService.Infrastructure.csproj) | Matching-owned PostgreSQL persistence, mock photo/AI adapters and demo seeding. | Own Application and Domain; BuildingBlocks.Infrastructure. |
+| [SmartLost.MatchingService.Infrastructure](SmartLost.MatchingService.Infrastructure/SmartLost.MatchingService.Infrastructure.csproj) | Matching-owned PostgreSQL persistence, file/mock photo readers, HTTP/mock inference adapters and demo seeding. | Own Application and Domain; BuildingBlocks.Infrastructure. |
 | [SmartLost.MatchingService.Modeling](SmartLost.MatchingService.Modeling/README.md) | NMF structural models (design evidence). | NMF-Basics; no service runtime references. |
 
 The focused solution also lists the four shared BuildingBlocks projects directly.
@@ -125,6 +120,7 @@ Matching owns the `matchingservice` PostgreSQL database. Only Matching accesses 
 
 | Table | Contents | Key constraints |
 | --- | --- | --- |
+| `PhotoAnalyses` | Durable work and per-operation state for a draft photo revision, Qwen suggestions in JSONB, DINO model and dimensions | Stable ID for operation and revision, optimistic lease token and due-work index. |
 | `SearchListings` | Projection of a confirmed listing; `Id` is the logical Listings ID | `CurrentPhotoId`/`CurrentPhotoRevision` both null or both set; `text[]` category/trait keys; `xmin` concurrency |
 | `ImageEmbeddings` | Cached `real[]` vectors | Unique `UX_ImageEmbeddings_Target` on listing, photo, revision, model and preprocessing version |
 | `EmbeddingPreparationTasks` | Durable embedding work, lease and retry state | Same unique target `UX_EmbeddingPreparationTasks_Target`; `xmin` optimistic concurrency for claims |
@@ -170,7 +166,7 @@ dotnet ef migrations has-pending-model-changes --project src/Services/Matching/S
 
 ## Local Kubernetes
 
-Compose remains available. Kubernetes is an alternative for the same local workflow: three
+Compose remains available. Kubernetes is an alternative for the same local workflow: two
 API pods and a Matching-only PostgreSQL StatefulSet in the shared `smartlost-local` Kind
 cluster and `smartlost` namespace. The full procedure, manifests and verification record
 are in the [Kubernetes runbook](../../../deploy/kubernetes/README.md#matching-api-and-postgresql).

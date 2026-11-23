@@ -5,6 +5,11 @@ namespace SmartLost.ListingsService.Domain.Errors;
 /// <summary>Business errors used by the hand-written Domain operations.</summary>
 public static class ListingErrors
 {
+    public static readonly Error NotFound = new("listings.not_found", "The listing was not found.", ErrorKind.NotFound);
+    public static readonly Error DecisionNotFound = new("listings.decision_not_found", "The decision was not found.", ErrorKind.NotFound);
+    public static readonly Error PairUnavailable = new("listings.pair_unavailable", "A listing is reserved or already recovered.", ErrorKind.Conflict);
+    public static readonly Error InvalidPatch = new("listings.empty_patch", "Supply at least one draft field.", ErrorKind.Validation);
+    public static readonly Error InvalidChoice = new("listings.invalid_choice", "Choose Accept or Reject.", ErrorKind.Validation);
     public static readonly Error InvalidIdentity = new("listings.invalid_identity", "A nonempty identifier is required.", ErrorKind.Validation);
     public static readonly Error RequiredText = new("listings.required_text", "A nonblank value is required.", ErrorKind.Validation);
     public static readonly Error InvalidType = new("listings.invalid_type", "The listing type is invalid.", ErrorKind.Validation);

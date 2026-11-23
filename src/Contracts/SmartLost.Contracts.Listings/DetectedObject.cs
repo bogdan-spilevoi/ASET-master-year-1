@@ -1,9 +1,9 @@
-namespace SmartLost.MatchingService.Application.Contracts;
+namespace SmartLost.Contracts.Listings;
 
 /// <summary>One object from the Qwen label prompt; null scalars mean the model could not identify the value.</summary>
 public sealed record DetectedObject(
-    string Category,
-    string ObjectType,
+    string? Category,
+    string? ObjectType,
     IReadOnlyList<string> Colors,
     string? Material,
     string? Shape,

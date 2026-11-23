@@ -97,6 +97,47 @@ public partial class Listing : AggregateRoot<Guid>
         ContentChanged();
     }
 
+    public void PatchDraft(Guid actorId, int expectedRevision, DateTime changedAtUtc, string? title, string? description,
+        string? location, DateOnly? occurredOn, string? colour, IReadOnlyList<string>? traits, IReadOnlyList<Category>? categories)
+    {
+        EnsureEditable(actorId, expectedRevision);
+        Guard.Against(State != ListingState.Draft, ListingErrors.InvalidState);
+        Guard.Against(title is null && description is null && location is null && occurredOn is null &&
+            colour is null && traits is null && categories is null, ListingErrors.InvalidPatch);
+        ListingRules.Utc(changedAtUtc);
+        Guard.Against(occurredOn.HasValue && (occurredOn == default(DateOnly) || occurredOn > DateOnly.FromDateTime(changedAtUtc)),
+            ListingErrors.InvalidDate);
+
+        string[]? newTraits = traits?.Select(ListingRules.Text).Distinct(StringComparer.Ordinal).ToArray();
+        Title = title?.Trim() ?? Title;
+        Description = description?.Trim() ?? Description;
+        Location = location?.Trim() ?? Location;
+        OccurredOn = occurredOn ?? OccurredOn;
+        if (colour is not null)
+        {
+            Colour = string.IsNullOrWhiteSpace(colour) ? null : colour.Trim();
+        }
+        if (newTraits is not null)
+        {
+            _traits.Clear();
+            _traits.AddRange(newTraits);
+        }
+        if (categories is not null)
+        {
+            var wanted = categories.Select(c => c.Id).ToHashSet();
+            foreach (ListingCategory assignment in _categories.Where(c => !wanted.Contains(c.CategoryId)).ToArray())
+            {
+                _categories.Remove(assignment);
+                assignment.Detach();
+            }
+            foreach (Category category in categories.Where(c => _categories.All(a => a.CategoryId != c.Id)))
+            {
+                _categories.Add(ListingCategory.Create(this, category));
+            }
+        }
+        ContentChanged();
+    }
+
     public void AddCategory(Guid actorId, int expectedRevision, Category category)
     {
         EnsureEditable(actorId, expectedRevision);

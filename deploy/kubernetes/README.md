@@ -1,6 +1,6 @@
 # Local Kubernetes for Auth, Listings and Matching
 
-The Kind overlay runs three API replicas per service and one PostgreSQL StatefulSet per
+The Kind overlay runs three replicas each for the Auth and Listings APIs, two for Matching, and one PostgreSQL StatefulSet per
 service. Auth runs separate email and identity workers and uses Mailpit for SMTP. Auth
 and Listings publish Outbox events to the shared RabbitMQ broker. Listings and Matching
 share a Redis query cache. Each database and the broker have a separate 1 GiB PVC.
@@ -101,7 +101,7 @@ or GitHub workflow was changed by adding this helper; .NET suites were not rerun
 | [images/rabbitmq/Dockerfile](images/rabbitmq/Dockerfile) | Digest-pinned broker with patched Ubuntu apt libraries. The upstream entrypoint starts RabbitMQ directly as the `rabbitmq` user. The image omits the unused Pebble supervisor. |
 | [local/auth/.env.example](local/auth/.env.example) | Placeholder Auth DB password, connection string and 32+ char `jwt-signing-key`; never a checked-in Secret. |
 | [local/rabbitmq/.env.example](local/rabbitmq/.env.example) | Separate ignored broker credentials/cookie file. |
-| [overlays/local/kustomization.yaml](overlays/local/kustomization.yaml) | `smartlost` namespace, three API replicas per service, Auth and Listings NodePorts, and the Matching Development patch. |
+| [overlays/local/kustomization.yaml](overlays/local/kustomization.yaml) | `smartlost` namespace, three Auth and Listings replicas each, two Matching replicas, Auth and Listings NodePorts, and the Matching Development patch. |
 | [overlays/local/auth-nodeport.yaml](overlays/local/auth-nodeport.yaml) | Local Service override: NodePort 30080; base Auth Service remains ClusterIP. |
 | [overlays/local/listings-nodeport.yaml](overlays/local/listings-nodeport.yaml) | Local Service override: NodePort 30081; the base Service remains ClusterIP. |
 | [migrations/auth-job.yaml](migrations/auth-job.yaml) | Explicit Auth migration bundle; one attempt, five-minute deadline. |
@@ -348,6 +348,14 @@ backfill notifications for existing fixtures; an unchanged seed rerun may leave 
 empty. Newly created published fixtures generate metadata notifications. Full Matching
 snapshots and Matching consumption remain unimplemented.
 
+## On-demand draft analysis
+
+Deploy Matching and Listings to update both the `AddDraftPhotoAnalyses` migration and the Listings Outbox bindings. Each Matching replica runs a consumer and a worker for durable analysis jobs. The shared broker, per-job database lease and laptop concurrency gate support two replicas. Set the laptop URL and key as described in the Matching runbook, then [test either operation from Listings Swagger](../../src/Services/Listings/SmartLost.ListingsService.Api/README.md#analyze-the-uploaded-draft).
+
+## Private draft photos
+
+`./k8s.sh deploy listings` applies the additive photo-payload migration and configures JWT verification with the Auth signing key. The helper creates the `listings-photo-access` Secret once for Listings and Matching. Apply `./k8s.sh deploy matching` to configure the client. Matching reads through ClusterIP `listings-photos:80`, which selects port 8082 on the Listings replicas. The public Listings NodePort selects port 8080. See the [upload walkthrough](../../src/Services/Listings/SmartLost.ListingsService.Api/README.md#upload-a-draft-from-swagger).
+
 ## Access and optional fixtures
 
 Once the local overlay is applied and the APIs are ready, access the following fixed URLs.
@@ -394,7 +402,7 @@ automatic cache invalidation.
 
 ## Matching API and PostgreSQL
 
-Matching reuses the `smartlost-local` cluster and `smartlost` namespace. It adds three
+Matching reuses the `smartlost-local` cluster and `smartlost` namespace. It adds two
 `matching-service` API pods (container port 8080) behind an internal ClusterIP Service on
 port 80, and its own `matching-db` PostgreSQL 16 StatefulSet with PVC
 `database-data-matching-db-0`. PostgreSQL is reachable only inside the namespace at
@@ -407,7 +415,7 @@ is loaded through `envFrom`. The Secret `matching-credentials` supplies
 `postgres-password` and `connection-string`; the latter becomes
 `ConnectionStrings__MatchingDatabase` in the API and migration Job. In the base,
 `matching-environment` sets `Production` and `MockAdapters__Enabled=false`, so the API
-refuses to start on its own (no real photo/AI adapters exist). The local overlay patches it
+requires either a configured AI runtime or explicit mock opt-in. See the [laptop AI setup, Secret and test image mount](../../AIModels/SmartLost.Ai.Api/README.md#connect-matching). The local overlay patches it
 to `ASPNETCORE_ENVIRONMENT=Development` and `MockAdapters__Enabled=true`, which enables
 Swagger and the Development-only test endpoints. The photo-analysis cache uses the shared
 [Redis query cache](#redis-query-cache) (`ConnectionStrings__Redis` from Secret

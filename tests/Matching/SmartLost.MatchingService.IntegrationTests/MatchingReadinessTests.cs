@@ -22,7 +22,7 @@ public sealed class MatchingReadinessTests
         {
             HealthCheckResult empty = await new MatchingDatabaseHealthCheck(context).CheckHealthAsync(new HealthCheckContext());
             Assert.Equal(HealthStatus.Unhealthy, empty.Status);
-            Assert.Equal("The Matching database has 1 pending migration(s).", empty.Description);
+            Assert.Equal($"The Matching database has {context.Database.GetMigrations().Count()} pending migration(s).", empty.Description);
         }
 
         Assert.Equal(0L, await CountPublicTablesAsync(database.GetConnectionString()));

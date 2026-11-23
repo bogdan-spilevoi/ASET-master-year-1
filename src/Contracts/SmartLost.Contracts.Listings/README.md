@@ -19,3 +19,5 @@ integration is implemented by this library.
 The project is listed in the root, Listings and Matching solutions. See the
 [root developer guide](../../../README.md), [Listings](../../Services/Listings/README.md)
 and [Matching](../../Services/Matching/README.md) for build and data ownership.
+
+DraftPhotoTarget identifies one immutable Listings photo revision. DraftAnalysisRequest is the version-1 Outbox payload. DraftAnalysisDto carries independent operation states, embedding metadata and optional PhotoAnalysis suggestions shared by the service APIs.

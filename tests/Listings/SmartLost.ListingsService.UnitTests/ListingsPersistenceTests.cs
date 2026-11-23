@@ -20,7 +20,7 @@ public sealed class ListingsPersistenceTests
         Assert.Equal("Npgsql.EntityFrameworkCore.PostgreSQL", context.Database.ProviderName);
         Assert.False(context.Database.HasPendingModelChanges());
         IMigrationsAssembly assembly = context.GetService<IMigrationsAssembly>();
-        Assert.Equal(2, assembly.Migrations.Count);
+        Assert.Equal(3, assembly.Migrations.Count);
         KeyValuePair<string, System.Reflection.TypeInfo> entry = Assert.Single(assembly.Migrations, item => item.Key.EndsWith("_InitialCreate", StringComparison.Ordinal));
         Assert.EndsWith("_InitialCreate", entry.Key, StringComparison.Ordinal);
         Migration migration = assembly.CreateMigration(entry.Value, context.Database.ProviderName!);

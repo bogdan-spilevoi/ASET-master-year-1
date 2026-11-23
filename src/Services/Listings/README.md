@@ -14,19 +14,17 @@ retains generated ModelElements, metamodel metadata and XMI samples.
 
 [Infrastructure](SmartLost.ListingsService.Infrastructure/README.md) now implements
 ListingsDbContext, entity configurations, a design-time factory, scoped DI registration
-and the InitialCreate/AddListingsOutbox migrations. [Root Compose](../../../docker-compose.yml) manages
+and the InitialCreate, AddListingsOutbox and AddPhotoPayloads migrations. [Root Compose](../../../docker-compose.yml) manages
 its local PostgreSQL container alongside the Auth and Matching databases. The executable [API](SmartLost.ListingsService.Api/README.md)
 now exposes public category/listing/detail reads through [Application CQRS](SmartLost.ListingsService.Application/README.md).
 Its [Dockerfile](SmartLost.ListingsService.Api/Dockerfile) and the root Compose file
 run the API beside its own database, retaining a separate data volume.
 A standalone [worker](SmartLost.ListingsService.Worker/README.md) supports read-only Inspect
 and RabbitMQ Publish modes. Local Kubernetes enables confirmed, persistent publishing to
-a durable queue. Authenticated mutation use cases, blob adapters and Matching consumers
-remain unimplemented.
+a durable queue. Authenticated users can [upload a draft with a photo](SmartLost.ListingsService.Api/README.md#upload-a-draft-from-swagger). Owners can request Qwen traits and DINO embeddings separately and poll the analysis from Listings Swagger. Owners can edit and publish drafts, then record manual decisions, recovery or withdrawal. See the [Swagger walkthrough](SmartLost.ListingsService.Api/README.md#publish-and-recover-from-swagger).
 Runtime layers do not reference Modeling or NMF.
 
-The API registers shared profiling, authorization and caching behaviors. Current reads
-remain public; only GetCategoriesQuery is cacheable. Profiling observes every MediatR
+The API registers shared profiling, authorization and caching behaviors. Catalog and Open listing reads are public. Private drafts require the owner. Only GetCategoriesQuery is cacheable. Profiling observes every MediatR
 request, while listing/detail reads still query current data.
 
 Main owns the application's lifetime and delegates construction/startup to separate methods.
@@ -41,8 +39,8 @@ code/configuration/test changes; CI checks document changes and reviewers check 
 
 | Project | Responsibility | References |
 | --- | --- | --- |
-| [Api](SmartLost.ListingsService.Api/README.md) | Public GET controllers, validation/result HTTP adapters, OpenAPI and composition. | Application, Infrastructure, BuildingBlocks.AspNetCore. |
-| [Application](SmartLost.ListingsService.Application/README.md) | MediatR query/handler/validator slices, read-store port and response DTOs. | Domain, BuildingBlocks.Application. |
+| [Api](SmartLost.ListingsService.Api/README.md) | Draft, publication, withdrawal and manual recovery endpoints, internal photo reads, public GET controllers, validation/result HTTP adapters, OpenAPI and composition. | Application, Infrastructure, BuildingBlocks.AspNetCore. |
+| [Application](SmartLost.ListingsService.Application/README.md) | Owner-authorized commands, private and public queries, persistence ports and DTOs. | Domain, BuildingBlocks.Application. |
 | [Domain](SmartLost.ListingsService.Domain/README.md) | Manual entity declarations and business behavior. | BuildingBlocks.Core, Contracts.Listings. |
 | [Infrastructure](SmartLost.ListingsService.Infrastructure/README.md) | Service-owned EF persistence, migration tooling and worker registration; blob adapters pending. | Application, Domain, BuildingBlocks.Infrastructure. |
 | [Modeling](SmartLost.ListingsService.Modeling/README.md) | Ecore/NMeta/XMI representation, independent of runtime entity maintenance. | NMF-Basics; no runtime project references. |
@@ -57,14 +55,12 @@ values and existing JSON representation are unchanged; no database migration is 
 
 ## Ownership and remaining integration
 
-Only Listings accesses its database; private photo storage remains unimplemented. Auth user IDs and Matching
+Only Listings accesses its database; private photo payloads live in its PostgreSQL database. Auth user IDs and Matching
 identifiers are logical references, without cross-service physical foreign keys.
-Domain enforces local lifecycle, ownership and reviewed-revision rules, but application
-transactions for future mutation use cases, global reservations, consumed Found eligibility,
-durable consumer idempotency and automatic invalidation remain unimplemented. Selected
-local notifications are staged into Outbox atomically with entity saves. Implicit EF
-transactions and the shared unit of work support this boundary; the seed uses the shared
-unit of work. No events are sent to another service.
+Listings checks ownership, reviewed revisions, active reservations and consumed Found eligibility.
+Withdrawal invalidates outstanding decisions. The unit of work saves domain changes and Outbox
+notifications together. Matching receives explicit draft analysis requests. The suggestions
+route is a 501 placeholder until candidate comparison is implemented.
 
 ## Development
 

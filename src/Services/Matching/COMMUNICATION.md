@@ -3,13 +3,58 @@
 Matching runs as an ASP.NET Core API with its own PostgreSQL database. The Application layer
 implements three MediatR use cases: suggestion ranking, embedding preparation and photo
 analysis. Every request passes through the profiling pipeline behavior and profiling
-decorators. The Listings photo reader and the DINOv3/Qwen adapters are **mocks**; no real
-Listings or AI runtime connection exists. All HTTP routes are development-only test endpoints
-without service authentication.
+decorators. The HTTP adapter calls the laptop runtime with mounted test images. Empty runtime URL selects explicitly enabled demo mocks. The separate ListingsPhotoClient reads uploaded photos on the private service listener. The internal analysis status route requires the shared service key. The demo routes run only in Development.
+
+
+
+## On-demand analysis of private drafts
+
+```mermaid
+sequenceDiagram
+    actor Owner
+    participant L as Listings
+    participant O as Listings Outbox
+    participant R as RabbitMQ
+    participant M as Matching
+    participant DB as Matching PostgreSQL
+    participant AI as Laptop AI
+    Owner->>L: 1. POST traits or embedding with JWT
+    L->>O: 2. Enqueue once for owned draft and current photo revision
+    L-->>Owner: 3. 202 with analysis URL
+    O->>R: 4. Publish versioned request with broker confirmation
+    R->>M: 5. Deliver request
+    M->>DB: 6. Insert pending work idempotently before acknowledgement
+    M->>L: 7. Claim work and fetch exact private photo using service key
+    M->>AI: 8. Run requested model
+    M->>DB: 9. Save suggestions or embedding and completion state
+    Owner->>L: 10. GET analysis with JWT
+    L->>M: 11. Retrieve current results via authenticated internal call
+    L-->>Owner: 12. Return independent states and advisory suggestions
+```
+
+Pending includes the interval before broker delivery. Matching retries transient failures and recovers expired claims. A busy laptop defers work without spending an attempt. A missing photo revision or exhausted attempts produces Failed. Outbox delivery failure is visible even if Matching never received the request. Repeated POSTs for the same operation and photo revision return the original request.
+
+## Authenticated draft upload and private photo read
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Listings
+    participant DB as Listings PostgreSQL
+    participant Matching
+    User->>Listings: 1. POST JWT, Lost/Found and image (multipart)
+    Listings->>DB: 2. Commit draft, photo metadata and bytes together
+    Listings-->>User: 3. Return 201 and listing/photo revisions
+    Matching->>Listings: 4. GET exact revision on private port with service key
+    Listings->>DB: 5. Read payload by listing, photo and revision
+    Listings-->>Matching: 6. Return original JPEG/PNG bytes or 404
+```
+
+Arrow 4 is a separate trusted client operation. Upload does not dispatch it automatically. Invalid JWTs and invalid images fail before persistence. A missing or invalid service key returns 401 on the internal listener. Public reads exclude drafts.
 
 ## Current implemented interactions
 
-Solid arrows are implemented and exercised by unit tests and by the Compose container.
+Solid arrows describe implemented paths. The runtime URL selects the inference adapter.
 
 ```mermaid
 flowchart LR
@@ -24,7 +69,7 @@ flowchart LR
     Ranker["ProfiledRelevanceRanker -> RelevanceRanker"]
     AiDecorators["ProfiledImageEmbeddingGenerator / ProfiledPhotoAnalyzer"]
     MockAi["Mock DINOv3 / Qwen adapters"]
-    MockPhotos["MockListingPhotoReader (static demo photos)"]
+    MockPhotos["Photo reader: mock catalog or mounted JPEG/PNG revision"]
     Profiler["MatchingProfiler / shared IProfilingContext"]
     Logs[("ILogger events 1301-1304 (container stdout)")]
     DB[("matchingservice PostgreSQL: SearchListings, ImageEmbeddings, EmbeddingPreparationTasks")]
@@ -54,6 +99,10 @@ flowchart LR
     AnalysisCache -->|"8.3 Miss, unreadable entry or Redis unavailable: analyze permitted photo bytes"| AiDecorators
     AnalysisCache -->|"8.4 Success: deserialized read-only labels, also on other replicas"| Handler
     AiDecorators -->|"7.3 Bounded call with AI timeout"| MockAi
+    AiDecorators -->|"7.3.1 HTTP mode: POST image + API key via HTTPS tunnel"| Runtime["Laptop inference API"]
+    Runtime -->|"7.3.2 Run one CLI process; concurrent request receives 429"| Models["DinoVision or QwenVision"]
+    Models -->|"7.3.3 Vector/version or labels; failure becomes 502"| Runtime
+    Runtime -->|"7.3.4 JSON or unavailable/timeout"| AiDecorators
     AiDecorators -->|"7.4 Record duration, timeout, cancellation or failure"| Profiler
     Handler -->|"7.5 Commit vector + Ready, or retry/exhausted Failed with sanitized code"| DB
     Profiler -->|"9. Warn on AI problems and slow AI calls"| Logs
@@ -91,13 +140,12 @@ Failure and retry paths that are implemented:
   retain the bounded AI call and error mapping. Successful nested label lists are frozen
   and come back from Redis as read-only lists; absolute expiry is 300 seconds. If Redis is
   unavailable or an entry is unreadable, inference runs once and the request still
-  succeeds; write failures are only logged (warning 2103/2104). Current adapters are mocks;
-  the only outgoing network call is the Redis cache connection.
+  succeeds; write failures are only logged (warning 2103/2104). HTTP mode sends the test image to the configured runtime; non-success or malformed responses follow the existing inference failure path.
 
 ## Local Kubernetes alternative
 
 The [local Kubernetes runbook](../../../deploy/kubernetes/README.md#matching-api-and-postgresql)
-runs three Matching API pods and a Matching-only PostgreSQL StatefulSet in the shared
+runs two Matching API pods and a Matching-only PostgreSQL StatefulSet in the shared
 `smartlost-local` Kind cluster and `smartlost` namespace. Root Compose remains available;
 its `matching-db-data` volume is not adopted. Solid arrows show the configured local deployment.
 
@@ -110,7 +158,7 @@ flowchart LR
     Database["Headless matching-db:5432 / one PostgreSQL pod"]
     Storage[("PVC: database-data-matching-db-0")]
     Migration["Job matching-migrate: EF bundle"]
-    Pod["Deployment matching-service: 3 API pods on :8080 (Development, mocks on)"]
+    Pod["Deployment matching-service: 2 API pods on :8080 (Development, mocks on)"]
     Service["ClusterIP matching-service:80"]
     Forward["kubectl port-forward: localhost:5083"]
     Client["Browser / HTTP client"]
@@ -144,7 +192,7 @@ deletion. Swagger and the test endpoints exist only because the local overlay pa
 `matching-environment` to `Development` and `MockAdapters__Enabled=true`. The photo-analysis cache is the shared Redis
 (arrow 9.1), so entries survive API pod replacement. Redis readiness is not part of the
 API readiness probe, and a Redis outage only reruns inference. Matching
-still has no NodePort, Kind host mapping, RabbitMQ connection or calls to Listings.
+has no NodePort or Kind host mapping. Its test endpoints do not call Listings.
 
 ## Current model-test interactions
 
@@ -161,8 +209,8 @@ flowchart LR
     Matching["Matching API with service authentication"]
     Worker["Future Matching preparation job"]
     DB[("matchingservice PostgreSQL")]
-    Tunnel["Future authenticated HTTPS tunnel"]
-    AI["Future local Qwen / DINOv3 HTTP runtime"]
+    Tunnel["Configured HTTPS tunnel"]
+    AI["Laptop Qwen / DINOv3 HTTP runtime"]
 
     Listings -.->|"1. Authenticated internal suggestion/analysis request"| Matching
     Listings -.->|"2. Deliver search snapshots (Outbox)"| Matching

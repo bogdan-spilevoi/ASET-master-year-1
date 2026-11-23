@@ -4,6 +4,7 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
+  <Project Path="SmartLost.Ai.Api/SmartLost.Ai.Api.csproj" />
   <Project Path="Qwen3-VL-4B-Instruct-ONNX/QwenVision.csproj" />
   <Project Path="DINOv3-ViTL16-ONNX/DinoVision.csproj" />
   <Project Path="DINOv3-ViTL16-ONNX.Tests/DinoVision.Tests.csproj" />

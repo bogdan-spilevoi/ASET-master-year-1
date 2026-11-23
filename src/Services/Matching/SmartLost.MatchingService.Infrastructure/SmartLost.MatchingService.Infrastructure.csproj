@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="../SmartLost.MatchingService.Application/SmartLost.MatchingService.Application.csproj" />
     <ProjectReference Include="../SmartLost.MatchingService.Domain/SmartLost.MatchingService.Domain.csproj" />
+    <ProjectReference Include="../../../BuildingBlocks/SmartLost.BuildingBlocks.Messaging.RabbitMq/SmartLost.BuildingBlocks.Messaging.RabbitMq.csproj" />
     <ProjectReference Include="../../../BuildingBlocks/SmartLost.BuildingBlocks.Infrastructure/SmartLost.BuildingBlocks.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>

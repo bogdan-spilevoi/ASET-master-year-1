@@ -279,6 +279,20 @@ namespace SmartLost.ListingsService.Infrastructure.Persistence.Migrations
                     b.ToTable("Recoveries", (string)null);
                 });
 
+            modelBuilder.Entity("SmartLost.ListingsService.Infrastructure.Persistence.PhotoPayload", b =>
+                {
+                    b.Property<Guid>("PhotoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Bytes")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("PhotoId");
+
+                    b.ToTable("PhotoPayloads", (string)null);
+                });
+
             modelBuilder.Entity("SmartLost.ListingsService.Domain.Entities.CredibilityEntry", b =>
                 {
                     b.HasOne("SmartLost.ListingsService.Domain.Entities.Recovery", "Recovery")
@@ -348,6 +362,15 @@ namespace SmartLost.ListingsService.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("MatchDecision");
+                });
+
+            modelBuilder.Entity("SmartLost.ListingsService.Infrastructure.Persistence.PhotoPayload", b =>
+                {
+                    b.HasOne("SmartLost.ListingsService.Domain.Entities.Photo", null)
+                        .WithOne()
+                        .HasForeignKey("SmartLost.ListingsService.Infrastructure.Persistence.PhotoPayload", "PhotoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SmartLost.ListingsService.Domain.Entities.Listing", b =>

@@ -132,7 +132,7 @@ public sealed class DomainEfCompatibilityTests
             .UseNpgsql("Host=localhost;Database=domain_schema_only;Username=probe").Options;
         using ListingsDbContext context = new(options);
         string sql = context.Database.GenerateCreateScript();
-        Assert.Equal(8, context.Model.GetEntityTypes().Count());
+        Assert.Equal(9, context.Model.GetEntityTypes().Count());
         Assert.Contains("CREATE TABLE \"OutboxMessages\"", sql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE \"MatchDecisions\"", sql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE \"Recoveries\"", sql, StringComparison.Ordinal);

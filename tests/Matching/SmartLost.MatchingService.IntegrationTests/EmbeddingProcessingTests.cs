@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using SmartLost.BuildingBlocks.Application.Outbox;
 using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Application.Contracts;
 using SmartLost.MatchingService.Application.Interfaces;
@@ -18,6 +19,7 @@ using SmartLost.MatchingService.Domain.Entities;
 using SmartLost.MatchingService.Domain.Enums;
 using SmartLost.MatchingService.Domain.Errors;
 using SmartLost.MatchingService.Domain.ValueObjects;
+using SmartLost.MatchingService.Infrastructure.Analysis;
 using SmartLost.MatchingService.Infrastructure.Mock;
 using SmartLost.MatchingService.Infrastructure.Persistence;
 using SmartLost.MatchingService.Infrastructure.Persistence.Repositories;
@@ -28,6 +30,27 @@ namespace SmartLost.MatchingService.IntegrationTests;
 
 public sealed class EmbeddingProcessingTests
 {
+    [Fact]
+    public async Task RedeliveredRequestCreatesOneDurableJobPerRevisionAndOperation()
+    {
+        await using MatchingFactory factory = new();
+        await factory.InitializeAsync();
+        using IServiceScope scope = factory.Services.CreateScope();
+        DraftAnalysisInbox inbox = scope.ServiceProvider.GetRequiredService<DraftAnalysisInbox>();
+        var photo = new DraftPhotoTarget(Guid.NewGuid(), Guid.NewGuid(), 1);
+        foreach (DraftAnalysisKind kind in Enum.GetValues<DraftAnalysisKind>())
+        {
+            var request = new DraftAnalysisRequest(photo, kind);
+            string payload = JsonSerializer.Serialize(request, JsonSerializerOptions.Web);
+            var envelope = new OutboxEnvelope(photo.RequestId(kind), DraftAnalysisRequest.RoutingKey, 1, payload, DateTimeOffset.UtcNow);
+            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(envelope, JsonSerializerOptions.Web);
+            Assert.True(await inbox.AcceptAsync(bytes, CancellationToken.None));
+            Assert.True(await inbox.AcceptAsync(bytes, CancellationToken.None));
+        }
+        MatchingDbContext db = scope.ServiceProvider.GetRequiredService<MatchingDbContext>();
+        Assert.Equal(2, await db.Set<PhotoAnalysisWork>().CountAsync());
+    }
+
     [Fact]
     public async Task ConcurrentClaimsReturnOneSuccessAndOneConflictWithoutDuplicateEmbedding()
     {

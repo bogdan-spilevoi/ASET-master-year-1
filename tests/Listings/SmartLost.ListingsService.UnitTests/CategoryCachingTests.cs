@@ -32,7 +32,7 @@ public sealed class CategoryCachingTests
         using (IServiceScope scope = factory.Services.CreateScope())
         {
             Type[] expectedOrder = [typeof(ProfilingBehavior<,>), typeof(ExceptionToResultBehavior<,>),
-                typeof(AuthorizationBehavior<,>), typeof(ValidationBehavior<,>), typeof(CachingBehavior<,>)];
+                typeof(AuthorizationBehavior<,>), typeof(ValidationBehavior<,>), typeof(CachingBehavior<,>), typeof(TransactionBehavior<,>)];
             Assert.Equal(expectedOrder, scope.ServiceProvider
                 .GetServices<IPipelineBehavior<GetCategoriesQuery, Result<IReadOnlyList<CategoryDto>>>>()
                 .Select(behavior => behavior.GetType().GetGenericTypeDefinition()));

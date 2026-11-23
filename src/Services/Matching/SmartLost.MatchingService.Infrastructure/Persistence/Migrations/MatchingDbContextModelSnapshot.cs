@@ -187,6 +187,56 @@ namespace SmartLost.MatchingService.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_SearchListings_CurrentPhoto", "(\"CurrentPhotoId\" IS NULL) = (\"CurrentPhotoRevision\" IS NULL)");
                         });
                 });
+
+            modelBuilder.Entity("SmartLost.MatchingService.Infrastructure.Analysis.PhotoAnalysisWork", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("AvailableAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("Dimensions")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ErrorCode")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("Lease")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ListingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ModelVersion")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("PhotoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PhotoRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SuggestionsJson")
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("State", "AvailableAt");
+
+                    b.ToTable("PhotoAnalyses", (string)null);
+                });
 #pragma warning restore 612, 618
         }
     }

@@ -68,7 +68,7 @@ read-only lists, and every cache hit is deserialized again with read-only nested
 Failures and cancellation are not stored. The original AI timeout/error mapping and
 profiling decorator remain in effect on misses.
 
-The 300-second cache stores advisory labels from the currently fixed mock analyzer.
+The 300-second cache stores advisory labels from the selected analyzer. In HTTP mode the key includes the real image bytes and media type.
 Restarting an API no longer clears it; entries expire by TTL or when Redis restarts. A
 future live adapter with hot-swappable model/prompt versions must include those versions
 in the cache input or policy prefix before use. Suggestions remain uncached because

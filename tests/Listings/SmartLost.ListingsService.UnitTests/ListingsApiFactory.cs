@@ -34,6 +34,9 @@ internal sealed class ListingsApiFactory : WebApplicationFactory<Program>
         context.Database.EnsureCreated();
     }
 
+    internal string SigningKey { get; } = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+    internal string PhotoReadKey { get; } = Guid.NewGuid().ToString("N");
+
     internal ListingsDbContext CreateDbContext()
     {
         return new ListingsDbContext(new DbContextOptionsBuilder<ListingsDbContext>().UseSqlite(_connection).Options);
@@ -84,6 +87,9 @@ internal sealed class ListingsApiFactory : WebApplicationFactory<Program>
         {
             ["ConnectionStrings:ListingsDatabase"] = "Host=unused;Database=unused",
             ["SeedData:Enabled"] = _seed.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["DraftAnalysis:Enabled"] = "true",
+            ["Jwt:SigningKey"] = SigningKey,
+            ["ListingsPhotos:ApiKey"] = PhotoReadKey,
             ["SeedData:Only"] = "false"
         };
     }

@@ -1,8 +1,8 @@
 # Listings Infrastructure and migrations
 
 This project implements Listings-owned EF Core persistence: [ListingsDbContext](Persistence/ListingsDbContext.cs),
-[seven entity configurations](Persistence/Configurations/), the [design-time factory](Persistence/ListingsDbContextFactory.cs),
-[InitialCreate/AddListingsOutbox and model snapshot](Persistence/Migrations/) and opt-in DI registration.
+[entity configurations](Persistence/Configurations/), the [design-time factory](Persistence/ListingsDbContextFactory.cs),
+[migrations and model snapshot](Persistence/Migrations/) and opt-in DI registration.
 EF Core/tooling is pinned to **10.0.12**, Npgsql EF provider to **10.0.3**.
 Domain remains independent of EF and NMF. The API now composes Application read queries
 with the EF [ListingsReadStore](Persistence/ListingsReadStore.cs).
@@ -12,7 +12,7 @@ with the EF [ListingsReadStore](Persistence/ListingsReadStore.cs).
 The service owns the `listingsservice` PostgreSQL database. InitialCreate creates
 Listings, Photos, Categories, ListingCategories, MatchDecisions, Recoveries and
 CredibilityEntries. AddListingsOutbox adds OutboxMessages to the same database, alongside
-EF migration history. Auth user IDs are logical values: no
+EF migration history. AddPhotoPayloads adds one private bytea payload per uploaded photo, with a cascading foreign key to Photos. Existing metadata needs no backfill. Auth user IDs are logical values: no
 Users table or cross-service foreign key is created.
 
 - ListingCategory uses `(ListingId, CategoryId)` as its composite key.
@@ -29,9 +29,7 @@ Users table or cross-service foreign key is created.
   business changes; events are cleared after commit. DbContext owns mapping, while shared
   components coordinate transactions and event cleanup.
 
-Global accepted reservations, consumed Found eligibility, automatic invalidation and
-transaction-level use-case orchestration remain application work. Database mapping alone
-is not the complete recovery protocol. The [worker](../SmartLost.ListingsService.Worker/README.md)
+The lifecycle store checks accepted reservations and confirmed recoveries. The transaction behavior saves decisions, listing sequences, recoveries, awards and their Outbox messages together. The [worker](../SmartLost.ListingsService.Worker/README.md)
 supports read-only inspection and opt-in RabbitMQ delivery with broker acknowledgement. Public reads use AsNoTracking projections to DTOs;
 filtering, sorting, count and pagination run in SQL. The read adapter does not save data
 or call Auth/Matching/Blob Storage. See [query contracts](../SmartLost.ListingsService.Application/README.md).
@@ -174,3 +172,7 @@ annotated; no new table or schema migration is required. See [cache policy and l
 processor and continuous delivery host, binding `Outbox` and `OutboxDelivery`. The Worker
 adds the separate shared RabbitMQ transport in Publish mode. Infrastructure owns no broker
 connection or Matching consumer. Inspect mode retains its independent no-write reader.
+
+DraftAnalysisStore queues one Outbox message per operation and revision using a deterministic key and INSERT ON CONFLICT. MatchingAnalysisReader reads the authenticated Matching status endpoint using the shared service credential.
+
+ListingLifecycleStore loads owned drafts, tracks both roots of a manual match, and checks accepted or confirmed decisions before reserving a pair. ListingsUnitOfWork maps conflicting saves to HTTP-facing conflict results. The existing schema stores these changes, recoveries, awards and Outbox rows.

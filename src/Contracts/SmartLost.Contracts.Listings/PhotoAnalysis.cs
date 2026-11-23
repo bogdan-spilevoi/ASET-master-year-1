@@ -1,4 +1,4 @@
-namespace SmartLost.MatchingService.Application.Contracts;
+namespace SmartLost.Contracts.Listings;
 
 /// <summary>
 /// Advisory labels matching the <c>objects</c>/<c>uncertainties</c> structure of

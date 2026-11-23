@@ -1,3 +1,4 @@
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Application.Contracts;
 using SmartLost.MatchingService.Application.Interfaces;
 
