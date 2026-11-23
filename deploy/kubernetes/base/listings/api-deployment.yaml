@@ -27,13 +27,27 @@ spec:
           image: smartlost-listings-api:local
           imagePullPolicy: IfNotPresent
           ports:
+            - name: photos
+              containerPort: 8082
             - name: http
               containerPort: 8080
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: Development
             - name: ASPNETCORE_URLS
-              value: http://+:8080
+              value: http://+:8080;http://+:8082
+            - name: Jwt__SigningKey
+              valueFrom:
+                secretKeyRef:
+                  name: auth-credentials
+                  key: jwt-signing-key
+            - name: MatchingAnalysis__BaseUrl
+              value: http://matching-service
+            - name: ListingsPhotos__ApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: listings-photo-access
+                  key: api-key
             - name: ConnectionStrings__ListingsDatabase
               valueFrom:
                 secretKeyRef:

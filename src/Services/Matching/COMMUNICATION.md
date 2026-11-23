@@ -3,8 +3,54 @@
 Matching runs as an ASP.NET Core API with its own PostgreSQL database. The Application layer
 implements three MediatR use cases: suggestion ranking, embedding preparation and photo
 analysis. Every request passes through the profiling pipeline behavior and profiling
-decorators. The HTTP adapter calls the laptop runtime with mounted test images. Empty runtime URL selects explicitly enabled demo mocks. Listings photo download is pending. All HTTP routes are development-only test endpoints
-without service authentication.
+decorators. The HTTP adapter calls the laptop runtime with mounted test images. Empty runtime URL selects explicitly enabled demo mocks. The separate ListingsPhotoClient reads uploaded photos on the private service listener. The internal analysis status route requires the shared service key. The demo routes run only in Development.
+
+
+
+## On-demand analysis of private drafts
+
+```mermaid
+sequenceDiagram
+    actor Owner
+    participant L as Listings
+    participant O as Listings Outbox
+    participant R as RabbitMQ
+    participant M as Matching
+    participant DB as Matching PostgreSQL
+    participant AI as Laptop AI
+    Owner->>L: 1. POST traits or embedding with JWT
+    L->>O: 2. Enqueue once for owned draft and current photo revision
+    L-->>Owner: 3. 202 with analysis URL
+    O->>R: 4. Publish versioned request with broker confirmation
+    R->>M: 5. Deliver request
+    M->>DB: 6. Insert pending work idempotently before acknowledgement
+    M->>L: 7. Claim work and fetch exact private photo using service key
+    M->>AI: 8. Run requested model
+    M->>DB: 9. Save suggestions or embedding and completion state
+    Owner->>L: 10. GET analysis with JWT
+    L->>M: 11. Retrieve current results via authenticated internal call
+    L-->>Owner: 12. Return independent states and advisory suggestions
+```
+
+Pending includes the interval before broker delivery. Matching retries transient failures and recovers expired claims. A busy laptop defers work without spending an attempt. A missing photo revision or exhausted attempts produces Failed. Outbox delivery failure is visible even if Matching never received the request. Repeated POSTs for the same operation and photo revision return the original request.
+
+## Authenticated draft upload and private photo read
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Listings
+    participant DB as Listings PostgreSQL
+    participant Matching
+    User->>Listings: 1. POST JWT, Lost/Found and image (multipart)
+    Listings->>DB: 2. Commit draft, photo metadata and bytes together
+    Listings-->>User: 3. Return 201 and listing/photo revisions
+    Matching->>Listings: 4. GET exact revision on private port with service key
+    Listings->>DB: 5. Read payload by listing, photo and revision
+    Listings-->>Matching: 6. Return original JPEG/PNG bytes or 404
+```
+
+Arrow 4 is a separate trusted client operation. Upload does not dispatch it automatically. Invalid JWTs and invalid images fail before persistence. A missing or invalid service key returns 401 on the internal listener. Public reads exclude drafts.
 
 ## Current implemented interactions
 
@@ -146,7 +192,7 @@ deletion. Swagger and the test endpoints exist only because the local overlay pa
 `matching-environment` to `Development` and `MockAdapters__Enabled=true`. The photo-analysis cache is the shared Redis
 (arrow 9.1), so entries survive API pod replacement. Redis readiness is not part of the
 API readiness probe, and a Redis outage only reruns inference. Matching
-still has no NodePort, Kind host mapping, RabbitMQ connection or calls to Listings.
+has no NodePort or Kind host mapping. Its test endpoints do not call Listings.
 
 ## Current model-test interactions
 

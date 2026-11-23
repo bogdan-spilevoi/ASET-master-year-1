@@ -123,6 +123,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
+      ListingsPhotos__ApiKey: ${LISTINGS_PHOTO_API_KEY:-}
+      ListingsPhotos__BaseUrl: http://listings-service:8082
       ConnectionStrings__Redis: redis:6379,password=${REDIS_PASSWORD:?Set REDIS_PASSWORD in the root .env file}
     volumes:
       - type: bind
@@ -166,7 +168,9 @@ services:
         condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_URLS: http://+:8080;http://+:8082
+      MatchingAnalysis__BaseUrl: http://matching-service:8080
+      ListingsPhotos__ApiKey: ${LISTINGS_PHOTO_API_KEY:-}
       ConnectionStrings__Redis: redis:6379,password=${REDIS_PASSWORD:?Set REDIS_PASSWORD in the root .env file}
     volumes:
       - type: bind

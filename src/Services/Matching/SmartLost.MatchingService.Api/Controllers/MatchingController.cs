@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using SmartLost.BuildingBlocks.Core.Results;
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Api.Contracts;
 using SmartLost.MatchingService.Api.Filters;
 using SmartLost.MatchingService.Api.Results;

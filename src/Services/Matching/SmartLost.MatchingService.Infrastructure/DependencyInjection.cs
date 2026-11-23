@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartLost.BuildingBlocks.Application.Transactions;
 using SmartLost.BuildingBlocks.Infrastructure;
+using SmartLost.BuildingBlocks.Messaging.RabbitMq;
 using SmartLost.MatchingService.Application.Interfaces;
 using SmartLost.MatchingService.Infrastructure.Ai;
 using SmartLost.MatchingService.Infrastructure.Demo;
@@ -32,6 +33,23 @@ public static class DependencyInjection
         services.AddHealthChecks().AddCheck<MatchingDatabaseHealthCheck>(MatchingDatabaseHealthCheck.Name,
             tags: [MatchingDatabaseHealthCheck.ReadinessTag]);
 
+        // The anonymous demo endpoints retain their own test-photo reader.
+        services.AddHttpClient<ListingsPhotoClient>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["ListingsPhotos:BaseUrl"] ?? "http://localhost:8082");
+            client.DefaultRequestHeaders.Add("X-Listings-Photo-Key",
+                configuration["ListingsPhotos:ApiKey"] ?? throw new InvalidOperationException("Configure ListingsPhotos:ApiKey."));
+            client.MaxResponseContentBufferSize = 10 * 1024 * 1024;
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddScoped<Analysis.DraftAnalysisResults>();
+        services.AddScoped<Analysis.DraftAnalysisInbox>();
+        services.AddScoped<Analysis.DraftAnalysisProcessor>();
+        if (configuration.GetValue<bool>("DraftAnalysis:WorkerEnabled"))
+        {
+            services.AddRabbitMqTransport(configuration);
+            services.AddHostedService<Analysis.DraftAnalysisConsumer>();
+            services.AddHostedService<Analysis.DraftAnalysisWorker>();
+        }
         services.AddScoped<MatchingDemoSeeder>();
         string? url = configuration["AiRuntime:BaseUrl"];
         if (!string.IsNullOrWhiteSpace(url))

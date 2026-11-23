@@ -33,7 +33,7 @@ public sealed class ListingsOutboxIntegrationTests
         await context.SaveChangesAsync(timeout.Token);
         await context.Database.MigrateAsync(timeout.Token);
         Assert.Equal(listing.Id, (await context.Listings.SingleAsync(timeout.Token)).Id);
-        Assert.Equal(2, (await context.Database.GetAppliedMigrationsAsync(timeout.Token)).Count());
+        Assert.Equal(3, (await context.Database.GetAppliedMigrationsAsync(timeout.Token)).Count());
         DateTime now = new(2026, 11, 17, 12, 0, 0, DateTimeKind.Utc);
         listing.UpdateDetails(listing.AuthorId, listing.Revision, "Bag", "Blue bag", "Library", DateOnly.FromDateTime(now), now);
         listing.AddCategory(listing.AuthorId, listing.Revision, Category.Create("bag"));

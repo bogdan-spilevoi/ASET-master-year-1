@@ -221,8 +221,16 @@ start_redis() {
     fi
 }
 
+ensure_photo_access() {
+    if [[ -z "$(kube get secret listings-photo-access --ignore-not-found -o name)" ]]; then
+        need openssl
+        openssl rand -hex 32 | tr -d '\n' | kube create secret generic listings-photo-access --from-file=api-key=/dev/stdin
+    fi
+}
+
 start_matching_database() {
     kube apply -f "$KUBE_DIR/base/namespace.yaml"
+    ensure_photo_access
     ensure_secret matching-credentials "$KUBE_DIR/local/matching/.env"
     kube apply -f "$KUBE_DIR/base/matching/db-service.yaml" -f "$KUBE_DIR/base/matching/db-statefulset.yaml"
     kube rollout status statefulset/matching-db --timeout=180s
@@ -230,6 +238,8 @@ start_matching_database() {
 
 start_listings_infrastructure() {
     kube apply -f "$KUBE_DIR/base/namespace.yaml"
+    ensure_photo_access
+    ensure_secret auth-credentials "$KUBE_DIR/local/auth/.env"
     ensure_secret listings-credentials "$KUBE_DIR/local/.env"
     kube apply -f "$KUBE_DIR/base/listings/db-service.yaml" -f "$KUBE_DIR/base/listings/db-statefulset.yaml"
     kube rollout status statefulset/listings-db --timeout=180s
@@ -324,7 +334,7 @@ deploy_target() {
     case "$target" in
         rabbitmq) start_broker yes; return ;;
         all) start_broker yes ;;
-        listings|auth) start_broker no ;;
+        listings|auth|matching) start_broker no ;;
     esac
     case "$target" in listings|matching|all) start_redis ;; esac
     if [[ "$target" == matching ]]; then

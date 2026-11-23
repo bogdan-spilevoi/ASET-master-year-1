@@ -139,6 +139,11 @@
         "resolved": "2.2.8",
         "contentHash": "zG2FApP5zxSx6OcdJQLbZDk2AVlN2BNQD6MorwIfV6gVj0RRxWPEp2LXAxqDGZqeNV1Zp0BNPcNaey/GXmTdvQ=="
       },
+      "RabbitMQ.Client": {
+        "type": "Transitive",
+        "resolved": "7.2.2",
+        "contentHash": "k4b6RnTXpLbsF96V93ooNYxgPMnoA2tEm24B6AXNJr1mG8wwNYdA1XJtgU66L5xqeGyveS7SJriRzlX3cbqQNA=="
+      },
       "StackExchange.Redis": {
         "type": "Transitive",
         "resolved": "2.7.27",
@@ -174,6 +179,13 @@
           "SmartLost.BuildingBlocks.Application": "[1.0.0, )"
         }
       },
+      "smartlost.buildingblocks.messaging.rabbitmq": {
+        "type": "Project",
+        "dependencies": {
+          "RabbitMQ.Client": "[7.2.2, )",
+          "SmartLost.BuildingBlocks.Application": "[1.0.0, )"
+        }
+      },
       "smartlost.contracts.listings": {
         "type": "Project"
       },
@@ -198,6 +210,7 @@
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "SmartLost.BuildingBlocks.Infrastructure": "[1.0.0, )",
+          "SmartLost.BuildingBlocks.Messaging.RabbitMq": "[1.0.0, )",
           "SmartLost.MatchingService.Application": "[1.0.0, )",
           "SmartLost.MatchingService.Domain": "[1.0.0, )"
         }

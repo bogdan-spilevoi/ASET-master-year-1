@@ -6,7 +6,7 @@ have no project references to the microservices and are not included in the Auth
 
 | Project | Responsibility | Documentation |
 | --- | --- | --- |
-| [SmartLost.Ai.Api](SmartLost.Ai.Api/README.md) | Authenticated HTTP inference for Matching with one active model process on the laptop | [Windows and Kind setup](SmartLost.Ai.Api/README.md) |
+| [SmartLost.Ai.Api](SmartLost.Ai.Api/README.md) | Authenticated HTTP inference for Matching with one active model process on the laptop | [macOS and Windows key setup](SmartLost.Ai.Api/README.md#shared-api-key-setup-on-macos-and-windows) |
 | [QwenVision.csproj](Qwen3-VL-4B-Instruct-ONNX/QwenVision.csproj) | CPU or NVIDIA CUDA image-label extraction using ONNX Runtime GenAI and an editable English prompt | [Qwen guide](Qwen3-VL-4B-Instruct-ONNX/README.md) |
 | [DinoVision.csproj](DINOv3-ViTL16-ONNX/DinoVision.csproj) | CPU or NVIDIA CUDA image embeddings from the community DINOv3 ONNX export, with RGB preprocessing and L2 normalization | [DINO guide](DINOv3-ViTL16-ONNX/README.md) |
 | [DinoVision.Tests.csproj](DINOv3-ViTL16-ONNX.Tests/DinoVision.Tests.csproj) | Local preprocessing regression tests without model downloads | [Test guide](DINOv3-ViTL16-ONNX.Tests/README.md) |

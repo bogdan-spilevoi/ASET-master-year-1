@@ -2,9 +2,9 @@ using RabbitMQ.Client;
 
 namespace SmartLost.BuildingBlocks.Messaging.RabbitMq;
 
-internal static class RabbitMqTopology
+public static class RabbitMqTopology
 {
-    internal static async Task DeclareAsync(IChannel channel, RabbitMqOptions settings, CancellationToken cancellationToken)
+    public static async Task DeclareAsync(IChannel channel, RabbitMqOptions settings, CancellationToken cancellationToken)
     {
         await channel.ExchangeDeclareAsync(settings.Exchange, ExchangeType.Topic, durable: true, autoDelete: false,
             arguments: null, cancellationToken: cancellationToken);

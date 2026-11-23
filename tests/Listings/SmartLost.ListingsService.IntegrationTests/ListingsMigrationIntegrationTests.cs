@@ -26,7 +26,7 @@ public sealed class ListingsMigrationIntegrationTests
             .UseNpgsql(database.GetConnectionString()).Options;
         await using ListingsDbContext context = new(options);
         await context.Database.MigrateAsync(timeout.Token);
-        Assert.Equal(2, (await context.Database.GetAppliedMigrationsAsync(timeout.Token)).Count());
+        Assert.Equal(3, (await context.Database.GetAppliedMigrationsAsync(timeout.Token)).Count());
         Assert.Empty(await context.Database.GetPendingMigrationsAsync(timeout.Token));
         Assert.False(context.Database.HasPendingModelChanges());
         DateTime now = new(2026, 11, 4, 12, 0, 0, DateTimeKind.Utc);
@@ -89,7 +89,7 @@ public sealed class ListingsMigrationIntegrationTests
         await context.GetService<IMigrator>().MigrateAsync(Migration.InitialDatabase, timeout.Token);
         Assert.Empty(await context.Database.GetAppliedMigrationsAsync(timeout.Token));
         await context.Database.MigrateAsync(timeout.Token);
-        Assert.Equal(2, (await context.Database.GetAppliedMigrationsAsync(timeout.Token)).Count());
+        Assert.Equal(3, (await context.Database.GetAppliedMigrationsAsync(timeout.Token)).Count());
         Assert.Empty(await context.Listings.ToListAsync(timeout.Token));
     }
 

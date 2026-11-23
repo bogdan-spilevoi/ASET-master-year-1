@@ -52,7 +52,8 @@ public sealed class MatchingDemoSeeder(MatchingDbContext context, MatchingOption
     public async Task<DemoScenario> SeedAsync(CancellationToken cancellationToken)
     {
         context.EmbeddingPreparationTasks.RemoveRange(await context.EmbeddingPreparationTasks.ToListAsync(cancellationToken));
-        context.ImageEmbeddings.RemoveRange(await context.ImageEmbeddings.ToListAsync(cancellationToken));
+        Guid[] demoIds = [.. _listings.Select(item => Guid.Parse(item.Id))];
+        context.ImageEmbeddings.RemoveRange(await context.ImageEmbeddings.Where(item => demoIds.Contains(item.ListingId)).ToListAsync(cancellationToken));
         context.SearchListings.RemoveRange(await context.SearchListings.ToListAsync(cancellationToken));
         await context.SaveChangesAsync(cancellationToken);
 

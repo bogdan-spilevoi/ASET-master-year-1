@@ -1,8 +1,7 @@
 # Listings Application — public read CQRS
 
 Application depends on Domain and BuildingBlocks.Application. It has no EF Core or
-Infrastructure dependency. These first CQRS slices implement only queries; there are
-no HTTP mutation commands, application transactions or inter-service calls yet. Only
+Infrastructure dependency. CreateDraftCommand uses the authenticated subject, constructs a Lost/Found draft and stages its photo through IDraftPhotoStore inside the transaction behavior. Only
 GetCategoriesQuery opts into the shared caching behavior (300-second absolute TTL).
 
 | Query | Handler | Read-store port |
@@ -13,7 +12,7 @@ GetCategoriesQuery opts into the shared caching behavior (300-second absolute TT
 
 [AddListingsApplication](DependencyInjection.cs) registers MediatR/validators using the
 BuildingBlocks pipeline: Profiling → ExceptionToResult → Authorization → Validation
-→ Caching → Handler. Current queries have no authorization attribute and remain public;
+→ Caching → Transaction → Handler. Public catalog queries have no authorization attribute. Private draft and analysis queries require an authenticated subject;
 profiling records operation metadata and validators run before cache lookups. Unmarked requests continue
 to their handlers; GetCategoriesQuery can return a cached successful snapshot. Handlers consume
 [IListingsReadStore](Interfaces/IListingsReadStore.cs); Infrastructure supplies its EF
@@ -36,3 +35,7 @@ See the [API contract](../SmartLost.ListingsService.Api/README.md),
 
 See [attribute-driven query caching](../../../../docs/QUERY_CACHING.md) for key construction,
 backend registration, cancellation, miss coordination and the laboratory AOP explanation.
+
+RequestDraftAnalysisCommand and GetDraftAnalysisQuery require an authenticated owner and resolve the current uploaded photo revision. The command enqueues a versioned request. The query combines Matching results with local delivery status. Neither operation changes confirmed traits.
+
+Lifecycle commands use the transaction behavior and IListingLifecycleStore. GetDraftQuery returns the owner’s private fields and revision. PatchDraftCommand saves partial input, and PublishDraftCommand checks completeness. RecordMatchDecisionCommand checks reviewed revisions and reservations. CancelAcceptanceCommand releases the pair. ConfirmRecoveryCommand returns the existing recovery on replay. WithdrawListingCommand invalidates outstanding decisions.

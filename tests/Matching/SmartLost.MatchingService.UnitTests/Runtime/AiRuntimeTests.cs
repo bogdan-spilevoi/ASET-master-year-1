@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Application.Contracts;
 using SmartLost.MatchingService.Application.Exceptions;
 using SmartLost.MatchingService.Application.Services;
@@ -15,6 +16,46 @@ public sealed class AiRuntimeTests
 {
     private const string Source = "10000000-0000-0000-0000-000000000001";
     private const string Photo = "10000000-f0f0-0000-0000-000000000001";
+
+    [Theory]
+    [InlineData(HttpStatusCode.OK, "image/png")]
+    [InlineData(HttpStatusCode.OK, "text/plain")]
+    [InlineData(HttpStatusCode.NotFound, "text/plain")]
+    [InlineData(HttpStatusCode.Unauthorized, "text/plain")]
+    public async Task PrivatePhotoClientUsesScopedServiceKeyAndExactRevision(HttpStatusCode status, string contentType)
+    {
+        string key = Guid.NewGuid().ToString();
+        using var factory = new MatchingApiFactory(overrides: new Dictionary<string, string?>
+        {
+            ["ListingsPhotos:BaseUrl"] = "http://listings-photos",
+            ["ListingsPhotos:ApiKey"] = key
+        });
+        using WebApplicationFactory<Program> host = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+            services.AddHttpClient(nameof(ListingsPhotoClient)).ConfigurePrimaryHttpMessageHandler(() => new Stub(request =>
+            {
+                Assert.Equal(key, Assert.Single(request.Headers.GetValues("X-Listings-Photo-Key")));
+                Assert.Equal($"http://listings-photos/internal/listings/{Source}/photos/{Photo}/revisions/2", request.RequestUri!.AbsoluteUri);
+                return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent("bytes", null, contentType) });
+            }))));
+        ListingsPhotoClient reader = host.Services.GetRequiredService<ListingsPhotoClient>();
+        Task<PhotoContent?> read = reader.ReadAsync(Guid.Parse(Source), new(Guid.Parse(Photo), 2), CancellationToken.None);
+        if (status == HttpStatusCode.NotFound)
+        {
+            Assert.Null(await read);
+        }
+        else if (status == HttpStatusCode.Unauthorized)
+        {
+            await Assert.ThrowsAsync<HttpRequestException>(() => read);
+        }
+        else if (contentType == "text/plain")
+        {
+            await Assert.ThrowsAsync<InvalidDataException>(() => read);
+        }
+        else
+        {
+            Assert.Equal("bytes"u8.ToArray(), (await read)!.Content.ToArray());
+        }
+    }
 
     [Fact]
     public async Task HttpModeSendsPhotoRevisionAndKeyThroughExistingEndpoints()

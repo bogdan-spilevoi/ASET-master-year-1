@@ -12,5 +12,6 @@ public enum ErrorKind
     NotFound,
     Conflict,
     Unauthorized,
-    Forbidden
+    Forbidden,
+    Unavailable
 }

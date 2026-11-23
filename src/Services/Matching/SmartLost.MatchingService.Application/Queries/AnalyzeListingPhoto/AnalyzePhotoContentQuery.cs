@@ -3,6 +3,7 @@ using MediatR;
 using SmartLost.BuildingBlocks.Application.Caching;
 using SmartLost.BuildingBlocks.Application.Profiling;
 using SmartLost.BuildingBlocks.Core.Results;
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Application.Contracts;
 
 namespace SmartLost.MatchingService.Application.Queries.AnalyzeListingPhoto;

@@ -4,9 +4,8 @@ A learning project for a campus lost-and-found application that will suggest mat
 listings using editable image-derived categories and photo similarity, with credibility points
 for confirmed recoveries. Qwen3-VL-4B-Instruct is selected for traits/categories and DINOv3
 ViT-L/16 for image similarity. The selected stack is .NET 10, Angular and PostgreSQL, with
-local model inference (ONNX Runtime verified in a standalone CPU experiment; optional NVIDIA CUDA execution is configured but not locally inferred yet; Matching can call the laptop inference API) and Azure Blob Storage for
-photos. Auth, Listings and Matching have separate APIs and service-owned PostgreSQL databases.
-Listings exposes public CQRS reads; Matching ranks suggestions and profiles operations using
+local model inference (ONNX Runtime verified in a standalone CPU experiment; optional NVIDIA CUDA execution is configured but not locally inferred yet; Matching can call the laptop inference API) and planned Azure Blob Storage. Uploaded draft photos currently live in Listings PostgreSQL. Auth, Listings and Matching have separate APIs and service-owned PostgreSQL databases.
+Listings supports authenticated draft uploads and public CQRS reads; Matching ranks suggestions and profiles operations using
 configurable HTTP inference and development-only test endpoints.
 
 ## Architecture
@@ -15,8 +14,8 @@ The intended architecture separates services by responsibility, with each servic
 data and communicating through explicit contracts. `SmartLost.AuthService.Api` currently implements that
 split with API, Application, Domain and Infrastructure projects, a dedicated PostgreSQL
 database connection and JWT issuance. Listings implements its Domain model, EF persistence/migrations
-and three public HTTP read queries through MediatR. Matching implements Domain, use cases,
-EF persistence and development-only test endpoints, with shared profiling, mock adapters and optional authenticated HTTP inference on laptop-hosted models. Listings photo delivery is pending.
+and MediatR handlers for draft creation and three public HTTP reads. Matching implements Domain, use cases,
+EF persistence and development-only test endpoints, with shared profiling, mock adapters and optional authenticated HTTP inference on laptop-hosted models. Matching has a service-authenticated client for private Listings photo reads.
 
 The [SmartLost project description](docs/SMARTLOST.md) documents the proposed Listings and
 Matching services, their data ownership, C4 diagrams, publication/matching flows and credibility
@@ -237,7 +236,7 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 | [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Auth Outbox worker with RabbitMQ profile publication (`Publish`), confirmation delivery over SMTP (`Email`), and an alternative bounded HTTP transport (`Batch`) | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
 | [`src/Services/Listings/`](src/Services/Listings/) | Manually maintained Domain aggregates/entities with guarded listing, decision, recovery and credibility behavior; separate NMF/XMI models; EF migrations and atomic Outbox persistence; public GET categories/listings/details through CQRS | [Module README](src/Services/Listings/README.md), [API](src/Services/Listings/SmartLost.ListingsService.Api/README.md), [Application](src/Services/Listings/SmartLost.ListingsService.Application/README.md), [NMF model](src/Services/Listings/SmartLost.ListingsService.Modeling/README.md), [Domain and behavior](src/Services/Listings/SmartLost.ListingsService.Domain/README.md), [Infrastructure](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md) |
 | [`src/Services/Listings/SmartLost.ListingsService.Worker/`](src/Services/Listings/SmartLost.ListingsService.Worker/) | Inspect/Publish host for service-owned Outbox; Kubernetes uses persistent RabbitMQ publishing with confirms and retries | [Worker README](src/Services/Listings/SmartLost.ListingsService.Worker/README.md) |
-| [`src/Services/Matching/`](src/Services/Matching/) | Suggestion ranking, embedding preparation and photo-analysis use cases with `ProfilingBehavior` and AI-call profiling decorators, a Matching-only PostgreSQL database, optional laptop HTTP inference, demo photo adapters and development-only endpoints; Listings photo delivery and worker pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md), [Communication](src/Services/Matching/COMMUNICATION.md), [Kubernetes](deploy/kubernetes/README.md#matching-api-and-postgresql) |
+| [`src/Services/Matching/`](src/Services/Matching/) | Suggestion ranking, embedding preparation and photo-analysis use cases with `ProfilingBehavior` and AI-call profiling decorators, a Matching-only PostgreSQL database, optional laptop HTTP inference, demo photo adapters and development-only endpoints; private Listings photo client; automatic preparation pending | [Module README](src/Services/Matching/README.md), [NMF model](src/Services/Matching/SmartLost.MatchingService.Modeling/README.md), [Communication](src/Services/Matching/COMMUNICATION.md), [Kubernetes](deploy/kubernetes/README.md#matching-api-and-postgresql) |
 | [`SmartLost.BuildingBlocks.*`](src/BuildingBlocks/SmartLost.BuildingBlocks.Core/) | Reusable domain/event/result/pagination primitives, application behaviors, HTTP adapters and opt-in EF Core Outbox | [Building blocks guide](docs/BUILDING_BLOCKS.md) |
 | [`AIModels/`](AIModels/) | Standalone `AIModels.slnx`; Qwen labels and DINO embeddings on CPU or NVIDIA CUDA, with an [authenticated laptop API](AIModels/SmartLost.Ai.Api/README.md) | [AI solution](AIModels/README.md), [Qwen guide](AIModels/Qwen3-VL-4B-Instruct-ONNX/README.md), [DINO guide](AIModels/DINOv3-ViTL16-ONNX/README.md) |
 
@@ -308,7 +307,7 @@ to load a local Qwen3-VL model on CPU or NVIDIA CUDA and extract English JSON ob
 [`AIModels.slnx`](AIModels/AIModels.slnx), with independent build configuration and commands.
 Its source and configuration are versioned; model files and build outputs are ignored.
 The AI solution is excluded from CI restore/build/format/test checks; repository-wide security scans still apply.
-The [laptop API setup](AIModels/SmartLost.Ai.Api/README.md) covers the loopback listener on port 5050, ngrok and Matching configuration.
+Follow the [macOS and Windows shared API key tutorial](AIModels/SmartLost.Ai.Api/README.md#shared-api-key-setup-on-macos-and-windows) to connect a new Matching device to the AI laptop and verify authentication through ngrok.
 
 Both AI projects read model/resource paths and an explicit CPU/CUDA provider from their own ignored `appsettings.json`.
 They use the standard .NET JSON configuration provider and a small path resolver.
@@ -606,7 +605,7 @@ The Listings worker polls due Outbox rows in bounded batches, publishes persiste
 messages to topic exchange `smartlost.events` / durable queue
 `smartlost.listings.notifications`, and marks them processed only after broker confirms.
 Failures use existing retry/lease/dead-letter fields. `ProcessedOn` means broker acceptance;
-no Matching consumer is implemented. Existing payloads are notification metadata, not full
+Matching consumes draft-analysis requests from its dedicated queue. Existing payloads are notification metadata, not full
 Matching snapshots. Duplicate delivery is possible. Local worker startup defaults to
 read-only Inspect; see [settings/modes](src/Services/Listings/SmartLost.ListingsService.Worker/README.md).
 
@@ -665,7 +664,7 @@ notifications are staged through the shared OutboxDbContext atomically with busi
 event collections are ignored as EF columns. The seed uses the shared EF unit of work.
 The migration adds one table to the same database and does not backfill historical events.
 The worker supports Inspect and broker-confirmed RabbitMQ Publish modes. Complete Matching
-snapshot contracts/consumers and transactional mutation HTTP use cases remain unimplemented.
+snapshot delivery and suggestion ranking remain future work. Listings commits draft publication, decisions and recovery through its transactional commands.
 
 `SmartLost.MatchingService.Api` owns the separate `matchingservice` PostgreSQL database
 (connection string `MatchingDatabase`). It is reachable only from Matching. Its
@@ -733,18 +732,26 @@ token, 401 invalid credentials). Malformed request bodies use ASP.NET validation
 Unexpected exceptions return a sanitized 500 problem and are logged server-side.
 
 
-Listings also exposes public read endpoints:
+Listings exposes draft uploads and public reads.
 
 | Method | Route | Description |
 | --- | --- | --- |
+| POST | `/api/listings/drafts` | Bearer JWT and multipart `type` + `photo`. Creates a private draft and returns its listing and photo references. [Swagger steps](src/Services/Listings/SmartLost.ListingsService.Api/README.md#upload-a-draft-from-swagger) |
+| POST | `/api/listings/drafts/{listingId}/traits` or `/embedding` under the same draft | Owner requests Qwen traits or a DINO embedding for the current photo. Returns 202. |
+| GET | `/api/listings/drafts/{listingId}/analysis` | Owner reads per-operation status, suggestions and embedding metadata. [Test from Swagger](src/Services/Listings/SmartLost.ListingsService.Api/README.md#analyze-the-uploaded-draft) |
 | GET | `/api/categories` | Category IDs/names, ordered by normalized name |
 | GET | `/api/listings` | Open listings, optional type/category filters and zero-based pagination |
+| GET / PATCH | `/api/listings/drafts/{id}` | Owner reads or partially edits a private draft, including confirmed traits and categories. |
+| POST | `/api/listings/drafts/{id}/publish` | Owner publishes the reviewed revision. |
+| POST | `/api/listings/{id}/withdraw` | Owner closes an Open listing without a recovery award. |
+| POST | `/api/listings/{lostId}/match-decisions` | Lost owner accepts or rejects a manually identified Found listing at the reviewed revisions. |
+| POST | `/api/match-decisions/{id}/cancel-acceptance` or `/api/match-decisions/{id}/confirm-recovery` | Release the reservation or record the recovery and one finder award. [Swagger walkthrough](src/Services/Listings/SmartLost.ListingsService.Api/README.md#publish-and-recover-from-swagger) |
+| GET | `/api/listings/{id}/suggestions` | Authenticated placeholder, responds 501. |
 | GET | `/api/listings/{id:guid}` | Open listing details and safe optional photo metadata; hidden/missing records return 404 |
 
 `pageIndex` defaults to 0 and `pageSize` to 10 (1..100); optional `type=Lost`/`Found`
 and `categoryId=<guid>` combine with AND. Validation failures return 400. No BlobKey,
-image URL or bytes are returned. These endpoints need no JWT; authenticated mutations,
-image delivery and listing/detail cache behavior remain pending. GET /api/categories
+image URL or bytes are returned. Public GETs require no JWT. Matching can read an exact uploaded revision through a separate internal listener. GET /api/categories
 uses a 300-second MediatR cache in Redis (Compose/Kind), shared by all replicas; failures/cancellation are not stored. Development-only OpenAPI/Swagger and
 [full HTTP examples](src/Services/Listings/SmartLost.ListingsService.Api/README.md) are documented separately.
 

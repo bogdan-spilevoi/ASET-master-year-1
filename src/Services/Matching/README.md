@@ -24,7 +24,7 @@ in its review notes. CI checks document changes; reviewers check diagram accurac
 | Infrastructure | `MatchingDbContext` (EF Core/Npgsql) with the `InitialCreate` migration, three repositories, `MatchingUnitOfWork` and the read-only `MatchingDatabaseHealthCheck`. HTTP inference and read-only test image directory, or demo adapters (`Mock/`), plus the development `MatchingDemoSeeder` (`Demo/`) |
 | Api | ASP.NET Core entry point, development-only test endpoints, `/health/live` and `/health/ready`, OpenAPI/Swagger in Development, Dockerfile with a default `runtime` and an opt-in `migrations` target |
 
-Set `AiRuntime:BaseUrl` and supply `AiRuntime__ApiKey` for HTTP inference. With an empty URL, enable `MockAdapters:Enabled` explicitly to use the simulated adapters. The inbound demo endpoints remain Development-only. Listings photo download is pending.
+Set `AiRuntime:BaseUrl` and supply `AiRuntime__ApiKey` for HTTP inference. Follow the [macOS and Windows shared key setup](../../../AIModels/SmartLost.Ai.Api/README.md#shared-api-key-setup-on-macos-and-windows) when connecting a new device. With an empty URL, enable `MockAdapters:Enabled` explicitly to use the simulated adapters. The inbound demo endpoints remain Development-only. Trusted workflows can resolve ListingsPhotoClient to read private uploaded revisions using ListingsPhotos:BaseUrl and ListingsPhotos:ApiKey. Anonymous demo endpoints continue to use test photos. After upload, separate authenticated Listings POSTs enqueue draft photo work. In Kind, Matching consumes the dedicated RabbitMQ queue, stores work and Qwen suggestions in PhotoAnalyses, and commits DINO vectors to ImageEmbeddings. Drafts remain outside the candidate pool.
 
 The Domain entities reproduce the structure of the [NMF model](SmartLost.MatchingService.Modeling/README.md)
 as DDD aggregates with runtime guards. Like the ecore model, entities store the photo and
@@ -36,7 +36,7 @@ Rules that are not yet implemented:
 - application of snapshot `ChangeSequence` checkpoints
 - revision-specific pair rejections
 - category synonym normalization (D01)
-- a worker that claims due embedding tasks automatically
+- automatic processing of the older search-projection EmbeddingPreparationTasks (draft work uses the separate PhotoAnalyses worker)
 
 The ranking weights and threshold in `RankingPolicy.Baseline` are an uncalibrated
 baseline, not validated values.
@@ -120,6 +120,7 @@ Matching owns the `matchingservice` PostgreSQL database. Only Matching accesses 
 
 | Table | Contents | Key constraints |
 | --- | --- | --- |
+| `PhotoAnalyses` | Durable work and per-operation state for a draft photo revision, Qwen suggestions in JSONB, DINO model and dimensions | Stable ID for operation and revision, optimistic lease token and due-work index. |
 | `SearchListings` | Projection of a confirmed listing; `Id` is the logical Listings ID | `CurrentPhotoId`/`CurrentPhotoRevision` both null or both set; `text[]` category/trait keys; `xmin` concurrency |
 | `ImageEmbeddings` | Cached `real[]` vectors | Unique `UX_ImageEmbeddings_Target` on listing, photo, revision, model and preprocessing version |
 | `EmbeddingPreparationTasks` | Durable embedding work, lease and retry state | Same unique target `UX_EmbeddingPreparationTasks_Target`; `xmin` optimistic concurrency for claims |

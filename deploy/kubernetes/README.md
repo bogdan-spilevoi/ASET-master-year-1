@@ -348,6 +348,14 @@ backfill notifications for existing fixtures; an unchanged seed rerun may leave 
 empty. Newly created published fixtures generate metadata notifications. Full Matching
 snapshots and Matching consumption remain unimplemented.
 
+## On-demand draft analysis
+
+Deploy Matching and Listings to update both the `AddDraftPhotoAnalyses` migration and the Listings Outbox bindings. Each Matching replica runs a consumer and a worker for durable analysis jobs. The shared broker, per-job database lease and laptop concurrency gate support two replicas. Set the laptop URL and key as described in the Matching runbook, then [test either operation from Listings Swagger](../../src/Services/Listings/SmartLost.ListingsService.Api/README.md#analyze-the-uploaded-draft).
+
+## Private draft photos
+
+`./k8s.sh deploy listings` applies the additive photo-payload migration and configures JWT verification with the Auth signing key. The helper creates the `listings-photo-access` Secret once for Listings and Matching. Apply `./k8s.sh deploy matching` to configure the client. Matching reads through ClusterIP `listings-photos:80`, which selects port 8082 on the Listings replicas. The public Listings NodePort selects port 8080. See the [upload walkthrough](../../src/Services/Listings/SmartLost.ListingsService.Api/README.md#upload-a-draft-from-swagger).
+
 ## Access and optional fixtures
 
 Once the local overlay is applied and the APIs are ready, access the following fixed URLs.

@@ -2,8 +2,78 @@
 
 Domain implements in-process business behavior. Infrastructure implements EF persistence
 and explicit migration tooling. API/Application implement three public read queries
-through MediatR. Authenticated mutations, blob and inter-service calls remain unimplemented.
+through MediatR. Authenticated draft upload and private photo delivery are described below.
 Modeling is a separate NMF representation; runtime projects do not reference it.
+
+
+
+## Draft publication and manual recovery
+
+```mermaid
+sequenceDiagram
+    actor Owner
+    participant API as Listings API and MediatR
+    participant DB as Listings PostgreSQL
+    Owner->>API: 1. GET or PATCH private draft with JWT
+    API->>DB: 2. Read owned draft or save partial edits at expected revision
+    Owner->>API: 3. Publish latest revision
+    API->>DB: 4. Validate required fields and commit Open state with Outbox
+    Owner->>API: 5. Submit Lost and Found IDs, revisions and Accept or Reject
+    API->>DB: 6. Check ownership and eligibility, then persist decision and Outbox
+    Owner->>API: 7. Cancel acceptance or confirm physical recovery
+    API->>DB: 8. Release pair or commit recovery, Lost closure, finder award and Outbox
+    Owner->>API: 9. Alternatively withdraw an owned Open listing
+    API->>DB: 10. Close listing and invalidate its outstanding decisions atomically
+```
+
+Conflicting writes roll back. Retrying a completed confirmation returns its existing recovery.
+The authenticated suggestions route returns 501 locally. Publication and manual decisions
+do not initiate candidate searches or inference.
+
+## On-demand analysis of private drafts
+
+```mermaid
+sequenceDiagram
+    actor Owner
+    participant L as Listings
+    participant O as Listings Outbox
+    participant R as RabbitMQ
+    participant M as Matching
+    participant DB as Matching PostgreSQL
+    participant AI as Laptop AI
+    Owner->>L: 1. POST traits or embedding with JWT
+    L->>O: 2. Enqueue once for owned draft and current photo revision
+    L-->>Owner: 3. 202 with analysis URL
+    O->>R: 4. Publish versioned request with broker confirmation
+    R->>M: 5. Deliver request
+    M->>DB: 6. Insert pending work idempotently before acknowledgement
+    M->>L: 7. Claim work and fetch exact private photo using service key
+    M->>AI: 8. Run requested model
+    M->>DB: 9. Save suggestions or embedding and completion state
+    Owner->>L: 10. GET analysis with JWT
+    L->>M: 11. Retrieve current results via authenticated internal call
+    L-->>Owner: 12. Return independent states and advisory suggestions
+```
+
+Pending includes the interval before broker delivery. Matching retries transient failures and recovers expired claims. A busy laptop defers work without spending an attempt. A missing photo revision or exhausted attempts produces Failed. Outbox delivery failure is visible even if Matching never received the request. Repeated POSTs for the same operation and photo revision return the original request.
+
+## Authenticated draft upload and private photo read
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Listings
+    participant DB as Listings PostgreSQL
+    participant Matching
+    User->>Listings: 1. POST JWT, Lost/Found and image (multipart)
+    Listings->>DB: 2. Commit draft, photo metadata and bytes together
+    Listings-->>User: 3. Return 201 and listing/photo revisions
+    Matching->>Listings: 4. GET exact revision on private port with service key
+    Listings->>DB: 5. Read payload by listing, photo and revision
+    Listings-->>Matching: 6. Return original JPEG/PNG bytes or 404
+```
+
+Arrow 4 is a separate trusted client operation. Upload does not dispatch it automatically. Invalid JWTs and invalid images fail before persistence. A missing or invalid service key returns 401 on the internal listener. Public reads exclude drafts.
 
 ## Current local container flow
 
@@ -90,7 +160,7 @@ flowchart LR
     Config -->|"10.1 Connection/Rabbit Secrets + JSON as outboxsettings.json"| Inspector
     Inspector -->|"10.2 Every 2 seconds: claim due rows, persist outcomes"| Database
     Inspector -->|"11. Persistent mandatory publish; wait for confirm"| Broker
-    Broker -->|"11.1 Store durable queue/messages; no consumer yet"| BrokerStorage
+    Broker -->|"11.1 Store durable notifications and draft-analysis requests"| BrokerStorage
     Redis["Shared redis:6379 Deployment; no PVC or host port"]
     Operator -->|"12. Apply Redis with its Secret, warn and continue on readiness timeout"| Redis
     Pods -->|"12.1 Category cache read/write via ConnectionStrings__Redis, shared by all 3 pods"| Redis
@@ -277,8 +347,7 @@ flowchart LR
     Processor -->|"5. Confirm: ProcessedOn; failure: retry/dead letter; clear lease"| DB
 ```
 
-`ProcessedOn` means broker acceptance, not consumer application. There is no Matching
-consumer. Failures retry with backoff, up to 8 attempts, then remain dead-lettered in
+`ProcessedOn` means broker acceptance, not consumer application. Matching consumes draft-analysis requests on its dedicated queue. Failures retry with backoff, up to 8 attempts, then remain dead-lettered in
 PostgreSQL; automatic replay is not implemented. Expired claims can be recovered. A crash
 after confirm before DB update can duplicate an ID. Future consumers need deduplication
 and stale-sequence handling; retries/parallel workers do not guarantee aggregate ordering.
@@ -305,7 +374,7 @@ public seed endpoint is introduced; the existing three public read routes are un
 
 ```mermaid
 flowchart LR
-    Caller["Behavior tests / future application caller"]
+    Caller["Listings application handlers / behavior tests"]
     Listing["Listing aggregate"]
     Children["Photo / ListingCategory entities"]
     Catalog["Category aggregate"]
@@ -331,12 +400,9 @@ flowchart LR
 ```
 
 Guard failures throw `DomainException`; validation occurs before existing graph changes.
-An already confirmed decision rejects another confirmation. Public setters and collection
-mutation cannot bypass behavior. The caller supplies actor identity; HTTP authentication
-is not implemented here. Cross-root transaction/concurrency, global reservations,
-consumed Found eligibility, automatic invalidation and durable retries remain pending.
-When tracked entities are saved, selected events are staged in the service-owned Outbox;
-no event is published to another service.
+The application returns the stored recovery on a repeated confirmation. It uses the authenticated
+subject, checks reservations and consumed Found listings, and commits all changed roots, the
+award and the service-owned Outbox within the transaction. The worker delivers staged events.
 
 ## Current Infrastructure and explicit migration flows
 
@@ -380,7 +446,7 @@ API and Compose startup do not apply them automatically. Only explicit Developme
 opt-in writes fixture data during API startup; it does not migrate the schema.
 
 Listing Revision/ChangeSequence and decision State protect optimistic writes. Stale saves
-throw DbUpdateConcurrencyException; unique/FK violations throw DbUpdateException. No
+are mapped to a conflict by ListingsUnitOfWork. No
 application retry orchestration is wired. Physical FKs stay inside Listings; Auth user IDs
 are logical references. Photo/assignment deletion cascades; historical/shared references
 restrict deletion. DomainEvents are ignored as mapped columns; selected notifications
@@ -389,31 +455,19 @@ Publish sends metadata notifications to RabbitMQ.
 See [Infrastructure commands/configuration](SmartLost.ListingsService.Infrastructure/README.md)
 and the [verification report](../../../docs/LISTINGS_EF_COMPATIBILITY.md).
 
-## Planned service integrations — not implemented
-
-All dashed arrows describe design intent. Exact contracts and retry behavior remain
-application/infrastructure work.
+## Publication and future Matching integration
 
 ```mermaid
 flowchart LR
-    Client["Future client"]
-    Listings["Future Listings API / application"]
-    DB[("Listings PostgreSQL; metadata Outbox implemented, full snapshots pending")]
-    Storage["Future private photo storage"]
-    Matching["Future Matching service"]
-    Worker["Current publisher; future full snapshot contract"]
-    Client -.->|"1. Submit listing and optional photo"| Listings
-    Listings -.->|"1.1 Store authorized photo"| Storage
-    Listings -.->|"1.2 Request optional image analysis"| Matching
-    Client -.->|"2. Confirm categories and publish"| Listings
-    Listings -.->|"2.1 Commit aggregates, sequence and Outbox snapshot atomically"| DB
-    Worker -.->|"3. Expand payload and deliver full snapshot via broker/consumer"| Matching
+    Client -->|"1. Publish owned draft"| Listings
+    Listings -->|"2. Save Open listing and metadata notification"| DB[(Listings PostgreSQL)]
+    Worker -->|"3. Read Outbox and publish listing change"| RabbitMQ
+    DB -->|"3.1 Return pending notifications"| Worker
+    RabbitMQ -.->|"4. Planned projection updates and opposite-type candidate ranking"| Matching
 ```
 
-Only Listings will access its database/photo storage. Auth identities and Matching
-results use logical IDs, without cross-service physical FKs. Auth Outbox reception,
-snapshot delivery and inference calls are not implemented in Listings. The current worker
-publishes metadata to RabbitMQ; full snapshot production/consumption remains planned.
+Publication emits a metadata event. Full snapshot consumption and candidate ranking are future work.
+The separate draft-analysis flow above handles explicit requests to process the current photo.
 
 ## Source references
 

@@ -15,6 +15,7 @@ public sealed class MatchingDbContext(DbContextOptions<MatchingDbContext> option
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.ApplyConfiguration(new Analysis.PhotoAnalysisWorkConfiguration());
         modelBuilder.ApplyConfiguration(new SearchListingConfiguration(
             string.Equals(Database.ProviderName, "Npgsql.EntityFrameworkCore.PostgreSQL", StringComparison.Ordinal)));
         modelBuilder.ApplyConfiguration(new ImageEmbeddingConfiguration());

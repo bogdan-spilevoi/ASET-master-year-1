@@ -1,7 +1,7 @@
 using MediatR;
 using SmartLost.BuildingBlocks.Application.Profiling;
 using SmartLost.BuildingBlocks.Core.Results;
-using SmartLost.MatchingService.Application.Contracts;
+using SmartLost.Contracts.Listings;
 
 namespace SmartLost.MatchingService.Application.Queries.AnalyzeListingPhoto;
 

@@ -35,7 +35,7 @@ public sealed class MatchingInfrastructureTests
 
         IMigrationsAssembly assembly = context.GetService<IMigrationsAssembly>();
         Assert.NotNull(assembly.ModelSnapshot);
-        KeyValuePair<string, System.Reflection.TypeInfo> entry = Assert.Single(assembly.Migrations);
+        KeyValuePair<string, System.Reflection.TypeInfo> entry = Assert.Single(assembly.Migrations, item => item.Key.EndsWith("_InitialCreate", StringComparison.Ordinal));
         Assert.EndsWith("_InitialCreate", entry.Key, StringComparison.Ordinal);
         Migration migration = assembly.CreateMigration(entry.Value, context.Database.ProviderName!);
         string[] tables = [.. migration.UpOperations.OfType<CreateTableOperation>().Select(table => table.Name).Order()];
@@ -46,6 +46,10 @@ public sealed class MatchingInfrastructureTests
         Assert.Equal(3, migration.DownOperations.OfType<DropTableOperation>().Count());
         Assert.NotNull(migration.TargetModel!.FindEntityType(typeof(SearchListing).FullName!));
 
+        KeyValuePair<string, System.Reflection.TypeInfo> analysisEntry = Assert.Single(assembly.Migrations, item => item.Key.EndsWith("_AddDraftPhotoAnalyses", StringComparison.Ordinal));
+        Migration analysis = assembly.CreateMigration(analysisEntry.Value, context.Database.ProviderName!);
+        Assert.Equal("PhotoAnalyses", Assert.Single(analysis.DownOperations.OfType<DropTableOperation>()).Name);
+        Assert.NotNull(analysis.TargetModel!.FindEntityType(typeof(SmartLost.MatchingService.Infrastructure.Analysis.PhotoAnalysisWork)));
         string script = context.GetService<IMigrator>().GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent);
         Assert.Contains("CREATE UNIQUE INDEX \"UX_ImageEmbeddings_Target\"", script, StringComparison.Ordinal);
         Assert.Contains("CK_SearchListings_CurrentPhoto", script, StringComparison.Ordinal);

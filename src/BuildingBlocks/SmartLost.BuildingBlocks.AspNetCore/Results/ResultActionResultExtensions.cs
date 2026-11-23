@@ -29,6 +29,7 @@ public static class ResultActionResultExtensions
             ErrorKind.NotFound => StatusCodes.Status404NotFound,
             ErrorKind.Conflict => StatusCodes.Status409Conflict,
             ErrorKind.Unauthorized => StatusCodes.Status401Unauthorized,
+            ErrorKind.Unavailable => StatusCodes.Status503ServiceUnavailable,
             ErrorKind.Forbidden => StatusCodes.Status403Forbidden,
             _ => StatusCodes.Status500InternalServerError
         };

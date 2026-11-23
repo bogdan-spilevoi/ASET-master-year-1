@@ -1,4 +1,8 @@
+using System.Text;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using SmartLost.BuildingBlocks.AspNetCore;
 using SmartLost.Contracts.Listings;
 using SmartLost.ListingsService.Application;
@@ -23,13 +27,44 @@ public partial class Program
         WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
         builder.Services.AddControllers().AddJsonOptions(options =>
             options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<ListingType>()));
+        builder.Services.ConfigureHttpJsonOptions(options =>
+            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<ListingType>()));
         builder.Services.AddOpenApi(options => options.AddDocumentTransformer((document, _, _) =>
         {
             document.Info.Title = "SmartLost Listings API";
             document.Info.Version = "v1";
-            document.Info.Description = "Public category and open lost/found listing reads.";
+            document.Info.Description = "Public listings, owner-managed drafts, match decisions and recoveries.";
+            document.Components ??= new();
+            document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>(StringComparer.Ordinal);
+            document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.Http,
+                Scheme = "bearer",
+                BearerFormat = "JWT"
+            };
+            return Task.CompletedTask;
+        }).AddOperationTransformer((operation, context, _) =>
+        {
+            if (context.Description.ActionDescriptor.EndpointMetadata.OfType<Microsoft.AspNetCore.Authorization.IAuthorizeData>().Any())
+            {
+                operation.Security = [new() { [new OpenApiSecuritySchemeReference("Bearer", context.Document)] = [] }];
+            }
             return Task.CompletedTask;
         }));
+        builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
+        {
+            string? key = builder.Configuration["Jwt:SigningKey"];
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "AuthService",
+                ValidAudience = builder.Configuration["Jwt:Audience"] ?? "AuthService",
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = string.IsNullOrWhiteSpace(key) ? null : new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+                ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+                ClockSkew = TimeSpan.FromMinutes(1)
+            };
+        });
+        builder.Services.AddAuthorization();
         builder.Services.AddBuildingBlocksApi();
         builder.Services.AddListingsApplication();
         builder.Services.AddListingsPersistence(builder.Configuration);
@@ -64,7 +99,7 @@ public partial class Program
         }
         else
         {
-            app.UseHttpsRedirection();
+            app.UseWhen(context => context.Connection.LocalPort != 8082, branch => branch.UseHttpsRedirection());
         }
 
         if (seedOnly)
@@ -72,6 +107,8 @@ public partial class Program
             return;
         }
 
+        app.UseAuthentication();
+        app.UseAuthorization();
         app.MapControllers();
         await app.RunAsync(cancellationToken);
     }

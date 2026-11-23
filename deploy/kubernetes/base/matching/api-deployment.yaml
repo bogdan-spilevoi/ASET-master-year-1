@@ -37,6 +37,23 @@ spec:
             - configMapRef:
                 name: matching-environment
           env:
+            - name: RabbitMq__UserName
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: username
+            - name: RabbitMq__Password
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: password
+            - name: ListingsPhotos__ApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: listings-photo-access
+                  key: api-key
+            - name: ListingsPhotos__BaseUrl
+              value: http://listings-photos
             - name: AiRuntime__ApiKey
               valueFrom:
                 secretKeyRef:

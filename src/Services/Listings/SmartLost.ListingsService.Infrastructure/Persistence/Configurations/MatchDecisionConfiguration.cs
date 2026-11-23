@@ -13,6 +13,9 @@ public sealed class MatchDecisionConfiguration : IEntityTypeConfiguration<MatchD
         builder.Property(decision => decision.Id).ValueGeneratedNever();
         builder.Ignore(decision => decision.DomainEvents);
         builder.Property(decision => decision.State).IsConcurrencyToken();
+        // The domain only writes UTC. Some relational providers materialize timestamps without their kind.
+        builder.Property(decision => decision.DecidedAt).HasConversion(
+            value => value, value => value.HasValue ? DateTime.SpecifyKind(value.Value, DateTimeKind.Utc) : (DateTime?)null);
         builder.HasOne(decision => decision.LostListing).WithMany()
             .HasForeignKey(decision => decision.LostListingId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(decision => decision.FoundListing).WithMany()

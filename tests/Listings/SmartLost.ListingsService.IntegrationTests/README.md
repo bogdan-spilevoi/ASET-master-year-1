@@ -60,3 +60,5 @@ counts category SELECTs per API instance.
 ```sh
 dotnet test tests/Listings/SmartLost.ListingsService.IntegrationTests/SmartLost.ListingsService.IntegrationTests.csproj --no-build --no-restore --configuration Release --filter "FullyQualifiedName~RedisQueryCacheIntegrationTests"
 ```
+
+ReservationConcurrencyTests stages competing reservations in two PostgreSQL transactions and verifies that the losing write rolls back its decision and Outbox messages.

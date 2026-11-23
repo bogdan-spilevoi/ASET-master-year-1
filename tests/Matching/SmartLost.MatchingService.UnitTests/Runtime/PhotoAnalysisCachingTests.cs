@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using SmartLost.BuildingBlocks.Core.Results;
+using SmartLost.Contracts.Listings;
 using SmartLost.MatchingService.Application;
 using SmartLost.MatchingService.Application.Contracts;
 using SmartLost.MatchingService.Application.Exceptions;
