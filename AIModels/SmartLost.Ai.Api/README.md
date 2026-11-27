@@ -1,13 +1,13 @@
 # Laptop inference API
 
-One ASP.NET Core process listens on `http://127.0.0.1:5050`. It accepts one inference request at a time across both routes. Each request starts the corresponding Release CLI, reads its JSON output, waits for process exit and deletes the temporary image. Cancellation, server shutdown and a three-minute deadline terminate an active child before the slot is released. Run one API instance on the laptop.
+One ASP.NET Core process listens on `http://127.0.0.1:5050`. Each model has its own inference slot, so DINO and Qwen can run concurrently. Each model accepts one active request at a time. Each request starts the corresponding Release CLI, reads its JSON output, waits for process exit and deletes the temporary image. Cancellation, server shutdown and a three-minute deadline terminate an active child before the slot is released. Run one API instance on the laptop.
 
 | POST route | Raw request body | Successful response |
 | --- | --- | --- |
 | `/embeddings` | JPEG or PNG | DINO model ID, preprocessing version, dimensions and normalized vector |
 | `/photo-analysis` | JPEG or PNG | Qwen JSON containing `objects` and `uncertainties` |
 
-Both routes require the `X-Api-Key` header and the matching `image/jpeg` or `image/png` content type. Uploads are limited to 10 MiB and 4 megapixels. A missing or incorrect key returns 401. A busy laptop returns 429 with `Retry-After: 10`. An unsuccessful model process returns 502.
+Both routes require the `X-Api-Key` header and the matching `image/jpeg` or `image/png` content type. Uploads are limited to 10 MiB and 4 megapixels. A missing or incorrect key returns 401. A request for a model that is already busy returns 429 with `Retry-After: 10`. An unsuccessful model process returns 502.
 
 ## Shared API key setup on macOS and Windows
 

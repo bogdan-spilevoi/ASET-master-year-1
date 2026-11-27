@@ -100,7 +100,7 @@ flowchart LR
     AnalysisCache -->|"8.4 Success: deserialized read-only labels, also on other replicas"| Handler
     AiDecorators -->|"7.3 Bounded call with AI timeout"| MockAi
     AiDecorators -->|"7.3.1 HTTP mode: POST image + API key via HTTPS tunnel"| Runtime["Laptop inference API"]
-    Runtime -->|"7.3.2 Run one CLI process; concurrent request receives 429"| Models["DinoVision or QwenVision"]
+    Runtime -->|"7.3.2 Run one CLI process per model; a second request for the same model receives 429"| Models["DinoVision or QwenVision"]
     Models -->|"7.3.3 Vector/version or labels; failure becomes 502"| Runtime
     Runtime -->|"7.3.4 JSON or unavailable/timeout"| AiDecorators
     AiDecorators -->|"7.4 Record duration, timeout, cancellation or failure"| Profiler

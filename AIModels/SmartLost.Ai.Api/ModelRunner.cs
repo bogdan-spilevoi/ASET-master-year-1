@@ -6,14 +6,19 @@ namespace SmartLost.Ai.Api;
 internal sealed class ModelRunner(IConfiguration configuration, IHostEnvironment environment,
     IHostApplicationLifetime lifetime, ILogger<ModelRunner> logger)
 {
-    private readonly SemaphoreSlim _slot = new(1, 1);
-    public string DinoPath => Resolve("Dino", "DINOv3-ViTL16-ONNX", "DinoVision");
-    public string QwenPath => Resolve("Qwen", "Qwen3-VL-4B-Instruct-ONNX", "QwenVision");
+    private readonly SemaphoreSlim _dinoSlot = new(1, 1);
+    private readonly SemaphoreSlim _qwenSlot = new(1, 1);
+
+    public Task<IResult> RunDinoAsync(HttpContext context) =>
+        RunAsync(context, Resolve("Dino", "DINOv3-ViTL16-ONNX", "DinoVision"), _dinoSlot);
+
+    public Task<IResult> RunQwenAsync(HttpContext context) =>
+        RunAsync(context, Resolve("Qwen", "Qwen3-VL-4B-Instruct-ONNX", "QwenVision"), _qwenSlot);
 
     private static string DefaultPath(string project, string assembly) =>
         $"../{project}/bin/Release/net10.0/{assembly}.dll";
 
-    public async Task<IResult> RunAsync(HttpContext context, string assembly)
+    private async Task<IResult> RunAsync(HttpContext context, string assembly, SemaphoreSlim slot)
     {
         string? extension = context.Request.ContentType?.ToLowerInvariant() switch
         {
@@ -25,7 +30,7 @@ internal sealed class ModelRunner(IConfiguration configuration, IHostEnvironment
         {
             return Results.StatusCode(StatusCodes.Status415UnsupportedMediaType);
         }
-        if (!await _slot.WaitAsync(0, context.RequestAborted))
+        if (!slot.Wait(0, context.RequestAborted))
         {
             context.Response.Headers.RetryAfter = "10";
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
@@ -84,7 +89,7 @@ internal sealed class ModelRunner(IConfiguration configuration, IHostEnvironment
         finally
         {
             try { File.Delete(temporary); }
-            finally { _slot.Release(); }
+            finally { slot.Release(); }
         }
     }
 

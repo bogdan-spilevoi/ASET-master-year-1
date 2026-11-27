@@ -27,6 +27,6 @@ app.Use(async (context, next) =>
     await next(context);
 });
 
-app.MapPost("/embeddings", (HttpContext context, ModelRunner runner) => runner.RunAsync(context, runner.DinoPath));
-app.MapPost("/photo-analysis", (HttpContext context, ModelRunner runner) => runner.RunAsync(context, runner.QwenPath));
+app.MapPost("/embeddings", (HttpContext context, ModelRunner runner) => runner.RunDinoAsync(context));
+app.MapPost("/photo-analysis", (HttpContext context, ModelRunner runner) => runner.RunQwenAsync(context));
 app.Run();
