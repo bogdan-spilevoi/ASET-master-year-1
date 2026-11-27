@@ -8,6 +8,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SmartLost.Contracts.Listings;
+using SmartLost.ListingsService.Api.Contracts;
 using SmartLost.ListingsService.Application.Dtos;
 using SmartLost.ListingsService.Domain.Entities;
 using SmartLost.ListingsService.Domain.Enums;
@@ -19,6 +20,91 @@ namespace SmartLost.ListingsService.UnitTests;
 public sealed class ListingLifecycleTests
 {
     private static readonly string[] _traits = ["zip"];
+
+    [Fact]
+    public async Task CategorySelectionRemainsPrivateUntilPublicationAndReusesTheCatalog()
+    {
+        using ListingsApiFactory factory = new(seed: false);
+        using HttpClient client = factory.CreateClient();
+        using ListingsDbContext db = factory.CreateDbContext();
+        var owner = Guid.NewGuid();
+        SignIn(client, factory, owner);
+        Assert.Empty((await client.GetFromJsonAsync<CategoryDto[]>("/api/categories"))!);
+        Guid? categoryId = null;
+        foreach (string name in new[] { "  Studio   Headphones ", "studio headphones" })
+        {
+            var listing = Listing.CreateDraft(owner, ListingType.Found);
+            db.Add(listing);
+            await db.SaveChangesAsync();
+            string route = $"/api/listings/drafts/{listing.Id}";
+            using HttpResponseMessage patch = await client.PatchAsJsonAsync(route, new
+            {
+                expectedRevision = 1,
+                categoryName = name,
+                broadClass = " Electronics "
+            });
+            patch.EnsureSuccessStatusCode();
+            JsonElement saved = await client.GetFromJsonAsync<JsonElement>(route);
+            int savedRevision = saved.GetProperty("revision").GetInt32();
+            Assert.Equal("studio headphones", saved.GetProperty("draftCategoryName").GetString());
+            Assert.Equal("electronics", saved.GetProperty("draftBroadClass").GetString());
+            Assert.Equal(0, saved.GetProperty("categories").GetArrayLength());
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(route + "/publish", new ListingRevisionRequest(savedRevision))).StatusCode);
+            Assert.Equal(categoryId.HasValue ? 1 : 0, await db.Categories.CountAsync());
+            using HttpResponseMessage details = await client.PatchAsJsonAsync(route, new
+            {
+                expectedRevision = savedRevision,
+                title = "Found",
+                description = "Wireless",
+                location = "Campus",
+                occurredOn = "2025-01-01"
+            });
+            details.EnsureSuccessStatusCode();
+            int revision = (await details.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("revision").GetInt32();
+            Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync(route + "/publish", new ListingRevisionRequest(revision))).StatusCode);
+            CategoryDto category = Assert.Single((await client.GetFromJsonAsync<CategoryDto[]>("/api/categories"))!);
+            Assert.Equal("electronics", category.BroadClass);
+            categoryId ??= category.Id;
+            Assert.Equal(categoryId, category.Id);
+        }
+        Assert.Equal(2, await db.ListingCategories.CountAsync(a => a.CategoryId == categoryId));
+    }
+
+    [Fact]
+    public async Task OnlyOwnerCanReadDraftPhotoAndDeleteDraftWithItsPayload()
+    {
+        using ListingsApiFactory factory = new(seed: false);
+        using HttpClient client = factory.CreateClient();
+        using ListingsDbContext db = factory.CreateDbContext();
+        var owner = Guid.NewGuid();
+        var draft = Listing.CreateDraft(owner, ListingType.Found);
+        byte[] bytes = [1, 2, 3];
+        draft.ReplacePhoto(owner, draft.Revision, Photo.Create("private/test", "image/png", bytes.Length));
+        new DraftPhotoStore(db).Add(draft, bytes);
+        Listing published = Open(ListingType.Found, Category.Create("Books"), owner);
+        db.Add(published);
+        await db.SaveChangesAsync();
+
+        string path = $"/api/listings/drafts/{draft.Id}";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(path + "/photo")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.DeleteAsync(path)).StatusCode);
+        SignIn(client, factory, Guid.NewGuid());
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(path + "/photo")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.DeleteAsync(path)).StatusCode);
+
+        SignIn(client, factory, owner);
+        using HttpResponseMessage photo = await client.GetAsync(path + "/photo");
+        photo.EnsureSuccessStatusCode();
+        Assert.Equal("image/png", photo.Content.Headers.ContentType!.MediaType);
+        Assert.Equal(bytes, await photo.Content.ReadAsByteArrayAsync());
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(path + "/photo")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.DeleteAsync(path)).StatusCode);
+        Assert.False(await db.Set<PhotoPayload>().AnyAsync());
+        Assert.Equal(HttpStatusCode.NotFound, (await client.DeleteAsync($"/api/listings/drafts/{published.Id}")).StatusCode);
+        Assert.True(await db.Listings.AnyAsync(l => l.Id == published.Id));
+    }
 
     [Fact]
     public async Task PrivatePartialEditsPreserveOmissionsAndPublishWithoutAi()
@@ -193,9 +279,59 @@ public sealed class ListingLifecycleTests
         Assert.Empty(await db.CredibilityEntries.ToListAsync());
     }
 
-    private static Listing Open(ListingType type, Category category)
+    [Fact]
+    public async Task MyListingsFiltersAndPaginatesOnlyTheAuthenticatedOwnersReports()
     {
+        using ListingsApiFactory factory = new(seed: false);
+        using HttpClient client = factory.CreateClient();
+        using ListingsDbContext db = factory.CreateDbContext();
+        const string MinePath = "/api/listings/mine";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(MinePath)).StatusCode);
+
         var owner = Guid.NewGuid();
+        var category = Category.Create("Keys");
+        var draft = Listing.CreateDraft(owner, ListingType.Found);
+        Listing found = Open(ListingType.Found, category, owner);
+        Listing withdrawn = Open(ListingType.Lost, category, owner);
+        withdrawn.Withdraw(owner, withdrawn.Revision);
+        Listing recovered = Open(ListingType.Lost, category, owner);
+        Listing other = Open(ListingType.Found, category);
+        var decision = MatchDecision.CreateSuggested(recovered, other);
+        decision.Accept(owner, DateTime.UtcNow);
+        db.AddRange(draft, found, withdrawn, Recovery.Confirm(decision, owner, DateTime.UtcNow));
+        await db.SaveChangesAsync();
+        SignIn(client, factory, owner);
+
+        async Task<JsonElement[]> Items(string query, int total)
+        {
+            JsonElement page = await client.GetFromJsonAsync<JsonElement>(MinePath + query);
+            Assert.Equal(total, page.GetProperty("totalCount").GetInt32());
+            return page.GetProperty("items").EnumerateArray().ToArray();
+        }
+
+        Assert.Equal(4, (await Items("", 4)).Length);
+        JsonElement ownDraft = Assert.Single(await Items("?state=Draft", 1));
+        Assert.Equal(draft.Id, ownDraft.GetProperty("id").GetGuid());
+        Assert.Equal(JsonValueKind.Null, ownDraft.GetProperty("occurredOn").ValueKind);
+        Assert.Equal("Open", Assert.Single(await Items("?state=Open", 1)).GetProperty("state").GetString());
+        Assert.Equal(2, (await Items("?type=Found", 2)).Length);
+        Assert.Equal(2, (await Items("?state=Closed", 2)).Length);
+        Assert.Equal("Recovered", Assert.Single(await Items("?closureReason=Recovered", 1)).GetProperty("closureReason").GetString());
+        Assert.Equal(found.Id, Assert.Single(await Items("?type=Found&state=Open", 1)).GetProperty("id").GetGuid());
+        Assert.Equal("Withdrawn", Assert.Single(await Items("?state=Closed&closureReason=Withdrawn", 1)).GetProperty("closureReason").GetString());
+        Assert.Empty(await Items("?type=Found&closureReason=Recovered", 0));
+        JsonElement first = Assert.Single(await Items("?pageSize=1", 4));
+        JsonElement second = Assert.Single(await Items("?pageSize=1&pageIndex=1", 4));
+        Assert.NotEqual(first.GetProperty("id").GetGuid(), second.GetProperty("id").GetGuid());
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(MinePath + "?state=Unknown")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(MinePath + "?pageSize=2&pageIndex=2147483647")).StatusCode);
+        SignIn(client, factory, other.AuthorId);
+        Assert.Equal(other.Id, Assert.Single(await Items("", 1)).GetProperty("id").GetGuid());
+    }
+
+    private static Listing Open(ListingType type, Category category, Guid? authorId = null)
+    {
+        Guid owner = authorId ?? Guid.NewGuid();
         var listing = Listing.CreateDraft(owner, type);
         listing.UpdateDetails(owner, listing.Revision, "Keys", "Silver", "Campus", new DateOnly(2025, 1, 1), DateTime.UtcNow);
         listing.AddCategory(owner, listing.Revision, category);

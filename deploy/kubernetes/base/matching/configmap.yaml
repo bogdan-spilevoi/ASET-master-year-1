@@ -7,7 +7,7 @@ metadata:
 data:
   appsettings.json: |
     {
-      "AiRuntime": { "BaseUrl": "https://obedience-dill-resale.ngrok-free.dev", "PhotoDirectory": "/app/ai-photos", "CallTimeout": "00:02:00" },
+      "AiRuntime": { "BaseUrl": "https://slightly-violin-handmade.ngrok-free.dev/", "PhotoDirectory": "/app/ai-photos", "CallTimeout": "00:02:00" },
       "MockAdapters": { "SlowDelay": "00:00:03" },
       "DraftAnalysis": { "WorkerEnabled": true },
       "RabbitMq": {

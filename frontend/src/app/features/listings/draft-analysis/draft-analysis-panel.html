@@ -1,0 +1,42 @@
+<fieldset [disabled]="disabled()">
+  <legend>Photo analysis</legend>
+  <div aria-live="polite">
+    @for (operation of operations; track operation.kind) {
+      @let status = snapshot()?.[operation.kind];
+      @let error = requestErrors()[operation.kind];
+      <p>{{ operation.label }} ·
+        @if (error && (!status || status.state === 'NotRequested')) {
+          Request unconfirmed. {{ error }}
+          <button type="button" [disabled]="submitting()" (click)="submit([operation.kind])">Retry request</button>
+        } @else if (status?.state === 'Failed') {
+          Failed @if (status?.errorCode) { ({{ status?.errorCode }}) }
+        } @else { {{ status && status.state !== 'NotRequested' ? status.state : 'Waiting' }} }
+      </p>
+    }
+  </div>
+  @if (snapshot()?.traits?.state === 'Failed' || snapshot()?.embedding?.state === 'Failed') {
+    <p role="alert">Analysis failed for this photo. Return to the item board to start a new draft with another photo.</p>
+  }
+  @if (readError()) {
+    <p role="alert">Could not check analysis. {{ readError() }}
+      <button type="button" [disabled]="submitting()" (click)="poll()">Check again</button>
+    </p>
+  }
+  @if (phase() === 'ready') {
+    @if (choices().length) {
+      <p>Select the traits that describe your item.</p>
+      <div class="choices">
+        @for (value of choices(); track value) {
+          <label><input #box type="checkbox" [checked]="selected().includes(value)" (change)="toggle(value, box.checked)">{{ value }}</label>
+        }
+      </div>
+    } @else { <p>No traits were suggested for this photo.</p> }
+    <div class="manual-trait">
+      <label>Custom trait
+        <input type="text" [formControl]="traitText"
+          (keydown.enter)="$event.preventDefault(); addTrait()">
+      </label>
+      <button type="button" [disabled]="!traitText.value.trim()" (click)="addTrait()">Add trait</button>
+    </div>
+  }
+</fieldset>

@@ -1,0 +1,40 @@
+.draft { position: relative; }
+.photo {
+  display: block;
+  width: 100%;
+  height: clamp(10rem, 32vw, 15rem);
+  object-fit: contain;
+  background: #f2f5f0;
+  border-radius: 8px;
+}
+.fields { display: grid; gap: 1rem; min-width: 0; margin: 0; padding: 0; border: 0; }
+.analysis-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: clamp(3rem, 10vw, 5rem);
+  background: rgb(0 0 0 / 24%);
+  border-radius: 8px;
+}
+.analysis-indicator {
+  display: grid;
+  justify-items: center;
+  gap: .65rem;
+  padding: .7rem 1.15rem;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 72%);
+  color: white;
+  font-weight: 600;
+}
+.spinner {
+  width: 1.65rem;
+  height: 1.65rem;
+  border: 3px solid rgb(255 255 255 / 35%);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }

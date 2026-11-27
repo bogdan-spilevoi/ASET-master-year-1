@@ -20,7 +20,7 @@ public sealed class ListingsPersistenceTests
         Assert.Equal("Npgsql.EntityFrameworkCore.PostgreSQL", context.Database.ProviderName);
         Assert.False(context.Database.HasPendingModelChanges());
         IMigrationsAssembly assembly = context.GetService<IMigrationsAssembly>();
-        Assert.Equal(3, assembly.Migrations.Count);
+        Assert.Equal(4, assembly.Migrations.Count);
         KeyValuePair<string, System.Reflection.TypeInfo> entry = Assert.Single(assembly.Migrations, item => item.Key.EndsWith("_InitialCreate", StringComparison.Ordinal));
         Assert.EndsWith("_InitialCreate", entry.Key, StringComparison.Ordinal);
         Migration migration = assembly.CreateMigration(entry.Value, context.Database.ProviderName!);
@@ -40,7 +40,8 @@ public sealed class ListingsPersistenceTests
         Assert.Contains("CREATE UNIQUE INDEX \"IX_Photos_ListingId\"", script, StringComparison.Ordinal);
         Assert.Contains("CREATE UNIQUE INDEX \"IX_Recoveries_MatchDecisionId\"", script, StringComparison.Ordinal);
         Assert.Contains("CREATE UNIQUE INDEX \"IX_CredibilityEntries_RecoveryId\"", script, StringComparison.Ordinal);
-        string rollback = context.GetService<IMigrator>().GenerateScript(entry.Key, Migration.InitialDatabase);
+        string rollback = context.GetService<IMigrator>().GenerateScript(assembly.Migrations.Keys.Last(), Migration.InitialDatabase);
+        Assert.Contains("DROP PROCEDURE merge_listing_category", rollback, StringComparison.Ordinal);
         Assert.Contains("DROP TABLE \"Listings\"", rollback, StringComparison.Ordinal);
     }
 

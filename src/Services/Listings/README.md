@@ -6,6 +6,8 @@ Listings for the semester MVP.
 
 ## Current state
 
+The authenticated owner list includes drafts, open and closed reports. The [API guide](SmartLost.ListingsService.Api/README.md#my-listings) describes its filters.
+
 The [Domain model](SmartLost.ListingsService.Domain/README.md) has conventional .NET
 entities with shared aggregate/entity bases, guarded partial methods, private setters,
 protected collections and local domain events. Each entity is maintained manually in
@@ -21,8 +23,10 @@ Its [Dockerfile](SmartLost.ListingsService.Api/Dockerfile) and the root Compose 
 run the API beside its own database, retaining a separate data volume.
 A standalone [worker](SmartLost.ListingsService.Worker/README.md) supports read-only Inspect
 and RabbitMQ Publish modes. Local Kubernetes enables confirmed, persistent publishing to
-a durable queue. Authenticated users can [upload a draft with a photo](SmartLost.ListingsService.Api/README.md#upload-a-draft-from-swagger). Owners can request Qwen traits and DINO embeddings separately and poll the analysis from Listings Swagger. Owners can edit and publish drafts, then record manual decisions, recovery or withdrawal. See the [Swagger walkthrough](SmartLost.ListingsService.Api/README.md#publish-and-recover-from-swagger).
+a durable queue. Authenticated users can [upload a draft with a photo](SmartLost.ListingsService.Api/README.md#upload-a-draft-from-swagger). Owners can request Qwen traits and DINO embeddings separately and poll the analysis from Listings Swagger. Owners can reopen a draft with its photo, save partial edits, delete the draft or publish it, then record manual decisions, recovery or withdrawal. See the [Swagger walkthrough](SmartLost.ListingsService.Api/README.md#publish-and-recover-from-swagger).
 Runtime layers do not reference Modeling or NMF.
+
+The public board requests a JPEG preview for visible report cards. Opening a report requests the full uploaded image. Both reads check that the listing is Open and has a stored photo payload.
 
 The API registers shared profiling, authorization and caching behaviors. Catalog and Open listing reads are public. Private drafts require the owner. Only GetCategoriesQuery is cacheable. Profiling observes every MediatR
 request, while listing/detail reads still query current data.
@@ -126,6 +130,10 @@ See [container setup, seed and lifecycle commands](SmartLost.ListingsService.Api
 - [Application architecture](../../../docs/SMARTLOST.md)
 - [Listings component diagrams](../../../docs/diagrams/member-4/README.md)
 - [Azure and local AI plan](../../../docs/AZURE_STUDENT_ARCHITECTURE.md)
+
+## Reusable categories
+
+A draft stores the owner’s proposed item type and optional broader class. Publication resolves the normalized name in the Listings catalog and attaches its ID in the same transaction as the listing. A new category is immediately selectable on subsequent catalog reads. Operators can periodically [review and merge synonyms](SmartLost.ListingsService.Infrastructure/README.md#category-review).
 
 ## Category query caching
 

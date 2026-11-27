@@ -2,12 +2,17 @@
 
 Application depends on Domain and BuildingBlocks.Application. It has no EF Core or
 Infrastructure dependency. CreateDraftCommand uses the authenticated subject, constructs a Lost/Found draft and stages its photo through IDraftPhotoStore inside the transaction behavior. Only
-GetCategoriesQuery opts into the shared caching behavior (300-second absolute TTL).
+GetCategoriesQuery opts into the shared caching behavior (300-second absolute TTL). DeleteDraftCommand loads an owned draft and stages its removal in the command transaction.
+
+PatchDraftCommand can stage a normalized item type and optional broad class on the private draft. PublishDraftCommand resolves the category through ICategoryCatalog and publishes in the same unit of work. Catalog reads include the committed version in the cache key.
 
 | Query | Handler | Read-store port |
 | --- | --- | --- |
 | [GetCategoriesQuery](Queries/GetCategories/GetCategoriesQuery.cs) | GetCategoriesQueryHandler | GetCategoriesAsync |
 | [GetListingsQuery](Queries/GetListings/GetListingsQuery.cs) | GetListingsQueryHandler | GetOpenListingsAsync |
+| [GetListingPhotoQuery](Queries/GetListingPhoto/GetListingPhotoQuery.cs) | GetListingPhotoQueryHandler | GetOpenListingPhotoAsync (Open reports with stored bytes) |
+| [GetDraftPhotoQuery](Queries/GetDraftPhoto/GetDraftPhotoQuery.cs) | GetDraftPhotoQueryHandler | ReadOwnedDraftPhotoAsync |
+| [GetMyListingsQuery](Queries/GetMyListings/GetMyListingsQuery.cs) | GetMyListingsQueryHandler | GetOwnedListingsAsync (authenticated user ID, optional filters and pagination) |
 | [GetListingByIdQuery](Queries/GetListingById/GetListingByIdQuery.cs) | GetListingByIdQueryHandler | GetOpenListingAsync |
 
 [AddListingsApplication](DependencyInjection.cs) registers MediatR/validators using the

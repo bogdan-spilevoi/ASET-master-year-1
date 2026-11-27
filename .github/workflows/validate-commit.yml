@@ -416,6 +416,9 @@ jobs:
                 Sort-Object FullName
             }
           })
+          if (Test-Path 'frontend/Dockerfile') {
+            $dockerfiles += Get-Item 'frontend/Dockerfile'
+          }
           if ($dockerfiles.Count -eq 0) {
             'No Dockerfiles yet; container creation is not applicable.'
             exit 0
@@ -425,7 +428,8 @@ jobs:
           $sha = (git rev-parse HEAD).Trim()
           for ($index = 0; $index -lt $dockerfiles.Count; $index++) {
             $tag = "aset-ci/service-$index`:$sha"
-            docker build --pull --file $dockerfiles[$index].FullName --tag $tag .
+            $context = if ($dockerfiles[$index].Directory.Name -eq 'frontend') { 'frontend' } else { '.' }
+            docker build --pull --file $dockerfiles[$index].FullName --tag $tag $context
             trivy image --exit-code 1 --severity HIGH,CRITICAL --scanners vuln,secret $tag
             trivy image --format cyclonedx --output "$output/service-$index.sbom.json" $tag
             docker save --output "$output/service-$index.tar" $tag

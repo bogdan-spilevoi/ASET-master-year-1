@@ -6,6 +6,8 @@ and Listings publish Outbox events to the shared RabbitMQ broker. Listings and M
 share a Redis query cache. Each database and the broker have a separate 1 GiB PVC.
 Explicit migration Jobs prepare the databases before API rollout.
 
+The [Angular web client](../../frontend/) runs in a separate Deployment behind the `smartlost-web` ClusterIP Service. Its Nginx serves the SPA and proxies browser API traffic to the Auth and Listings services on port 80.
+
 ## Short local commands
 
 Use the executable [root helper](../../k8s.sh) from the repository root (Bash on macOS/Linux):
@@ -14,6 +16,8 @@ Use the executable [root helper](../../k8s.sh) from the repository root (Bash on
 ./k8s.sh help
 ./k8s.sh config                  # First setup: create ignored files, then edit their placeholders
 ./k8s.sh up                      # Create/reuse Kind, build/load all images, infra, migrations, rollout
+./k8s.sh deploy web              # Rebuild and deploy the web client only
+./k8s.sh ui web                  # Forward localhost:4200 to the web Service
 ./k8s.sh deploy auth             # Rebuild/load Auth API/worker/bundle, migrate auth-db, start Mailpit and ensure the shared broker is running
 ./k8s.sh deploy listings         # Rebuild/load Listings API/worker/bundle, load, migrate, rollout
 ./k8s.sh deploy matching         # Update Matching API and migration bundle with the shared Redis cache
@@ -184,7 +188,8 @@ docker build --provenance=false --file src/Services/Listings/SmartLost.ListingsS
 docker build --provenance=false --file src/Services/Matching/SmartLost.MatchingService.Api/Dockerfile --tag smartlost-matching-api:local .
 docker build --provenance=false --file src/Services/Matching/SmartLost.MatchingService.Api/Dockerfile --target migrations --tag smartlost-matching-migrations:local .
 docker build --provenance=false --file deploy/kubernetes/images/rabbitmq/Dockerfile --tag smartlost-rabbitmq:local .
-kind load docker-image smartlost-auth-api:local smartlost-auth-worker:local smartlost-auth-migrations:local smartlost-listings-api:local smartlost-listings-migrations:local smartlost-listings-worker:local smartlost-matching-api:local smartlost-matching-migrations:local smartlost-rabbitmq:local --name smartlost-local
+docker build --provenance=false --tag smartlost-web:local frontend
+kind load docker-image smartlost-web:local smartlost-auth-api:local smartlost-auth-worker:local smartlost-auth-migrations:local smartlost-listings-api:local smartlost-listings-migrations:local smartlost-listings-worker:local smartlost-matching-api:local smartlost-matching-migrations:local smartlost-rabbitmq:local --name smartlost-local
 ```
 
 `--provenance=false` avoids Docker Desktop attestation-index import failures when loading

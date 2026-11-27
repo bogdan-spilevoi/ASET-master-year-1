@@ -13,6 +13,7 @@ public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
         builder.Property(category => category.Id).ValueGeneratedNever();
         builder.Ignore(category => category.DomainEvents);
         builder.Property(category => category.NormalizedName).IsRequired();
-        builder.HasIndex(category => category.NormalizedName);
+        builder.HasIndex(category => category.NormalizedName).IsUnique();
+        builder.HasOne<Category>().WithMany().HasForeignKey(category => category.MergedIntoId).OnDelete(DeleteBehavior.Restrict);
     }
 }

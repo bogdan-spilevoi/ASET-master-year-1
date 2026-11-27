@@ -18,7 +18,7 @@ sequenceDiagram
     participant M as Matching
     participant DB as Matching PostgreSQL
     participant AI as Laptop AI
-    Owner->>L: 1. POST traits or embedding with JWT
+    Owner->>L: 1. Angular requests traits and embedding after draft creation via Listings
     L->>O: 2. Enqueue once for owned draft and current photo revision
     L-->>Owner: 3. 202 with analysis URL
     O->>R: 4. Publish versioned request with broker confirmation
@@ -83,7 +83,7 @@ flowchart LR
     Pipeline -->|"5. Valid request"| Handler
     Handler -->|"6. Suggestions: read source projection"| DB
     Handler -->|"6.1 Select candidates"| Selector
-    Selector -->|"6.1.1 Coarse pool query; domain rules applied in memory"| DB
+    Selector -->|"6.1.1 Read eligible opposite-type projections; prefer exact category, then broader class if none qualify"| DB
     Handler -->|"6.2 Rank candidates"| Ranker
     Ranker -->|"6.2.1 Read cached vectors only"| DB
     Selector -->|"6.3 Record duration and counts"| Profiler

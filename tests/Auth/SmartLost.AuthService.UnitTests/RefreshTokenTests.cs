@@ -57,6 +57,34 @@ public sealed class RefreshTokenTests
     }
 
     [Fact]
+    public async Task LogoutRevokesOnlyThePresentedTokenFamilyAndCanBeRetried()
+    {
+        using SqliteAuthFixture fixture = new();
+        AuthResponse first = await RegisterAsync(fixture.Client);
+        using HttpResponseMessage login = await fixture.Client.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest { Email = first.Email, Password = "ValidPassword123!" });
+        AuthResponse second = (await login.Content.ReadFromJsonAsync<AuthResponse>())!;
+        using HttpResponseMessage rotation = await RefreshAsync(fixture.Client, first.RefreshToken);
+        AuthResponse rotated = (await rotation.Content.ReadFromJsonAsync<AuthResponse>())!;
+
+        async Task<HttpStatusCode> LogoutAsync(string token)
+        {
+            using HttpResponseMessage response = await fixture.Client.PostAsJsonAsync("/api/auth/logout",
+                new RefreshRequest { RefreshToken = token });
+            return response.StatusCode;
+        }
+
+        Assert.Equal(HttpStatusCode.BadRequest, await LogoutAsync("invalid"));
+        Assert.Equal(HttpStatusCode.NoContent, await LogoutAsync(first.RefreshToken));
+        using HttpResponseMessage revoked = await RefreshAsync(fixture.Client, rotated.RefreshToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, revoked.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, await LogoutAsync(rotated.RefreshToken));
+        Assert.Equal(HttpStatusCode.NoContent, await LogoutAsync(new string('A', 86)));
+        using HttpResponseMessage active = await RefreshAsync(fixture.Client, second.RefreshToken);
+        Assert.Equal(HttpStatusCode.OK, active.StatusCode);
+    }
+
+    [Fact]
     public async Task ReplayingAnOldTokenRevokesItsSessionButNotAnotherLogin()
     {
         using SqliteAuthFixture fixture = new();

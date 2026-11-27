@@ -11,5 +11,6 @@ public interface IListingLifecycleStore
     Task<MatchDecision?> FindReviewedPairAsync(Listing lost, Listing found, CancellationToken token);
     Task<bool> IsReservedOrRecoveredAsync(Guid lostId, Guid foundId, CancellationToken token);
     Task<MatchDecision> GetOwnedDecisionAsync(Guid id, Guid authorId, CancellationToken token);
+    void Remove(Listing draft);
     void Add(MatchDecision decision);
 }

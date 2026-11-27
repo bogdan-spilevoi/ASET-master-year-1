@@ -252,7 +252,7 @@ in Redis when `ConnectionStrings:Redis` is configured, or in a process-local sto
 otherwise. Keys are scoped as `smartlost:<service>:<environment>:`. Same-key misses are
 coordinated within a process. Store outages and unreadable entries run the handler once
 instead of failing the request. See [complete policy, tests and AOP explanation](QUERY_CACHING.md).
-No mutation invalidation is implemented.
+Listings passes its persisted category catalog version into the query key. The shared cache expires previous entries after their TTL.
 
 ## Pagination
 

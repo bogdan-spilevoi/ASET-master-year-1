@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using SmartLost.BuildingBlocks.Application.Transactions;
 using SmartLost.Contracts.Listings;
 using SmartLost.ListingsService.Domain.Entities;
 using SmartLost.ListingsService.Domain.Enums;
@@ -26,12 +27,12 @@ public sealed class ListingsMigrationIntegrationTests
             .UseNpgsql(database.GetConnectionString()).Options;
         await using ListingsDbContext context = new(options);
         await context.Database.MigrateAsync(timeout.Token);
-        Assert.Equal(3, (await context.Database.GetAppliedMigrationsAsync(timeout.Token)).Count());
+        Assert.Equal(4, (await context.Database.GetAppliedMigrationsAsync(timeout.Token)).Count());
         Assert.Empty(await context.Database.GetPendingMigrationsAsync(timeout.Token));
         Assert.False(context.Database.HasPendingModelChanges());
         DateTime now = new(2026, 11, 4, 12, 0, 0, DateTimeKind.Utc);
         Listing lost = CreateListing(ListingType.Lost, now);
-        Listing found = CreateListing(ListingType.Found, now);
+        Listing found = CreateListing(ListingType.Found, now, lost.Categories.Single().Category);
         context.Listings.AddRange(lost, found);
         await context.SaveChangesAsync(timeout.Token);
         context.ChangeTracker.Clear();
@@ -56,7 +57,7 @@ public sealed class ListingsMigrationIntegrationTests
         found = await context.Listings.SingleAsync(value => value.Type == ListingType.Found, timeout.Token);
         Assert.Null(lost.Photo);
         Assert.Single(lost.Categories);
-        Assert.Equal(3, await context.Categories.CountAsync(timeout.Token));
+        Assert.Equal(2, await context.Categories.CountAsync(timeout.Token));
         Assert.Equal("new trait", Assert.Single(lost.Traits));
         var decision = MatchDecision.CreateSuggested(lost, found);
         context.MatchDecisions.Add(decision);
@@ -89,16 +90,53 @@ public sealed class ListingsMigrationIntegrationTests
         await context.GetService<IMigrator>().MigrateAsync(Migration.InitialDatabase, timeout.Token);
         Assert.Empty(await context.Database.GetAppliedMigrationsAsync(timeout.Token));
         await context.Database.MigrateAsync(timeout.Token);
-        Assert.Equal(3, (await context.Database.GetAppliedMigrationsAsync(timeout.Token)).Count());
+        Assert.Equal(4, (await context.Database.GetAppliedMigrationsAsync(timeout.Token)).Count());
         Assert.Empty(await context.Listings.ToListAsync(timeout.Token));
     }
 
-    private static Listing CreateListing(ListingType type, DateTime now)
+    [Fact]
+    public async Task ConcurrentPublicationsReuseOneCategoryAndReviewPreservesExistingAssignmentsAndAliases()
+    {
+        await using PostgreSqlContainer database = new PostgreSqlBuilder("postgres:16-alpine").Build();
+        using CancellationTokenSource timeout = new(TimeSpan.FromMinutes(2));
+        CancellationToken token = timeout.Token;
+        await database.StartAsync(token);
+        DbContextOptions<ListingsDbContext> options = new DbContextOptionsBuilder<ListingsDbContext>()
+            .UseNpgsql(database.GetConnectionString()).Options;
+        await using ListingsDbContext db = new(options);
+        await db.Database.MigrateAsync(token);
+
+        async Task<Guid> PublishAsync(string name)
+        {
+            await using ListingsDbContext writer = new(options);
+            ListingsUnitOfWork unitOfWork = new(writer);
+            await using ITransaction transaction = await unitOfWork.BeginTransactionAsync(token);
+            Category category = await new CategoryCatalog(writer).ResolveAsync(name, "electronics", token);
+            Listing listing = CreateListing(ListingType.Lost, new DateTime(2026, 11, 4, 12, 0, 0, DateTimeKind.Utc), category);
+            writer.Add(listing);
+            await unitOfWork.SaveChangesAsync(token);
+            await transaction.CommitAsync(token);
+            return category.Id;
+        }
+
+        Guid[] same = await Task.WhenAll(PublishAsync("headphones"), PublishAsync("headphones"));
+        Assert.Equal(same[0], same[1]);
+        Guid synonym = await PublishAsync("headset");
+        await db.Database.ExecuteSqlInterpolatedAsync($"CALL merge_listing_category({synonym}, {same[0]})", token);
+        Assert.Equal(3, await db.ListingCategories.CountAsync(a => a.CategoryId == same[0], token));
+        Assert.Equal(same[0], await PublishAsync("headset"));
+        Assert.Equal(4, await db.ListingCategories.CountAsync(a => a.CategoryId == same[0], token));
+        Assert.Single(await new ListingsReadStore(db).GetCategoriesAsync(token));
+        List<Category> resolved = await new ListingLifecycleStore(db).GetCategoriesAsync([synonym, same[0]], token);
+        Assert.Equal(same[0], Assert.Single(resolved).Id);
+    }
+
+    private static Listing CreateListing(ListingType type, DateTime now, Category? category = null)
     {
         var listing = Listing.CreateDraft(Guid.NewGuid(), type);
         listing.UpdateDetails(listing.AuthorId, listing.Revision, "Bag", "Blue bag", "Library", new DateOnly(2026, 11, 3), now,
             traits: ["large bag"]);
-        listing.AddCategory(listing.AuthorId, listing.Revision, Category.Create("bag"));
+        listing.AddCategory(listing.AuthorId, listing.Revision, category ?? Category.Create("bag"));
         listing.ReplacePhoto(listing.AuthorId, listing.Revision, Photo.Create("private/photo", "image/png", 100));
         listing.Publish(listing.AuthorId, listing.Revision, now);
         return listing;

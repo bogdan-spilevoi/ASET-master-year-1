@@ -1,21 +1,58 @@
 # Listings communication diagrams
 
 Domain implements in-process business behavior. Infrastructure implements EF persistence
-and explicit migration tooling. API/Application implement three public read queries
+and explicit migration tooling. API/Application implement public read queries
 through MediatR. Authenticated draft upload and private photo delivery are described below.
 Modeling is a separate NMF representation; runtime projects do not reference it.
 
 
+
+## Public report photos
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant API as Listings API via Nginx
+    participant DB as Listings PostgreSQL
+    Browser->>API: 1. Request visible board photos with preview=true
+    API->>DB: 2. Read payload by listing ID and Open state
+    API-->>Browser: 3. JPEG preview up to 480 pixels, or 404
+    Browser->>API: 4. Open a report and request its full photo
+    API->>DB: 5. Check visibility again and read payload
+    API-->>Browser: 6. Original JPEG or PNG, or 404
+```
+
+## My listings
+
+```mermaid
+sequenceDiagram
+    actor Owner
+    participant Web as SmartLost web
+    participant API as Listings API
+    participant DB as Listings PostgreSQL
+    Owner->>Web: 1. Open Profile or select an owner filter
+    Web->>API: 2. GET /api/listings/mine with JWT and paging
+    API->>DB: 3. Count and page by authenticated author and optional filters
+    DB-->>API: 4. Matching summaries and total
+    API-->>Web: 5. Return private page, or 401 for missing identity / 400 for invalid filters
+```
 
 ## Draft publication and manual recovery
 
 ```mermaid
 sequenceDiagram
     actor Owner
+    participant Web as smartlost-web Nginx
     participant API as Listings API and MediatR
     participant DB as Listings PostgreSQL
+    Owner->>Web: 0.1 Angular submits listing requests with same-origin URLs
+    Web->>API: 0.2 Forward public API path, body and bearer token
     Owner->>API: 1. GET or PATCH private draft with JWT
     API->>DB: 2. Read owned draft or save partial edits at expected revision
+    Owner->>API: 2.1 GET owned draft photo from the profile editor
+    API->>DB: 2.2 Read bytes by draft ID, author and Draft state
+    Owner->>API: 2.3 Alternatively DELETE a draft from Profile
+    API->>DB: 2.4 Commit deletion of owned draft with cascading photo and category assignments
     Owner->>API: 3. Publish latest revision
     API->>DB: 4. Validate required fields and commit Open state with Outbox
     Owner->>API: 5. Submit Lost and Found IDs, revisions and Accept or Reject
@@ -41,7 +78,7 @@ sequenceDiagram
     participant M as Matching
     participant DB as Matching PostgreSQL
     participant AI as Laptop AI
-    Owner->>L: 1. POST traits or embedding with JWT
+    Owner->>L: 1. After draft upload the Angular editor requests traits and embedding with JWT
     L->>O: 2. Enqueue once for owned draft and current photo revision
     L-->>Owner: 3. 202 with analysis URL
     O->>R: 4. Publish versioned request with broker confirmation
@@ -224,6 +261,7 @@ flowchart LR
     DB[("Listings PostgreSQL")]
     Result["Typed Result / HTTP adapter"]
     Client -->|"1. GET categories, filtered listings or details"| API
+    API -->|"1.1 Categories: read catalog version for the cache key"| DB
     API -->|"2. Bind input; send query and cancellation"| Validation
     Validation -->|"3. Valid query"| Aspect
     Validation -->|"3.1 Invalid query: HTTP 400"| Result
@@ -254,8 +292,7 @@ coordinate them. Replicas are not coordinated with each other. Hits skip the han
 store. Failure Results, thrown exceptions and cancellation are not stored. Cancelled
 waiters do not cancel another request's population. Unreadable entries and Redis outages
 run the handler once and never fail the request. GetCategoriesQueryHandler returns a
-read-only snapshot of immutable CategoryDto records, and hits come back as read-only lists. Direct catalog changes
-can remain stale until expiry; mutation invalidation is not implemented in this phase.
+read-only snapshot of immutable CategoryDto records, and hits come back as read-only lists. Catalog creation, enrichment and synonym merges increment the version in their database transaction. Subsequent reads use the new version across replicas.
 
 Read requests do not write, start an application transaction or call Auth/Matching/Blob
 Storage. Cancellation reaches EF on misses; unexpected exceptions use the shared generic
@@ -287,8 +324,7 @@ create/migrate a database or upload an image; one fixture carries photo metadata
 The separate SeedData:Only flag requests seeding even when SeedData:Enabled is false;
 it is rejected outside Development before any seed writes. seed.sh uses the existing
 API connection settings and finishes without opening an HTTP listener. Startup-enabled
-seeding instead continues into the regular read API. Neither mode invalidates the cache
-of a separately running API process; its categories can stay stale until TTL/restart.
+seeding instead continues into the regular read API. In either mode, newly seeded categories advance the version read by every API replica.
 Repeated sequential runs preserve existing fixture records. Read endpoints expose the
 four Open samples; Draft/Withdrawn fixtures remain hidden. Canonical local connection
 settings now live beside the API; Infrastructure links that same file for EF CLI.
@@ -460,6 +496,7 @@ and the [verification report](../../../docs/LISTINGS_EF_COMPATIBILITY.md).
 ```mermaid
 flowchart LR
     Client -->|"1. Publish owned draft"| Listings
+    Listings -->|"1.1 Resolve reviewed name or alias, attach category and advance catalog version on change"| Catalog[("Listings DB, same publication transaction")]
     Listings -->|"2. Save Open listing and metadata notification"| DB[(Listings PostgreSQL)]
     Worker -->|"3. Read Outbox and publish listing change"| RabbitMQ
     DB -->|"3.1 Return pending notifications"| Worker

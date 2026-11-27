@@ -50,6 +50,11 @@ public sealed class MatchingInfrastructureTests
         Migration analysis = assembly.CreateMigration(analysisEntry.Value, context.Database.ProviderName!);
         Assert.Equal("PhotoAnalyses", Assert.Single(analysis.DownOperations.OfType<DropTableOperation>()).Name);
         Assert.NotNull(analysis.TargetModel!.FindEntityType(typeof(SmartLost.MatchingService.Infrastructure.Analysis.PhotoAnalysisWork)));
+        KeyValuePair<string, System.Reflection.TypeInfo> categoryEntry = Assert.Single(assembly.Migrations, item => item.Key.EndsWith("_SearchCategoryBroadClass", StringComparison.Ordinal));
+        Migration category = assembly.CreateMigration(categoryEntry.Value, context.Database.ProviderName!);
+        Assert.True(Assert.Single(category.UpOperations.OfType<AddColumnOperation>()).IsNullable);
+        Assert.Equal("BroadClass", Assert.Single(category.DownOperations.OfType<DropColumnOperation>()).Name);
+        Assert.NotNull(category.TargetModel.FindEntityType(typeof(SearchListing).FullName!)?.FindProperty(nameof(SearchListing.BroadClass)));
         string script = context.GetService<IMigrator>().GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent);
         Assert.Contains("CREATE UNIQUE INDEX \"UX_ImageEmbeddings_Target\"", script, StringComparison.Ordinal);
         Assert.Contains("CK_SearchListings_CurrentPhoto", script, StringComparison.Ordinal);

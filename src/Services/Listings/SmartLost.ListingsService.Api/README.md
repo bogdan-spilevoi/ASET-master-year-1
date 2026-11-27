@@ -6,6 +6,21 @@ Only GET /api/categories uses server-side query caching (300-second absolute TTL
 listing list/details remain uncached. Draft uploads require an Auth access token. Public listing reads
 always filter to Open; callers cannot request Draft/Closed data through these endpoints.
 
+## My listings
+
+`GET /api/listings/mine` requires a bearer token. It returns a zero-based page for the authenticated author. Each item includes its ID, title, location, optional occurrence date, type, state and optional closure reason. Filters can be combined.
+
+| UI filter | Query string |
+| --- | --- |
+| All | Omit filters |
+| Draft | `?state=Draft` |
+| Open | `?state=Open` |
+| Found | `?type=Found` |
+| Closed | `?state=Closed` |
+| Recovered | `?closureReason=Recovered` |
+
+Found includes the author's found-item reports in any state. Closed includes both recovered and withdrawn reports. For example, `?type=Found&state=Open&pageIndex=0&pageSize=12` returns the first page of the author's open found-item reports. Missing authentication returns 401 and invalid filters or pagination return 400.
+
 ## Upload a draft from Swagger
 
 1. Deploy Listings and Matching to local Kind with `./k8s.sh deploy listings` and `./k8s.sh deploy matching`. Log in to Auth and copy the access token.
@@ -16,6 +31,8 @@ always filter to Open; callers cannot request Draft/Closed data through these en
 Matching can retrieve the original bytes from `GET /internal/listings/{listingId}/photos/{photoId}/revisions/{revision}` through ClusterIP `http://listings-photos`. Only the private listener on container port 8082 serves this route. It requires the dedicated `X-Listings-Photo-Key` header. An unknown reference returns 404. Seeded metadata has no uploaded bytes. Uploading a draft does not start inference.
 
 Kind reuses the Auth JWT signing key and provisions the shared photo-reader Secret with `k8s.sh`. For Compose, set `Jwt:SigningKey` in the ignored Listings Docker settings to the Auth value, match `Jwt:Issuer` and `Jwt:Audience` if customized, and set a random `LISTINGS_PHOTO_API_KEY` in the ignored root `.env`. For direct host runs set `ListingsPhotos__ApiKey` for both processes and `Jwt__SigningKey` for Listings. The default local photo-client origin is `http://localhost:8082`.
+
+From Profile or Swagger, the owner can fetch the original image using `GET /api/listings/drafts/{id}/photo` and discard the draft with `DELETE /api/listings/drafts/{id}` (204). Both require the owner's JWT. Unknown IDs, other owners' drafts and published listings return 404. A photo without an uploaded payload also returns 404.
 
 ## Analyze the uploaded draft
 
@@ -34,7 +51,7 @@ Kind enables the pipeline and sets broker credentials, routing and internal serv
 ## Publish and recover from Swagger
 
 1. Use the owner's bearer token. Read `GET /api/listings/drafts/{id}` for private content, photo metadata and the current revision.
-2. Get category IDs from `GET /api/categories`. Send `PATCH /api/listings/drafts/{id}` with the current revision. You can save partial drafts before AI finishes. For example, supply a real category ID in this body:
+2. Choose an existing or new category name. Send `PATCH /api/listings/drafts/{id}` with the current revision. You can save partial drafts before AI finishes. For example:
 
    ```json
    {
@@ -45,12 +62,13 @@ Kind enables the pipeline and sets broker credentials, routing and internal serv
      "occurredOn": "2026-01-15",
      "colour": "blue",
      "traits": ["front pocket"],
-     "categoryIds": ["00000000-0000-0000-0000-000000000001"]
+     "categoryName": "backpack",
+     "broadClass": "bags"
    }
    ```
 
-   Omitted or null fields keep their current values. Supply `[]` to clear a collection or an empty string to clear colour. Each successful patch returns the saved draft and its new revision. A stale revision returns 409.
-3. Send `POST /api/listings/drafts/{id}/publish` with `{"expectedRevision": 3}`, substituting the latest revision. Publication requires title, description, location, a valid occurrence date and at least one catalog category. A 204 makes the listing available on the public detail route. The AI host may be offline.
+   The draft keeps the proposed name private until publication. Existing clients can send `categoryIds` from `GET /api/categories` instead of a name and broad class. Omitting both category inputs preserves the choice. Supply `[]` to clear a collection or an empty string to clear colour. Each successful patch returns the saved draft and its new revision. A stale revision returns 409.
+3. Send `POST /api/listings/drafts/{id}/publish` with `{"expectedRevision": 3}`, substituting the latest revision. Publication requires title, description, location, a valid occurrence date and a reviewed category. A previously unseen name is created on successful publication. A 204 makes the listing available on the public detail route. The AI host may be offline.
 4. For a manual match, publish an opposite-type listing using a second account. Read both public details for the current revisions. As the Lost owner, send `POST /api/listings/{lostId}/match-decisions` with `foundListingId`, `lostRevision`, `foundRevision` and `choice` ("Accept" or "Reject"). The response includes `decisionId`. A reservation conflict or stale revision returns 409. A rejected decision applies to that reviewed pair.
 5. With the same token, send `POST /api/match-decisions/{decisionId}/cancel-acceptance` to release a reservation, or `POST /api/match-decisions/{decisionId}/confirm-recovery` after the physical return. These operations take no body. Confirmation returns a recovery ID, closes Lost and credits the finder once. Found stays Open and becomes ineligible for another recovery.
 6. The owner of an Open listing can call `POST /api/listings/{id}/withdraw` with its expected revision. Withdrawal closes the listing and invalidates outstanding decisions without creating a recovery or award.
@@ -76,7 +94,7 @@ produce ProblemDetails for 400/404; unexpected errors use the shared generic 500
 Summaries contain ID/type/title/location/occurrence/publication date, categories and
 optional photo metadata. Details also include description, colour, traits and content
 revision. Photo metadata contains only ID/format/byte size/revision. No private BlobKey,
-image URL or file bytes are exposed. Returning metadata does not imply an uploaded image.
+image URL or file bytes are included in the JSON. Anonymous clients can request `GET /api/listings/{id}/photo` for the original JPEG/PNG, or add `?preview=true` for a JPEG scaled proportionally to at most 480 pixels per side. Both variants return 404 for missing payloads, Draft or Closed listings. Returning metadata does not imply an uploaded image.
 
 ## Local setup
 

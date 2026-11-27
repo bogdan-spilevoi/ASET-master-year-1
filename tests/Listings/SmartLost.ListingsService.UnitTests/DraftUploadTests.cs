@@ -67,6 +67,47 @@ public sealed class DraftUploadTests
         Assert.Equal(bytes, content.ToArray());
     }
 
+    [Theory]
+    [InlineData(SKEncodedImageFormat.Jpeg, "image/jpeg")]
+    [InlineData(SKEncodedImageFormat.Png, "image/png")]
+    public async Task PublicPhotoFollowsListingVisibilityAndProvidesASmallerBoardImage(SKEncodedImageFormat format, string mediaType)
+    {
+        using ListingsApiFactory factory = new(seed: false);
+        using HttpClient client = factory.CreateClient();
+        using ListingsDbContext db = factory.CreateDbContext();
+        using var bitmap = new SKBitmap(960, 640);
+        using SKData encoded = bitmap.Encode(format, 90);
+        byte[] bytes = encoded.ToArray();
+        var owner = Guid.NewGuid();
+        var listing = Listing.CreateDraft(owner, SmartLost.Contracts.Listings.ListingType.Lost);
+        listing.ReplacePhoto(owner, listing.Revision, Photo.Create("test/photo", mediaType, bytes.Length));
+        new DraftPhotoStore(db).Add(listing, bytes);
+        await db.SaveChangesAsync();
+        string url = $"/api/listings/{listing.Id}/photo";
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(url)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(url + "?preview=true")).StatusCode);
+
+        listing.UpdateDetails(owner, listing.Revision, "Backpack", "Blue", "Campus", new DateOnly(2025, 1, 1), DateTime.UtcNow);
+        listing.AddCategory(owner, listing.Revision, Category.Create("bags"));
+        listing.Publish(owner, listing.Revision, DateTime.UtcNow);
+        await db.SaveChangesAsync();
+        using HttpResponseMessage full = await client.GetAsync(url);
+        full.EnsureSuccessStatusCode();
+        Assert.Equal(mediaType, full.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(bytes, await full.Content.ReadAsByteArrayAsync());
+        using HttpResponseMessage preview = await client.GetAsync(url + "?preview=true");
+        preview.EnsureSuccessStatusCode();
+        Assert.Equal("image/jpeg", preview.Content.Headers.ContentType?.MediaType);
+        using var thumbnail = SKBitmap.Decode(await preview.Content.ReadAsByteArrayAsync());
+        Assert.Equal(480, thumbnail.Width);
+        Assert.Equal(320, thumbnail.Height);
+
+        listing.Withdraw(owner, listing.Revision);
+        await db.SaveChangesAsync();
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(url)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(url + "?preview=true")).StatusCode);
+    }
+
     private static MultipartFormDataContent Form(string type, byte[] bytes)
     {
         return new MultipartFormDataContent

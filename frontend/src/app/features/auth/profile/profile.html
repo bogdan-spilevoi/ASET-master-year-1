@@ -1,0 +1,17 @@
+<section class="heading identity" aria-labelledby="profile-heading">
+  <div class="identity-header">
+    <h1 id="profile-heading">Profile</h1>
+    <button type="button" class="sign-out" (click)="logout()" [disabled]="pending()">{{ pending() ? 'Signing out…' : 'Sign out' }}</button>
+  </div>
+  @if (logoutError()) { <p role="alert">Sign out failed. {{ logoutError() }}</p> }
+  @if (profile | async; as info) {
+    @if (info.user; as user) {
+      <dl>
+        <div><dt>Username</dt><dd>{{ user.userName }}</dd></div>
+        <div><dt>Email</dt><dd>{{ user.email }}</dd></div>
+      </dl>
+    } @else { <p role="alert">{{ info.error }}</p> }
+  } @else { <p role="status">Loading profile…</p> }
+</section>
+
+<sl-my-listings />

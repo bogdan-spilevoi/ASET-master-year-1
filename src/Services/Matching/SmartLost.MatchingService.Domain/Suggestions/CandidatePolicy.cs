@@ -17,7 +17,8 @@ public static class CandidatePolicy
         ArgumentOutOfRangeException.ThrowIfNegative(foundBeforeLostToleranceDays);
 
         if (candidate.Id == source.Id || !candidate.Eligible || candidate.Type == source.Type ||
-            candidate.AuthorId == source.AuthorId || !candidate.CategoryKeys.Overlaps(source.CategoryKeys))
+            candidate.AuthorId == source.AuthorId || (!candidate.CategoryKeys.Overlaps(source.CategoryKeys) &&
+            (source.BroadClass is null || candidate.BroadClass != source.BroadClass)))
         {
             return false;
         }
@@ -30,6 +31,8 @@ public static class CandidatePolicy
         int foundBeforeLostToleranceDays = DefaultFoundBeforeLostToleranceDays)
     {
         ArgumentNullException.ThrowIfNull(pool);
-        return [.. pool.Where(candidate => IsCandidate(source, candidate, foundBeforeLostToleranceDays))];
+        SearchListing[] eligible = [.. pool.Where(candidate => IsCandidate(source, candidate, foundBeforeLostToleranceDays))];
+        SearchListing[] exact = [.. eligible.Where(candidate => candidate.CategoryKeys.Overlaps(source.CategoryKeys))];
+        return exact.Length > 0 ? exact : eligible;
     }
 }

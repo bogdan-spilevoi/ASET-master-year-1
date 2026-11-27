@@ -76,13 +76,22 @@ namespace SmartLost.ListingsService.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BroadClass")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("MergedIntoId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("NormalizedName")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("NormalizedName");
+                    b.HasIndex("MergedIntoId");
+
+                    b.HasIndex("NormalizedName")
+                        .IsUnique();
 
                     b.ToTable("Categories", (string)null);
                 });
@@ -137,6 +146,12 @@ namespace SmartLost.ListingsService.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Description")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("DraftBroadClass")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DraftCategoryName")
                         .HasColumnType("text");
 
                     b.Property<string>("Location")
@@ -279,6 +294,29 @@ namespace SmartLost.ListingsService.Infrastructure.Persistence.Migrations
                     b.ToTable("Recoveries", (string)null);
                 });
 
+            modelBuilder.Entity("SmartLost.ListingsService.Infrastructure.Persistence.CategoryCatalogState", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CategoryCatalogState", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Version = 0L
+                        });
+                });
+
             modelBuilder.Entity("SmartLost.ListingsService.Infrastructure.Persistence.PhotoPayload", b =>
                 {
                     b.Property<Guid>("PhotoId")
@@ -291,6 +329,14 @@ namespace SmartLost.ListingsService.Infrastructure.Persistence.Migrations
                     b.HasKey("PhotoId");
 
                     b.ToTable("PhotoPayloads", (string)null);
+                });
+
+            modelBuilder.Entity("SmartLost.ListingsService.Domain.Entities.Category", b =>
+                {
+                    b.HasOne("SmartLost.ListingsService.Domain.Entities.Category", null)
+                        .WithMany()
+                        .HasForeignKey("MergedIntoId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("SmartLost.ListingsService.Domain.Entities.CredibilityEntry", b =>

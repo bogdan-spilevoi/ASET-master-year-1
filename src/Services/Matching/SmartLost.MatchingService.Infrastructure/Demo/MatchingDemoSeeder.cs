@@ -64,7 +64,8 @@ public sealed class MatchingDemoSeeder(MatchingDbContext context, MatchingOption
             var listingId = Guid.Parse(seed.Id);
             PhotoReference? photo = seed.Appearance is null ? null : new PhotoReference(DerivePhotoId(listingId), 1);
             context.SearchListings.Add(SearchListing.Create(listingId, 1, 1, seed.Type, seed.AuthorId, photo, [seed.Category],
-                seed.Colour, [], _day.AddDays(seed.DayOffset), seed.Location, seed.Eligible));
+                seed.Colour, [], _day.AddDays(seed.DayOffset), seed.Location, seed.Eligible,
+                broadClass: seed.Category == "backpack" ? "containers" : "keys"));
             Guid? taskId = null;
             if (photo is not null)
             {

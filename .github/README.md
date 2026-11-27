@@ -52,8 +52,7 @@ assess until those files exist.
 
 TRX and Coverlet Cobertura reports are retained as `tests-<commit>-<OS>` for 14 days. If Dockerfiles
 exist, scanned image archives, CycloneDX SBOMs and a manifest mapping the commit to Dockerfiles
-are retained as `containers-<commit>` for 7 days. Packaging builds every Dockerfile under `src/Services/` with
-the repository root as build context. It does not push images to a registry or deploy them.
+are retained as `containers-<commit>` for 7 days. Packaging builds the service and infrastructure images from the repository root and builds the Angular/Nginx image with `frontend/` as its context. It does not push images to a registry or deploy them.
 The final aggregate gate is unchanged by individual job or matrix names.
 
 ## Coverlet coverage and test gates

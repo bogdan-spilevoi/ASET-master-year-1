@@ -1,4 +1,5 @@
 using FluentValidation;
+using SmartLost.AuthService.Application.Validation;
 
 namespace SmartLost.AuthService.Application.Commands.Refresh;
 
@@ -6,9 +7,6 @@ public sealed class RefreshTokenCommandValidator : AbstractValidator<RefreshToke
 {
     public RefreshTokenCommandValidator()
     {
-        RuleFor(command => command.RefreshToken)
-            .Cascade(CascadeMode.Stop)
-            .NotEmpty().WithErrorCode("auth.refresh_token_required")
-            .Matches("\\A[A-Za-z0-9_-]{86}\\z").WithErrorCode("auth.invalid_refresh_token");
+        RefreshTokenRules.ApplyTo(RuleFor(command => command.RefreshToken));
     }
 }

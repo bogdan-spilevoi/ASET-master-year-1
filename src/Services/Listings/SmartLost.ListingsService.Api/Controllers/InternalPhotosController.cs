@@ -23,7 +23,7 @@ public sealed class InternalPhotosController(IDraftPhotoStore store, IConfigurat
         {
             return Unauthorized();
         }
-        PrivatePhotoDto? photo = await store.ReadAsync(listingId, photoId, revision, cancellationToken);
+        PhotoContentDto? photo = await store.ReadAsync(listingId, photoId, revision, cancellationToken);
         return photo is null ? NotFound() : File(photo.Bytes, photo.MediaType);
     }
 }

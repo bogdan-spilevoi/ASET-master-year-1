@@ -8,3 +8,4 @@ resources:
   - matching
   - rabbitmq
   - redis
+  - web

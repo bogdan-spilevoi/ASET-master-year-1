@@ -592,6 +592,11 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<AuthServiceFacto
             throw new DomainException(AuthErrors.InvalidCredentials);
         }
 
+        public Task RevokeAsync(string refreshToken, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
         public Task<Result<AuthResponse>> RefreshAsync(string refreshToken, CancellationToken cancellationToken)
         {
             throw new NotSupportedException();

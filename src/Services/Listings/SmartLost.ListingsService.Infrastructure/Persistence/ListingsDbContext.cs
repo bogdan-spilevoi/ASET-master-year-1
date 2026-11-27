@@ -27,6 +27,8 @@ public sealed class ListingsDbContext(DbContextOptions<ListingsDbContext> option
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<CategoryCatalogState>().ToTable("CategoryCatalogState")
+            .HasData(new CategoryCatalogState(1, 0));
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ListingsDbContext).Assembly);
         modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
     }

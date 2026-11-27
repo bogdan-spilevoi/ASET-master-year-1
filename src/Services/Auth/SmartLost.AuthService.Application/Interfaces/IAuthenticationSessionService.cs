@@ -8,5 +8,7 @@ public interface IAuthenticationSessionService
 {
     Task<AuthResponse> CreateAsync(UserAccount user, CancellationToken cancellationToken);
 
+    Task RevokeAsync(string refreshToken, CancellationToken cancellationToken);
+
     Task<Result<AuthResponse>> RefreshAsync(string refreshToken, CancellationToken cancellationToken);
 }

@@ -1,0 +1,12 @@
+h2, h3 { margin: 0; }
+.tools { gap: 12px; }
+.card h3 { margin: 16px 0 8px; overflow-wrap: anywhere; }
+.draft-card { position: relative; padding-right: 4rem; }
+.draft-link::after { content: ''; position: absolute; inset: 0; border-radius: 14px; }
+.draft-link:focus-visible::after { outline: 3px solid #29785d; }
+.delete-draft {
+  position: absolute; top: .75rem; right: .75rem;
+  width: 2.75rem; height: 2.75rem; padding: 0; display: grid; place-items: center;
+  color: #a52c28; border-color: transparent;
+}
+.delete-draft:hover:enabled { background: #fae9e7; }

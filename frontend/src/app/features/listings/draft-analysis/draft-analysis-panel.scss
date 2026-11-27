@@ -1,0 +1,11 @@
+fieldset { margin: 0; padding: 1rem; border: 1px solid #cbd5cb; border-radius: 8px; min-width: 0; }
+legend { padding: 0 .35rem; font-weight: 650; }
+p { margin: .25rem 0 .5rem; }
+.choices { display: flex; flex-wrap: wrap; gap: .5rem; }
+.choices label {
+  display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .65rem;
+  border: 1px solid #cbd5cb; border-radius: 6px; overflow-wrap: anywhere; cursor: pointer;
+}
+input { accent-color: #114839; }
+.manual-trait { display: flex; align-items: end; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+.manual-trait label { flex: 1 1 12rem; min-width: 0; }

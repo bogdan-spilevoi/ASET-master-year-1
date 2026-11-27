@@ -61,7 +61,7 @@ public sealed class DomainEfCompatibilityTests
         using ListingsDbContext context = Context(connection);
         context.Database.EnsureCreated();
         Listing lost = CreateListing();
-        Listing found = CreateListing(ListingType.Found);
+        Listing found = CreateListing(ListingType.Found, lost.Categories.Single().Category);
         var decision = MatchDecision.CreateSuggested(lost, found);
         context.Add(decision);
         context.SaveChanges();
@@ -132,7 +132,7 @@ public sealed class DomainEfCompatibilityTests
             .UseNpgsql("Host=localhost;Database=domain_schema_only;Username=probe").Options;
         using ListingsDbContext context = new(options);
         string sql = context.Database.GenerateCreateScript();
-        Assert.Equal(9, context.Model.GetEntityTypes().Count());
+        Assert.Equal(10, context.Model.GetEntityTypes().Count());
         Assert.Contains("CREATE TABLE \"OutboxMessages\"", sql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE \"MatchDecisions\"", sql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE \"Recoveries\"", sql, StringComparison.Ordinal);
@@ -155,12 +155,12 @@ public sealed class DomainEfCompatibilityTests
         return new ListingsDbContext(new DbContextOptionsBuilder<ListingsDbContext>().UseSqlite(connection).Options);
     }
 
-    private static Listing CreateListing(ListingType type = ListingType.Lost)
+    private static Listing CreateListing(ListingType type = ListingType.Lost, Category? category = null)
     {
         var listing = Listing.CreateDraft(Guid.NewGuid(), type);
         listing.UpdateDetails(listing.AuthorId, listing.Revision, "Bag", "Blue bag", "Library", new DateOnly(2026, 11, 3), _now,
             traits: ["black strap", "large bag"]);
-        listing.AddCategory(listing.AuthorId, listing.Revision, Category.Create("bag"));
+        listing.AddCategory(listing.AuthorId, listing.Revision, category ?? Category.Create("bag"));
         listing.ReplacePhoto(listing.AuthorId, listing.Revision, Photo.Create("private/photo", "image/png", 100));
         listing.Publish(listing.AuthorId, listing.Revision, _now);
         return listing;

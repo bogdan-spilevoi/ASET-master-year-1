@@ -9,7 +9,7 @@ whose implementation is absent. Auth owns every database table shown here.
 
 ```mermaid
 flowchart LR
-    Client["HTTP client"]
+    Browser["Angular client"] -->|"1.0 Same-origin login or registration"| Client["smartlost-web Nginx or direct API client"]
     API["AuthController / AutoMapper"]
     Pipeline["MediatR: Profiling / ExceptionToResult / Authorization / Validation / Caching / Transaction"]
     Handler["RegisterUserCommandHandler or LoginUserCommandHandler"]
@@ -133,6 +133,21 @@ flowchart LR
 The HTTP attribute rejects unauthenticated requests before the action executes. The Application
 attribute separately protects direct MediatR dispatches; register, login and refresh requests
 have no Application authorization attribute and remain public.
+
+## Profile sign-out
+
+```mermaid
+sequenceDiagram
+    actor Browser
+    participant Auth as Auth API and LogoutCommand
+    participant DB as Auth PostgreSQL
+    Browser->>Auth: 1. POST /api/auth/logout with refresh token
+    Auth->>DB: 2. Resolve token hash to its session
+    Auth->>DB: 3. For a known session, set RevokedAtUtc if still active
+    Auth-->>Browser: 4. Return 204, including a repeat request
+```
+
+Malformed tokens return 400. Following a network or server failure, the profile offers another sign-out attempt. Successful revocation prevents further rotation for that session; existing bearer JWTs retain their signed lifetime.
 
 ## Refresh and replay handling
 

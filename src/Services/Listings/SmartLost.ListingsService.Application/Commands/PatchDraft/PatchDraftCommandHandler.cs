@@ -17,7 +17,7 @@ public sealed class PatchDraftCommandHandler(IListingLifecycleStore store, ICurr
         DraftPatchDto patch = request.Patch;
         List<Category>? categories = patch.CategoryIds is null ? null : await store.GetCategoriesAsync(patch.CategoryIds, cancellationToken);
         draft.PatchDraft(authorId, patch.ExpectedRevision, clock.GetUtcNow().UtcDateTime, patch.Title, patch.Description,
-            patch.Location, patch.OccurredOn, patch.Colour, patch.Traits, categories);
+            patch.Location, patch.OccurredOn, patch.Colour, patch.Traits, categories, patch.CategoryName, patch.BroadClass);
         return Result<DraftDetailsDto>.Success(DraftDetailsDto.From(draft));
     }
 }

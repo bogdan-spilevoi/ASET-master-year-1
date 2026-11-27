@@ -4,8 +4,7 @@ Listings `GetCategoriesQuery` and Matching `AnalyzePhotoContentQuery` use a
 **300-second absolute TTL**. Only successful Results are stored. In the local Compose stack
 and Kind cluster, entries live in one internal **Redis** instance per environment, which
 both services share. List/detail queries remain uncached, so their Open-only visibility is read from
-the database on each request. No mutation invalidation, HTTP response cache or
-additional Azure resource is configured.
+the database on each request. Listings reads a catalog version before the cache lookup. A committed catalog change produces a new cache key.
 
 ## Components and registration
 
@@ -23,7 +22,7 @@ additional Azure resource is configured.
 
 ```csharp
 [CacheableQuery("listings:categories", TtlSeconds = 300)]
-public sealed record GetCategoriesQuery
+public sealed record GetCategoriesQuery(long CatalogVersion = 0)
     : IRequest<Result<IReadOnlyList<CategoryDto>>>;
 ```
 
@@ -89,7 +88,8 @@ sequenceDiagram
     participant Handler as GetCategoriesQueryHandler
     participant DB as ListingsReadStore / EF / PostgreSQL
     Client->>API: 1. GET /api/categories
-    API->>Validation: 2. Send GetCategoriesQuery
+    API->>DB: 1.1 Read committed catalog version
+    API->>Validation: 2. Send GetCategoriesQuery with version
     Validation->>Aspect: 3. Continue after validation
     Aspect->>Cache: 4. Get or populate typed key with TTL
     Cache->>Redis: 5. Read smartlost:listings:<env>:<key>
@@ -159,10 +159,7 @@ Results are returned without storage.
 - **Opt-in scope.** Mark only public read-only queries whose results are immutable
   snapshots. No EF entity or scoped service is cached. Principal-dependent queries need
   an explicit identity scope in their key before opt-in.
-- **Stale reads.** Direct catalog changes can remain invisible until TTL expires, now
-  across every replica. There are no category write endpoints or invalidation behaviors
-  yet. Add save/commit-aware invalidation before extending caching to mutable
-  listing/detail queries.
+- **Catalog changes.** Publication, seeding and the operator merge procedure advance the persisted version when the catalog changes. The previous snapshot expires normally and subsequent requests use the committed version.
 
 ## Local Redis
 

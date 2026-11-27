@@ -33,6 +33,16 @@ public partial class Listing : AggregateRoot<Guid>
         get; private set;
     }
 
+    public string? DraftCategoryName
+    {
+        get; private set;
+    }
+
+    public string? DraftBroadClass
+    {
+        get; private set;
+    }
+
     public string? Colour
     {
         get; private set;
@@ -98,17 +108,29 @@ public partial class Listing : AggregateRoot<Guid>
     }
 
     public void PatchDraft(Guid actorId, int expectedRevision, DateTime changedAtUtc, string? title, string? description,
-        string? location, DateOnly? occurredOn, string? colour, IReadOnlyList<string>? traits, IReadOnlyList<Category>? categories)
+        string? location, DateOnly? occurredOn, string? colour, IReadOnlyList<string>? traits, IReadOnlyList<Category>? categories,
+        string? categoryName = null, string? broadClass = null)
     {
         EnsureEditable(actorId, expectedRevision);
         Guard.Against(State != ListingState.Draft, ListingErrors.InvalidState);
         Guard.Against(title is null && description is null && location is null && occurredOn is null &&
-            colour is null && traits is null && categories is null, ListingErrors.InvalidPatch);
+            colour is null && traits is null && categories is null && categoryName is null, ListingErrors.InvalidPatch);
         ListingRules.Utc(changedAtUtc);
         Guard.Against(occurredOn.HasValue && (occurredOn == default(DateOnly) || occurredOn > DateOnly.FromDateTime(changedAtUtc)),
             ListingErrors.InvalidDate);
 
+        Guard.Against((categories is not null && categoryName is not null) || (categoryName is null && broadClass is not null), ListingErrors.InvalidCategory);
         string[]? newTraits = traits?.Select(ListingRules.Text).Distinct(StringComparer.Ordinal).ToArray();
+        if (categoryName is not null || categories is not null)
+        {
+            string? normalizedName = string.IsNullOrWhiteSpace(categoryName) ? null : Category.NormalizeName(categoryName);
+            DraftBroadClass = normalizedName is null || string.IsNullOrWhiteSpace(broadClass) ? null : Category.NormalizeName(broadClass);
+            DraftCategoryName = normalizedName;
+            if (categoryName is not null)
+            {
+                categories = [];
+            }
+        }
         Title = title?.Trim() ?? Title;
         Description = description?.Trim() ?? Description;
         Location = location?.Trim() ?? Location;
@@ -187,14 +209,20 @@ public partial class Listing : AggregateRoot<Guid>
         }
     }
 
-    public void Publish(Guid actorId, int expectedRevision, DateTime publishedAtUtc)
+    public void Publish(Guid actorId, int expectedRevision, DateTime publishedAtUtc, Category? resolvedCategory = null)
     {
         ListingRules.Owner(AuthorId, actorId);
         EnsureRevision(expectedRevision);
         ListingRules.Utc(publishedAtUtc);
         Guard.Against(State != ListingState.Draft || PublishedAt.HasValue || ClosureReason.HasValue || ChangeSequence != 0,
             ListingErrors.InvalidState);
-        ValidatePublication(publishedAtUtc);
+        ValidatePublication(publishedAtUtc, resolvedCategory);
+        if (resolvedCategory is not null)
+        {
+            _categories.Add(ListingCategory.Create(this, resolvedCategory));
+        }
+        DraftCategoryName = null;
+        DraftBroadClass = null;
         State = ListingState.Open;
         PublishedAt = publishedAtUtc;
         AdvanceSequence();
@@ -247,15 +275,15 @@ public partial class Listing : AggregateRoot<Guid>
         ClosureReason = Enums.ClosureReason.Recovered;
     }
 
-    private void ValidatePublication(DateTime publishedAtUtc)
+    private void ValidatePublication(DateTime publishedAtUtc, Category? resolvedCategory)
     {
         Guard.Against(!Enum.IsDefined(Type), ListingErrors.InvalidType);
         _ = ListingRules.Text(Title);
         _ = ListingRules.Text(Description);
         _ = ListingRules.Text(Location);
         Guard.Against(OccurredOn == default || OccurredOn > DateOnly.FromDateTime(publishedAtUtc), ListingErrors.InvalidDate);
-        Guard.Against(Categories.Count == 0, ListingErrors.CategoriesRequired);
-        HashSet<Guid> categoryIds = [];
+        Guard.Against((Categories.Count == 0 || DraftCategoryName is not null) && resolvedCategory is null, ListingErrors.CategoriesRequired);
+        HashSet<Guid> categoryIds = resolvedCategory is null ? [] : [resolvedCategory.Id];
         foreach (ListingCategory assignment in Categories)
         {
             Guard.Against(assignment.Category is null || assignment.Category.Id == Guid.Empty ||

@@ -29,11 +29,21 @@ public sealed class ListingsOutboxIntegrationTests
         string initial = context.Database.GetMigrations().Single(name => name.EndsWith("_InitialCreate", StringComparison.Ordinal));
         await context.GetService<IMigrator>().MigrateAsync(initial, timeout.Token);
         var listing = Listing.CreateDraft(Guid.NewGuid(), ListingType.Lost);
-        context.Listings.Add(listing);
-        await context.SaveChangesAsync(timeout.Token);
+        await context.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Listings" ("Id", "AuthorId", "Type", "Title", "Description", "Location", "OccurredOn", "Traits", "State", "Revision", "ChangeSequence")
+            VALUES ({listing.Id}, {listing.AuthorId}, 0, '', '', '', DATE '0001-01-01', ARRAY[]::text[], 0, 1, 0)
+            """, timeout.Token);
+        var firstCategory = Guid.NewGuid();
+        var duplicate = Guid.NewGuid();
+        await context.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Categories" ("Id", "NormalizedName") VALUES ({firstCategory}, 'legacy'), ({duplicate}, 'legacy');
+            INSERT INTO "ListingCategories" ("ListingId", "CategoryId") VALUES ({listing.Id}, {firstCategory}), ({listing.Id}, {duplicate})
+            """, timeout.Token);
         await context.Database.MigrateAsync(timeout.Token);
-        Assert.Equal(listing.Id, (await context.Listings.SingleAsync(timeout.Token)).Id);
-        Assert.Equal(3, (await context.Database.GetAppliedMigrationsAsync(timeout.Token)).Count());
+        Guid canonical = await context.Categories.Where(c => c.NormalizedName == "legacy").Select(c => c.Id).SingleAsync(timeout.Token);
+        Assert.Equal(canonical, await context.Set<ListingCategory>().Select(c => c.CategoryId).SingleAsync(timeout.Token));
+        listing = await context.Listings.SingleAsync(row => row.Id == listing.Id, timeout.Token);
+        Assert.Equal(4, (await context.Database.GetAppliedMigrationsAsync(timeout.Token)).Count());
         DateTime now = new(2026, 11, 17, 12, 0, 0, DateTimeKind.Utc);
         listing.UpdateDetails(listing.AuthorId, listing.Revision, "Bag", "Blue bag", "Library", DateOnly.FromDateTime(now), now);
         listing.AddCategory(listing.AuthorId, listing.Revision, Category.Create("bag"));

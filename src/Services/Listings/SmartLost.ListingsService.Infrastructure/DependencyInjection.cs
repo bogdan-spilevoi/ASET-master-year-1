@@ -24,6 +24,7 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.Add("X-Listings-Photo-Key", configuration["ListingsPhotos:ApiKey"]);
             client.Timeout = TimeSpan.FromSeconds(5);
         }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddScoped<ICategoryCatalog, CategoryCatalog>();
         services.AddScoped<IListingLifecycleStore, ListingLifecycleStore>();
         services.AddScoped<IDraftPhotoStore, DraftPhotoStore>();
         services.AddScoped<IListingsReadStore, ListingsReadStore>();

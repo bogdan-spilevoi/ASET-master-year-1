@@ -154,6 +154,11 @@ public sealed class AuthCommandHandlerTests
                 DateTime.UtcNow.AddHours(1), "test-refresh-token", DateTime.UtcNow.AddDays(7)));
         }
 
+        public Task RevokeAsync(string refreshToken, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
         public Task<Result<AuthResponse>> RefreshAsync(string refreshToken, CancellationToken cancellationToken)
         {
             throw new NotSupportedException();

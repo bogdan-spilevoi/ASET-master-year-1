@@ -24,12 +24,21 @@ public sealed class ListingLifecycleStore(ListingsDbContext db) : IListingLifecy
 
     public async Task<List<Category>> GetCategoriesAsync(Guid[] ids, CancellationToken token)
     {
-        List<Category> categories = await db.Categories.Where(c => ids.Contains(c.Id)).ToListAsync(token);
+        // Hold the catalog stable until the ID-based draft assignment commits.
+        IQueryable<Category> requested = db.Database.IsNpgsql()
+            ? db.Categories.FromSqlInterpolated($"""SELECT * FROM "Categories" WHERE "Id" = ANY ({ids}) FOR SHARE""")
+            : db.Categories.Where(c => ids.Contains(c.Id));
+        List<Category> categories = await requested.ToListAsync(token);
         if (categories.Count != ids.Length)
         {
             throw new DomainException(ListingErrors.InvalidCategory);
         }
-        return categories;
+        if (!categories.Any(c => c.MergedIntoId.HasValue))
+        {
+            return categories;
+        }
+        Guid[] canonicalIds = [.. categories.Select(c => c.MergedIntoId ?? c.Id).Distinct()];
+        return await db.Categories.Where(c => canonicalIds.Contains(c.Id)).ToListAsync(token);
     }
 
     public Task<List<MatchDecision>> GetUnconfirmedAsync(Guid listingId, CancellationToken token)
@@ -56,6 +65,11 @@ public sealed class ListingLifecycleStore(ListingsDbContext db) : IListingLifecy
         return await db.MatchDecisions.Include(d => d.LostListing).Include(d => d.FoundListing).Include(d => d.Recovery)
             .SingleOrDefaultAsync(d => d.Id == id && d.LostListing.AuthorId == authorId, token)
             ?? throw new DomainException(ListingErrors.DecisionNotFound);
+    }
+
+    public void Remove(Listing draft)
+    {
+        db.Listings.Remove(draft);
     }
 
     public void Add(MatchDecision decision)

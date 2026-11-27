@@ -59,6 +59,11 @@ public sealed class SearchListing : AggregateRoot<Guid>
 
     public IReadOnlySet<string> CategoryKeys { get; private set; } = new HashSet<string>();
 
+    public string? BroadClass
+    {
+        get; private set;
+    }
+
     public string? Colour
     {
         get; private set;
@@ -91,7 +96,8 @@ public sealed class SearchListing : AggregateRoot<Guid>
         IEnumerable<string> traits,
         DateOnly occurredOn,
         string location,
-        bool eligible)
+        bool eligible,
+        string? broadClass = null)
     {
         Guard.Against(listingId == Guid.Empty, MatchingErrors.ListingIdRequired);
         Guard.Against(sourceRevision < 1, MatchingErrors.InvalidSourceRevision);
@@ -102,6 +108,8 @@ public sealed class SearchListing : AggregateRoot<Guid>
         Guard.Against(colour is not null && (string.IsNullOrWhiteSpace(colour) || colour.Trim().Length > MaximumColourLength),
             MatchingErrors.InvalidColour);
 
+        string? group = broadClass?.Trim().ToLowerInvariant();
+        Guard.Against(group is { Length: 0 or > MaximumKeyLength }, MatchingErrors.InvalidCategoryKey);
         return new SearchListing
         {
             Id = listingId,
@@ -111,6 +119,7 @@ public sealed class SearchListing : AggregateRoot<Guid>
             AuthorId = authorId,
             CurrentPhotoId = currentPhoto?.PhotoId,
             CurrentPhotoRevision = currentPhoto?.Revision,
+            BroadClass = group,
             CategoryKeys = NormalizeKeys(categoryKeys, MatchingErrors.InvalidCategoryKey),
             Colour = colour?.Trim().ToLowerInvariant(),
             Traits = NormalizeKeys(traits, MatchingErrors.InvalidTrait),

@@ -6,6 +6,7 @@ using SmartLost.AuthService.Api.Contracts;
 using SmartLost.AuthService.Api.Pages;
 using SmartLost.AuthService.Application.Commands.ConfirmEmail;
 using SmartLost.AuthService.Application.Commands.Login;
+using SmartLost.AuthService.Application.Commands.Logout;
 using SmartLost.AuthService.Application.Commands.Refresh;
 using SmartLost.AuthService.Application.Commands.Register;
 using SmartLost.AuthService.Application.Contracts;
@@ -40,6 +41,15 @@ public sealed class AuthController(ISender sender, IMapper mapper) : ControllerB
         RefreshTokenCommand command = mapper.Map<RefreshTokenCommand>(request);
         Result<AuthResponse> result = await sender.Send(command, cancellationToken);
         return this.ToActionResult(result);
+    }
+
+    [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Logout([FromBody] RefreshRequest request, CancellationToken cancellationToken)
+    {
+        LogoutCommand command = mapper.Map<LogoutCommand>(request);
+        return this.ToActionResult(await sender.Send(command, cancellationToken));
     }
 
     [HttpPost("login")]

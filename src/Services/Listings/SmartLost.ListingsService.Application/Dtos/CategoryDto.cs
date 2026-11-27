@@ -1,3 +1,3 @@
 namespace SmartLost.ListingsService.Application.Dtos;
 
-public sealed record CategoryDto(Guid Id, string Name);
+public sealed record CategoryDto(Guid Id, string Name, string? BroadClass = null);

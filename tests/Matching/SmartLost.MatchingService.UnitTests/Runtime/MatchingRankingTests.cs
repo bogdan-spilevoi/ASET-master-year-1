@@ -10,6 +10,21 @@ namespace SmartLost.MatchingService.UnitTests.Runtime;
 public sealed class MatchingRankingTests
 {
     [Fact]
+    public void EligibleExactTypesTakePriorityOverTheBroaderClass()
+    {
+        static SearchListing Item(ListingType type, string key, string group, bool eligible = true) =>
+            SearchListing.Create(Guid.NewGuid(), 1, 1, type, Guid.NewGuid(), null, [key], null, [],
+                MatchingData.Day, "campus", eligible, group);
+        SearchListing source = Item(ListingType.Lost, "headphones", "electronics");
+        SearchListing exact = Item(ListingType.Found, "headphones", "electronics");
+        SearchListing broader = Item(ListingType.Found, "phone", "electronics");
+        SearchListing unrelated = Item(ListingType.Found, "wallet", "accessories");
+        Assert.Equal([exact], CandidatePolicy.Select(source, [broader, exact]));
+        Assert.Equal([broader], CandidatePolicy.Select(source, [unrelated, broader, Item(ListingType.Found, "headphones", "electronics", false)]));
+        Assert.Empty(CandidatePolicy.Select(source, [unrelated]));
+    }
+
+    [Fact]
     public void CandidatePolicyAppliesEligibilityRules()
     {
         var author = Guid.NewGuid();

@@ -1,0 +1,8 @@
+{
+  "/api/auth": { "target": "http://127.0.0.1:5080" },
+  "/api/auth/**": { "target": "http://127.0.0.1:5080" },
+  "/api/categories": { "target": "http://127.0.0.1:5082" },
+  "/api/listings": { "target": "http://127.0.0.1:5082" },
+  "/api/listings/**": { "target": "http://127.0.0.1:5082" },
+  "/api/match-decisions/**": { "target": "http://127.0.0.1:5082" }
+}

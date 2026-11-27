@@ -78,6 +78,17 @@ public sealed class AuthenticationSessionService(
         return Result<AuthResponse>.Success(response);
     }
 
+    public async Task RevokeAsync(string refreshToken, CancellationToken cancellationToken)
+    {
+        string hash = HashToken(refreshToken);
+        Guid? sessionId = await dbContext.RefreshTokens.Where(token => token.TokenHash == hash)
+            .Select(token => (Guid?)token.SessionId).SingleOrDefaultAsync(cancellationToken);
+        if (sessionId.HasValue)
+        {
+            await RevokeSessionAsync(sessionId.Value, DateTime.UtcNow, cancellationToken);
+        }
+    }
+
     private Task<int> RevokeSessionAsync(Guid sessionId, DateTime nowUtc, CancellationToken cancellationToken)
     {
         // Update the shared session row, so concurrent rotations also observe revocation.

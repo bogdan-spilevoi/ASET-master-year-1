@@ -2,12 +2,17 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartLost.BuildingBlocks.AspNetCore.Results;
+using SmartLost.BuildingBlocks.Core.Pagination;
+using SmartLost.BuildingBlocks.Core.Results;
 using SmartLost.ListingsService.Api.Contracts;
+using SmartLost.ListingsService.Application.Commands.DeleteDraft;
 using SmartLost.ListingsService.Application.Commands.PatchDraft;
 using SmartLost.ListingsService.Application.Commands.PublishDraft;
 using SmartLost.ListingsService.Application.Commands.WithdrawListing;
 using SmartLost.ListingsService.Application.Dtos;
 using SmartLost.ListingsService.Application.Queries.GetDraft;
+using SmartLost.ListingsService.Application.Queries.GetDraftPhoto;
+using SmartLost.ListingsService.Application.Queries.GetMyListings;
 
 namespace SmartLost.ListingsService.Api.Controllers;
 
@@ -17,11 +22,35 @@ namespace SmartLost.ListingsService.Api.Controllers;
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class ListingLifecycleController(ISender sender) : ControllerBase
 {
+    [HttpGet("mine")]
+    [ProducesResponseType<PagedResult<OwnedListingDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMine([FromQuery] GetMyListingsQuery query, CancellationToken token)
+    {
+        return this.ToActionResult(await sender.Send(query, token));
+    }
+
     [HttpGet("drafts/{id:guid}")]
     [ProducesResponseType<DraftDetailsDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDraft(Guid id, CancellationToken token)
     {
         return this.ToActionResult(await sender.Send(new GetDraftQuery(id), token));
+    }
+
+    [HttpGet("drafts/{id:guid}/photo")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK, "image/png", "image/jpeg")]
+    public async Task<IActionResult> GetDraftPhoto(Guid id, CancellationToken token)
+    {
+        Result<PhotoContentDto> result = await sender.Send(new GetDraftPhotoQuery(id), token);
+        return result.IsFailure ? this.ToActionResult(result) : File(result.Value.Bytes, result.Value.MediaType);
+    }
+
+    [HttpDelete("drafts/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> DeleteDraft(Guid id, CancellationToken token)
+    {
+        return this.ToActionResult(await sender.Send(new DeleteDraftCommand(id), token));
     }
 
     [HttpPatch("drafts/{id:guid}")]

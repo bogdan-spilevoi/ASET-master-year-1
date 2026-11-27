@@ -1,0 +1,61 @@
+<section class="form-page">
+  @if (existingId) { <a routerLink="/profile">← Profile</a> } @else { <a routerLink="/">← Item board</a> }
+  <h1>{{ existingId ? 'Edit draft' : 'Report an item' }}{{ !existingId || draft() ? ' · ' + type : '' }}</h1>
+  @if (existingId && !draft()) {
+    @if (busy()) { <p role="status">Loading draft…</p> }
+    @else { <button type="button" (click)="loadDraft(existingId)">Retry loading draft</button> }
+  } @else if (!draft()) {
+    <form (ngSubmit)="create()">
+      <label>Report type
+        <select name="type" [(ngModel)]="type" [disabled]="busy()"><option>Lost</option><option>Found</option></select>
+      </label>
+      <label>Item photo<input type="file" accept="image/png,image/jpeg" [disabled]="busy()" (change)="pickPhoto($event)"></label>
+      <small>JPEG or PNG, up to 10 MiB and 16 megapixels.</small>
+      <button class="primary" [disabled]="busy() || !photo">Create draft</button>
+    </form>
+  } @else if (draft(); as currentDraft) {
+    @let phase = analysisPhase();
+    <form class="draft" #form="ngForm" (ngSubmit)="save('publish')">
+      @if (currentDraft.photoUrl) {
+        <img class="photo" [src]="currentDraft.photoUrl" alt="Uploaded item photo">
+      } @else { <p role="alert">This draft has no photo to analyze.</p> }
+      <fieldset class="fields" [disabled]="phase !== 'ready' || busy()" aria-label="Report details">
+        <label>Title<input name="title" [(ngModel)]="title" required></label>
+        <label>Description<textarea name="description" [(ngModel)]="description" required></textarea></label>
+        <label>Location<input name="location" [(ngModel)]="location" required></label>
+        <label>Date lost or found<input type="date" name="occurredOn" [(ngModel)]="occurredOn" required></label>
+        <label>Category
+          <select name="category" [ngModel]="selectedCategory()" (ngModelChange)="chooseCategory($event)">
+            @for (name of categoryNames(); track name) {
+              <option [value]="name">{{ name }}{{ name === suggestedCategory() ? ' (Qwen suggestion)' : '' }}</option>
+            }
+            <option value="">Enter a category…</option>
+          </select>
+        </label>
+        @if (!selectedCategory()) {
+          <label>Category name
+            <input name="customCategory" [ngModel]="categoryName()" (ngModelChange)="editCategory($event)" required maxlength="100">
+          </label>
+        }
+        <label>Broader class (optional)
+          <input name="broadClass" [ngModel]="broadClass()" (ngModelChange)="setBroadClass($event)" [readonly]="!!catalogGroup()" maxlength="100">
+        </label>
+      </fieldset>
+      @if (currentDraft.photoUrl) {
+        <sl-draft-analysis [listingId]="currentDraft.listingId" [resume]="!!existingId" [savedTraits]="savedTraits()"
+          [(selected)]="selectedTraits" [disabled]="busy()" />
+      }
+      <button class="primary" [disabled]="phase !== 'ready' || busy() || form.invalid || !categoryName().trim()">Publish report</button>
+      <button type="button" [disabled]="phase !== 'ready' || busy()" (click)="save('draft')">Save draft and return to profile</button>
+      @if (currentDraft.photoUrl && phase === 'analyzing') {
+        <div class="analysis-overlay" role="status">
+          <div class="analysis-indicator">
+            <span>Analyzing photo</span>
+            <span class="spinner" aria-hidden="true"></span>
+          </div>
+        </div>
+      }
+    </form>
+  }
+  @if (error()) { <p role="alert">{{ error() }}</p> }
+</section>

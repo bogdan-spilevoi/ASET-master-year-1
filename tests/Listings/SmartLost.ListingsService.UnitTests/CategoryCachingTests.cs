@@ -7,6 +7,7 @@ using SmartLost.BuildingBlocks.Application.Behaviors;
 using SmartLost.BuildingBlocks.Application.Profiling;
 using SmartLost.BuildingBlocks.Core.Results;
 using SmartLost.ListingsService.Application.Dtos;
+using SmartLost.ListingsService.Application.Interfaces;
 using SmartLost.ListingsService.Application.Queries.GetCategories;
 using SmartLost.ListingsService.Domain.Entities;
 using SmartLost.ListingsService.Infrastructure.Persistence;
@@ -36,7 +37,8 @@ public sealed class CategoryCachingTests
             Assert.Equal(expectedOrder, scope.ServiceProvider
                 .GetServices<IPipelineBehavior<GetCategoriesQuery, Result<IReadOnlyList<CategoryDto>>>>()
                 .Select(behavior => behavior.GetType().GetGenericTypeDefinition()));
-            Result<IReadOnlyList<CategoryDto>> cached = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new GetCategoriesQuery());
+            long version = await scope.ServiceProvider.GetRequiredService<ICategoryCatalog>().GetVersionAsync(CancellationToken.None);
+            Result<IReadOnlyList<CategoryDto>> cached = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new GetCategoriesQuery(version));
             Assert.Null(scope.ServiceProvider.GetRequiredService<IProfilingContext>().Current);
             Assert.Throws<NotSupportedException>(() => ((IList<CategoryDto>)cached.Value).Clear());
             ListingsDbContext context = scope.ServiceProvider.GetRequiredService<ListingsDbContext>();

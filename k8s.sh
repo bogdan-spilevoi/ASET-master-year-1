@@ -31,7 +31,7 @@ help_text() {
 Usage: ./k8s.sh COMMAND [TARGET]
 
   up                        Create/reuse local Kind; build/load all; infra, migrate, rollout
-  deploy [listings|auth|matching|rabbitmq|mailpit|all]
+  deploy [web|listings|auth|matching|rabbitmq|mailpit|all]
                             Rebuild/load and update an existing local cluster (default: all)
   build [TARGET]            Build images only (default: all)
   load [TARGET]             Load existing Docker images into Kind (default: all)
@@ -39,17 +39,17 @@ Usage: ./k8s.sh COMMAND [TARGET]
                             Build/load EF bundle(s); recreate finished Job(s); wait and show logs
   migration-add [SERVICE] NAME
                             Generate a local EF migration (SERVICE: listings, auth or matching, default: listings)
-  restart [TARGET]          Restart auth-api/auth-worker/auth-identity/listings-api/listings-worker/auth/listings/matching/mailpit/rabbitmq/redis/all
+  restart [TARGET]          Restart web/auth-api/auth-worker/auth-identity/listings-api/listings-worker/auth/listings/matching/mailpit/rabbitmq/redis/all
   stop                      Stop workloads, Mailpit, Redis, RabbitMQ and PostgreSQL; retain PVCs
   status                    Show local workloads, Services, Jobs and PVCs
-  logs [TARGET] [--follow]  Show api/worker/db/rabbitmq/mailpit/auth-api/auth-worker/auth-identity/auth-db/matching-api/matching-db/matching-migrations/redis/migrations logs
-  ui [rabbitmq|mailpit|matching]     Forward RabbitMQ (15672), Mailpit (8025) or Matching (5083) UI; Ctrl+C stops (default: rabbitmq)
+  logs [TARGET] [--follow]  Show web/api/worker/db/rabbitmq/mailpit/auth-api/auth-worker/auth-identity/auth-db/matching-api/matching-db/matching-migrations/redis/migrations logs
+  ui [web|rabbitmq|mailpit|matching] Forward SmartLost (4200), RabbitMQ (15672), Mailpit (8025) or Matching (5083) UI; Ctrl+C stops (default: rabbitmq)
   config                    Create missing ignored .env files from examples; edit placeholders
   validate                  Render/check the local Kustomize overlay without applying it
   help                      Show this help
 
 Build/load targets: listings-api (api), listings-worker (worker), listings-migrations (migrations),
-auth-api, auth-worker, auth-migrations, matching-api, matching-migrations, rabbitmq, listings, matching, auth, all.
+auth-api, auth-worker, auth-migrations, matching-api, matching-migrations, rabbitmq, listings, matching, auth, web, all.
 All cluster commands explicitly use kind-smartlost-local / namespace smartlost.
 No command deletes database volumes, the namespace, or the cluster. No seed runs automatically.
 HELP
@@ -116,13 +116,13 @@ targets() {
         migrations|listings-migrations) printf '%s\n' listings-migrations ;;
         auth-api) printf '%s\n' auth-api ;;
         auth-worker) printf '%s\n' auth-worker ;;
-        auth-migrations|matching-api|matching-migrations) printf '%s\n' "$1" ;;
+        web|auth-migrations|matching-api|matching-migrations) printf '%s\n' "$1" ;;
         matching) printf '%s\n' matching-api matching-migrations ;;
         rabbitmq) printf '%s\n' rabbitmq ;;
         listings) printf '%s\n' listings-api listings-worker listings-migrations ;;
         auth) printf '%s\n' auth-api auth-worker auth-migrations ;;
-        all) printf '%s\n' listings-api listings-worker listings-migrations auth-api auth-worker auth-migrations matching-api matching-migrations rabbitmq ;;
-        *) fail "Unknown image target '$1'. Use listings-api, listings-worker, listings-migrations, auth-api, auth-worker, auth-migrations, matching-api, matching-migrations, rabbitmq, listings, matching, auth or all." ;;
+        all) printf '%s\n' listings-api listings-worker listings-migrations auth-api auth-worker auth-migrations matching-api matching-migrations rabbitmq web ;;
+        *) fail "Unknown image target '$1'. Use listings-api, listings-worker, listings-migrations, auth-api, auth-worker, auth-migrations, matching-api, matching-migrations, rabbitmq, web, listings, matching, auth or all." ;;
     esac
 }
 
@@ -134,7 +134,7 @@ image_for_target() {
         auth-api) printf '%s\n' smartlost-auth-api:local ;;
         auth-worker) printf '%s\n' smartlost-auth-worker:local ;;
         auth-migrations) printf '%s\n' smartlost-auth-migrations:local ;;
-        matching-api|matching-migrations) printf 'smartlost-%s:local\n' "$1" ;;
+        web|matching-api|matching-migrations) printf 'smartlost-%s:local\n' "$1" ;;
         rabbitmq) printf '%s\n' smartlost-rabbitmq:local ;;
         *) fail "Unknown image target '$1'." ;;
     esac
@@ -147,6 +147,8 @@ build_images() {
     while IFS= read -r target; do
         image=$(image_for_target "$target")
         case "$target" in
+            web)
+                docker build --provenance=false --tag "$image" frontend ;;
             listings-api)
                 docker build --provenance=false --file "$LISTINGS_API_DOCKERFILE" --tag "$image" . ;;
             listings-migrations)
@@ -309,20 +311,21 @@ restart_target() {
         auth-api) kube rollout restart deployment/auth-service; kube rollout status deployment/auth-service --timeout=180s ;;
         auth-identity) kube rollout restart deployment/auth-identity-worker; kube rollout status deployment/auth-identity-worker --timeout=180s ;;
         auth-worker) kube rollout restart deployment/auth-outbox-worker; kube rollout status deployment/auth-outbox-worker --timeout=180s ;;
+        web) kube rollout restart deployment/smartlost-web; kube rollout status deployment/smartlost-web --timeout=180s ;;
         rabbitmq) kube rollout restart statefulset/rabbitmq; kube rollout status statefulset/rabbitmq --timeout=300s ;;
         matching|matching-api) kube rollout restart deployment/matching-service; kube rollout status deployment/matching-service --timeout=180s ;;
         redis) kube rollout restart deployment/redis; kube rollout status deployment/redis --timeout=180s ;;
         mailpit) kube rollout restart deployment/mailpit; kube rollout status deployment/mailpit --timeout=180s ;;
         listings) restart_target listings-api; restart_target listings-worker ;;
         auth) restart_target auth-api; restart_target auth-worker; restart_target auth-identity ;;
-        all) restart_target rabbitmq; restart_target mailpit; restart_target listings; restart_target auth; restart_target matching ;;
-        *) fail "Unknown restart target '$1'. Use listings-api (api), listings-worker (worker), auth-api, auth-worker, auth-identity, matching, redis, listings, auth, rabbitmq, mailpit or all." ;;
+        all) restart_target rabbitmq; restart_target mailpit; restart_target listings; restart_target auth; restart_target matching; restart_target web ;;
+        *) fail "Unknown restart target '$1'. Use listings-api (api), listings-worker (worker), auth-api, auth-worker, auth-identity, matching, redis, web, listings, auth, rabbitmq, mailpit or all." ;;
     esac
 }
 
 deploy_target() {
     local target=$1
-    case "$target" in listings|auth|matching|rabbitmq|mailpit|all) ;; *) fail "Deploy target must be listings, auth, matching, rabbitmq, mailpit or all." ;; esac
+    case "$target" in web|listings|auth|matching|rabbitmq|mailpit|all) ;; *) fail "Deploy target must be web, listings, auth, matching, rabbitmq, mailpit or all." ;; esac
     check_cluster
     if [[ "$target" == mailpit ]]; then
         kube apply -f "$KUBE_DIR/base/namespace.yaml"
@@ -332,6 +335,11 @@ deploy_target() {
     build_images "$target"
     load_images "$target"
     case "$target" in
+        web)
+            kube apply -f "$KUBE_DIR/base/namespace.yaml"
+            kube apply -k "$KUBE_DIR/base/web"
+            restart_target web
+            return ;;
         rabbitmq) start_broker yes; return ;;
         all) start_broker yes ;;
         listings|auth|matching) start_broker no ;;
@@ -378,6 +386,8 @@ deploy_target() {
     restart_target listings
     restart_target auth
     restart_target matching
+    restart_target web
+    printf 'SmartLost web: ./k8s.sh ui web\n'
     printf 'Auth Swagger: http://localhost:5080/swagger\nListings Swagger: http://localhost:5082/swagger\nMatching Swagger: ./k8s.sh ui matching\nMailpit UI: ./k8s.sh ui mailpit\nRabbitMQ UI: ./k8s.sh ui rabbitmq\n'
 }
 
@@ -396,6 +406,7 @@ logs_target() {
         db|listings-db) resource=statefulset/listings-db ;;
         migrations|listings-migrations) resource=job/listings-migrate ;;
         redis) resource=deployment/redis ;;
+        web) resource=deployment/smartlost-web ;;
         matching-api) resource=deployment/matching-service ;;
         matching-db) resource=statefulset/matching-db ;;
         matching-migrations) resource=job/matching-migrate ;;
@@ -406,7 +417,7 @@ logs_target() {
         auth-migrations) resource=job/auth-migrate ;;
         mailpit) resource=deployment/mailpit ;;
         rabbitmq) resource=statefulset/rabbitmq ;;
-        *) fail "Unknown log target '$1'. Use listings-api (api), listings-worker (worker), listings-db (db), listings-migrations (migrations), auth-api (auth), auth-worker, auth-db, auth-migrations, matching-api, matching-db, matching-migrations, redis, mailpit or rabbitmq." ;;
+        *) fail "Unknown log target '$1'. Use listings-api (api), listings-worker (worker), listings-db (db), listings-migrations (migrations), auth-api (auth), auth-worker, auth-db, auth-migrations, matching-api, matching-db, matching-migrations, redis, web, mailpit or rabbitmq." ;;
     esac
     case "$2" in
         '') kube logs "$resource" --tail=100 ;;
@@ -455,6 +466,7 @@ case "$command_name" in
     stop)
         [[ $# -eq 0 ]] || fail 'stop takes no arguments.'
         check_cluster
+        scale_if_exists deployment/smartlost-web 0
         scale_if_exists deployment/matching-service 0
         scale_if_exists deployment/auth-service 0
         scale_if_exists deployment/auth-identity-worker 0
@@ -480,6 +492,9 @@ case "$command_name" in
     ui)
         check_cluster
         case "${1:-rabbitmq}" in
+            web)
+                printf 'SmartLost: http://localhost:4200 (Ctrl+C stops forwarding).\n'
+                kube port-forward service/smartlost-web 4200:80 ;;
             rabbitmq)
                 printf 'RabbitMQ: http://localhost:15672 (credentials in deploy/kubernetes/local/rabbitmq/.env). Ctrl+C stops forwarding.\n'
                 kube port-forward service/rabbitmq 15672:15672 ;;
@@ -489,7 +504,7 @@ case "$command_name" in
             matching)
                 printf 'Matching Swagger: http://localhost:%s/swagger (Ctrl+C stops forwarding).\n' "$MATCHING_LOCAL_PORT"
                 kube port-forward service/matching-service "$MATCHING_LOCAL_PORT:80" ;;
-            *) fail "Unknown UI target '$1'. Use rabbitmq, mailpit or matching." ;;
+            *) fail "Unknown UI target '$1'. Use web, rabbitmq, mailpit or matching." ;;
         esac ;;
     validate)
         [[ $# -eq 0 ]] || fail 'validate takes no arguments.'

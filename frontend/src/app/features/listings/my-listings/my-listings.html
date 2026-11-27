@@ -1,0 +1,51 @@
+<section class="board" aria-labelledby="my-listings-heading">
+  <div class="tools">
+    <h2 id="my-listings-heading">My listings</h2>
+    <label class="category">Filter
+      <select #filter [value]="selected" (change)="selectFilter(filter.value)">
+        @for (label of labels; track label) { <option [value]="label">{{ label }}</option> }
+      </select>
+    </label>
+  </div>
+  @if (deleteError()) { <p role="alert">{{ deleteError() }}</p> }
+  @if (results | async; as result) {
+    @if (result.error) {
+      <p role="alert">{{ result.error }} <button (click)="retry()">Retry</button></p>
+    } @else if (result.page; as page) {
+      <p class="count">{{ page.totalCount }} {{ page.totalCount === 1 ? 'report' : 'reports' }}</p>
+      <div class="grid">
+        @for (item of page.items; track item.id) {
+          <article class="card" [class.draft-card]="item.state === 'Draft'">
+            <span class="tag" [class.found]="item.type === 'Found'">{{ item.type }}</span>
+            <h3>
+              @if (item.state === 'Draft') {
+                <a class="draft-link" [routerLink]="['/listings/drafts', item.id]">{{ item.title || 'Untitled draft' }}</a>
+              } @else if (item.state === 'Open') {
+                <a [routerLink]="['/listings', item.id]">{{ item.title }}</a>
+              } @else { {{ item.title || 'Untitled draft' }} }
+            </h3>
+            @if (item.state === 'Draft') {
+              <button class="delete-draft" type="button" [disabled]="!!deletingId()"
+                [attr.aria-label]="'Delete draft: ' + (item.title || 'Untitled draft')" title="Delete draft"
+                (click)="deleteDraft(item, page.items.length)">
+                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>
+                </svg>
+              </button>
+            }
+            <p>{{ item.state }} @if (item.closureReason) { · {{ item.closureReason }} }</p>
+            @if (item.location) { <p>{{ item.location }}</p> }
+            @if (item.occurredOn) { <time [attr.datetime]="item.occurredOn">{{ item.occurredOn }}</time> }
+          </article>
+        } @empty { <div class="empty">No listings match this filter.</div> }
+      </div>
+      @if (page.totalCount > page.pageSize) {
+        <div class="pager">
+          <button [disabled]="page.currentPage === 0" (click)="show(selected, page.currentPage - 1)">Previous</button>
+          <span>Page {{ page.currentPage + 1 }}</span>
+          <button [disabled]="(page.currentPage + 1) * page.pageSize >= page.totalCount" (click)="show(selected, page.currentPage + 1)">Next</button>
+        </div>
+      }
+    } @else { <p role="status">Loading your listings…</p> }
+  }
+</section>

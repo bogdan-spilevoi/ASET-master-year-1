@@ -132,6 +132,9 @@ namespace SmartLost.MatchingService.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("AuthorId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BroadClass")
+                        .HasColumnType("text");
+
                     b.Property<string[]>("CategoryKeys")
                         .IsRequired()
                         .HasColumnType("text[]");

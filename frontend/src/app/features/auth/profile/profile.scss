@@ -1,0 +1,19 @@
+.identity-header, dl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1rem 3rem;
+}
+.identity-header { justify-content: space-between; }
+.sign-out {
+  color: white;
+  background-color: #b42318;
+  border-color: #b42318;
+}
+.sign-out:hover:enabled {
+  background-color: #912018;
+  border-color: #912018;
+}
+dl { margin: 1.5rem 0 0; }
+dt { color: #44583f; font-size: .875rem; }
+dd { margin: .2rem 0 0; font-weight: 600; overflow-wrap: anywhere; }

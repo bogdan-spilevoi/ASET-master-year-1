@@ -1,7 +1,7 @@
 # Auth service
 
 The implemented .NET 10 authentication service provides register, login, refresh,
-current-user and email confirmation endpoints, JWT issuance, persistent refresh sessions,
+logout, current-user and email confirmation endpoints, JWT issuance, persistent refresh sessions,
 hashed single-use email confirmation tokens queued atomically into the PostgreSQL outbox
 (`auth.email.confirmation_requested`) and delivered after commit with retry via SMTP
 (Mailpit in local dev) by `SmartLost.AuthService.Worker` (`Worker:Mode=Email`). Opening
@@ -15,7 +15,7 @@ The API registers the shared Profiling → ExceptionToResult → Authorization �
 request is cacheable, so identity and token responses are evaluated per request.
 Register/login commands use the transaction behavior and scoped AuthUnitOfWork to commit
 user/session/token/Outbox changes together. Domain events clear only after commit.
-Refresh keeps its own save/revocation flow; the current-user query does not start a transaction.
+Logout revokes the presented refresh-token family using the existing session row. Refresh keeps its own save/revocation flow; the current-user query does not start a transaction.
 AuthDbContext inherits shared OutboxDbContext and only declares tables/mapping.
 AuthUnitOfWork derives from shared EfUnitOfWork<AuthDbContext>; its only customization
 is saving through the Auth repository's error mapping. Transaction/event lifecycle code

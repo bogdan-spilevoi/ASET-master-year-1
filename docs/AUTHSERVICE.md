@@ -423,6 +423,7 @@ Deployment remains inactive; no workflow currently applies migrations.
 | --- | --- | --- |
 | `POST` | `/api/auth/register` | Creates a new user, enqueues an Outbox email confirmation request (`auth.email.confirmation_requested`), and returns access/refresh tokens |
 | `POST` | `/api/auth/login` | Authenticates by email and password and creates a token session |
+| `POST` | `/api/auth/logout` | Revokes the session identified by the refresh token in the JSON body. Returns 204 and can be retried. |
 | `POST` | `/api/auth/refresh` | Rotates a refresh token and returns a new access/refresh pair |
 | `GET` | `/api/auth/confirm-email?token=...` | Renders a safe HTML confirmation page whose button submits `POST /api/auth/confirm-email` (never consumes the token on `GET`) |
 | `POST` | `/api/auth/confirm-email` | Confirms an email address from a `{ "token": "..." }` JSON payload and consumes the single-use token |
@@ -476,6 +477,10 @@ checks remain in `Program.cs`. Restricted endpoints must use authorization; curr
 register/login/refresh routes remain public. No current Auth handler consumes this new
 abstraction yet. See [the BuildingBlocks identity guide](BUILDING_BLOCKS.md#current-user-identity)
 for properties, null behavior and the required-user-ID method.
+
+## Profile logout
+
+The Angular profile reads the JWT identity from `GET /api/auth/me`. To sign out, post `{ "refreshToken": "<refresh-token>" }` to `/api/auth/logout`. Possession of that token authorizes revocation even after access-token expiry. Auth hashes it, looks up its session through token history, and sets the session revocation timestamp with a conditional update. A retry or an unknown well-formed token returns 204. Malformed input returns 400. Other login sessions remain active. Previously issued access JWTs expire according to their signed lifetime.
 
 ## Refresh tokens
 

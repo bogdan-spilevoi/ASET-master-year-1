@@ -7,6 +7,10 @@ EF Core/tooling is pinned to **10.0.12**, Npgsql EF provider to **10.0.3**.
 Domain remains independent of EF and NMF. The API now composes Application read queries
 with the EF [ListingsReadStore](Persistence/ListingsReadStore.cs).
 
+The public photo read joins the photo payload to its listing and applies the Open-state filter in the same SQL query. Both the preview and full image use this check.
+
+The owner list filters by author ID before applying optional state, type and closure reason, counting and paging. Its read model uses the existing Listings table. Draft photo reads join the payload to a listing filtered by author and Draft state. Deleting an owned draft uses the existing cascade relationships for its photo, payload and category assignments.
+
 ## Database ownership and mapping
 
 The service owns the `listingsservice` PostgreSQL database. InitialCreate creates
@@ -176,3 +180,24 @@ connection or Matching consumer. Inspect mode retains its independent no-write r
 DraftAnalysisStore queues one Outbox message per operation and revision using a deterministic key and INSERT ON CONFLICT. MatchingAnalysisReader reads the authenticated Matching status endpoint using the shared service credential.
 
 ListingLifecycleStore loads owned drafts, tracks both roots of a manual match, and checks accepted or confirmed decisions before reserving a pair. ListingsUnitOfWork maps conflicting saves to HTTP-facing conflict results. The existing schema stores these changes, recoveries, awards and Outbox rows.
+
+## Category review
+
+Listings owns the reusable category catalog. Publication creates or reuses the confirmed normalized name under a unique index. Changes to the catalog and its cache version commit together. To review active categories and their assignment counts, run this query in pgAdmin against the Listings database.
+
+```sql
+SELECT c."Id", c."NormalizedName", c."BroadClass", count(lc."ListingId") AS assignments
+FROM "Categories" c
+LEFT JOIN "ListingCategories" lc ON lc."CategoryId" = c."Id"
+WHERE c."MergedIntoId" IS NULL
+GROUP BY c."Id"
+ORDER BY c."NormalizedName";
+```
+
+To merge two synonyms, connect as the procedure owner or an authorized database operator. Substitute the UUID of the duplicate first and the UUID of the category to keep second.
+
+```sql
+CALL merge_listing_category('<duplicate-id>'::uuid, '<category-to-keep-id>'::uuid);
+```
+
+The procedure moves assignments, coalesces duplicates and retains the old name as an alias for future publications. The old ID still resolves when selecting a category by ID or filtering listings. The public catalog shows the retained category.

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SmartLost.BuildingBlocks.Application.Transactions;
 using SmartLost.Contracts.Listings;
+using SmartLost.ListingsService.Application.Interfaces;
 using SmartLost.ListingsService.Domain.Entities;
 using SmartLost.ListingsService.Domain.Enums;
 using SmartLost.ListingsService.Infrastructure.Persistence;
@@ -8,7 +9,7 @@ using SmartLost.ListingsService.Infrastructure.Persistence;
 namespace SmartLost.ListingsService.Infrastructure.Seeding;
 
 /// <summary>Explicit development fixtures; existing records are preserved on sequential reruns.</summary>
-public sealed class ListingsDevelopmentSeeder(ListingsDbContext context, IUnitOfWork unitOfWork)
+public sealed class ListingsDevelopmentSeeder(ListingsDbContext context, IUnitOfWork unitOfWork, ICategoryCatalog catalog)
 {
     private static readonly Guid _lostAuthor = Guid.Parse("11111111-1111-4111-8111-111111111111");
     private static readonly Guid _foundAuthor = Guid.Parse("22222222-2222-4222-8222-222222222222");
@@ -19,14 +20,7 @@ public sealed class ListingsDevelopmentSeeder(ListingsDbContext context, IUnitOf
         Dictionary<string, Category> categories = new(StringComparer.Ordinal);
         foreach (string name in new[] { "backpack", "wallet", "keys" })
         {
-            Category? category = await context.Categories.OrderBy(value => value.Id)
-                .FirstOrDefaultAsync(value => value.NormalizedName == name, cancellationToken);
-            category ??= Category.Create(name);
-            if (context.Entry(category).State == EntityState.Detached)
-            {
-                context.Categories.Add(category);
-            }
-
+            Category category = await catalog.ResolveAsync(name, null, cancellationToken);
             categories.Add(name, category);
         }
 

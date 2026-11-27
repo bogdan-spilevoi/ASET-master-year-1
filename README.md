@@ -10,6 +10,8 @@ configurable HTTP inference and development-only test endpoints.
 
 ## Architecture
 
+In the local cluster, the [Angular web application](frontend/) runs behind Nginx. Browsers use one origin for the UI, Auth and Listings. Backend calls to Matching stay inside the service boundary.
+
 The intended architecture separates services by responsibility, with each service owning its
 data and communicating through explicit contracts. `SmartLost.AuthService.Api` currently implements that
 split with API, Application, Domain and Infrastructure projects, a dedicated PostgreSQL
@@ -231,6 +233,7 @@ The linked PlantUML sources and current hosting proposal describe the latest des
 
 | Module | Responsibility | Documentation |
 | --- | --- | --- |
+| [`frontend/`](frontend/) | Angular report board, profile with paginated personal listings, sign-in, sign-out, registration and draft publication through Nginx | [Web guide](frontend/README.md), [communication](frontend/COMMUNICATION.md) |
 | [`.github/`](.github/) | GitHub Actions workflows, PR/main validation, Coverlet gates, security and container checks | [CI guide](.github/README.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Api/`](src/Services/Auth/SmartLost.AuthService.Api/) | Register/login/refresh/confirm-email API, JWT issuance, rotating refresh sessions, safe confirmation page and an auth-only PostgreSQL database | [Module README](docs/AUTHSERVICE.md) |
 | [`src/Services/Auth/SmartLost.AuthService.Worker/`](src/Services/Auth/SmartLost.AuthService.Worker/) | Auth Outbox worker with RabbitMQ profile publication (`Publish`), confirmation delivery over SMTP (`Email`), and an alternative bounded HTTP transport (`Batch`) | [Worker README](src/Services/Auth/SmartLost.AuthService.Worker/README.md) |
@@ -545,11 +548,15 @@ it is off by default, Development-only and never applies migrations. See the
 
 ### Local Kubernetes for Auth, Listings and Matching
 
+The [web Dockerfile](frontend/Dockerfile) builds Angular with Node and serves it with Nginx. The `smartlost-web` ClusterIP Service is accessible at [localhost:4200](http://localhost:4200) while the web port-forward runs.
+
 Use the [local helper](k8s.sh) to avoid repeating Docker/Kind/kubectl commands:
 
 ```sh
 ./k8s.sh help
 ./k8s.sh up               # First setup/resume: build/load all, infra, migrate, start
+./k8s.sh deploy web       # Rebuild and roll out Angular/Nginx only
+./k8s.sh ui web           # Open localhost:4200 while this command runs
 ./k8s.sh deploy auth      # Update Auth API + migration bundle + Mailpit
 ./k8s.sh deploy listings  # Update Listings API + worker + migration bundle
 ./k8s.sh migrate auth     # Rebuild/load/apply Auth migrations (or: listings / all)
@@ -696,6 +703,7 @@ See [Matching tables and migration commands](src/Services/Matching/README.md#dat
 | --- | --- | --- |
 | `POST` | `/api/auth/register` | Creates a new user, queues a confirmation email in `OutboxMessages`, and returns access/refresh tokens |
 | `POST` | `/api/auth/login` | Authenticates by email and password and creates a token session |
+| `POST` | `/api/auth/logout` | Revokes the session identified by the refresh token in the JSON body. Returns 204 and can be retried. |
 | `POST` | `/api/auth/refresh` | Rotates a refresh token and returns a new access/refresh pair |
 | `GET` | `/api/auth/confirm-email?token=...` | Renders a safe HTML confirmation page whose button submits `POST /api/auth/confirm-email` (never consumes the token on `GET`) |
 | `POST` | `/api/auth/confirm-email` | Confirms an email address from a `{ "token": "..." }` JSON payload and consumes the single-use token |
@@ -736,13 +744,17 @@ Listings exposes draft uploads and public reads.
 
 | Method | Route | Description |
 | --- | --- | --- |
-| POST | `/api/listings/drafts` | Bearer JWT and multipart `type` + `photo`. Creates a private draft and returns its listing and photo references. [Swagger steps](src/Services/Listings/SmartLost.ListingsService.Api/README.md#upload-a-draft-from-swagger) |
+| POST | `/api/listings/drafts` | The web editor automatically requests traits and an embedding after creation, shows the uploaded photo, unlocks editing once both results are ready and saves user-selected traits on publication. Bearer JWT and multipart `type` + `photo`. Creates a private draft and returns its listing and photo references. [Swagger steps](src/Services/Listings/SmartLost.ListingsService.Api/README.md#upload-a-draft-from-swagger) |
 | POST | `/api/listings/drafts/{listingId}/traits` or `/embedding` under the same draft | Owner requests Qwen traits or a DINO embedding for the current photo. Returns 202. |
 | GET | `/api/listings/drafts/{listingId}/analysis` | Owner reads per-operation status, suggestions and embedding metadata. [Test from Swagger](src/Services/Listings/SmartLost.ListingsService.Api/README.md#analyze-the-uploaded-draft) |
-| GET | `/api/categories` | Category IDs/names, ordered by normalized name |
+| GET | `/api/categories` | Active category IDs, normalized names and optional broad classes, ordered by name |
+| GET | `/api/listings/mine` | Lists the JWT owner’s reports across all states. Optional `state`, `type`, `closureReason`, `pageIndex` and `pageSize`. |
 | GET | `/api/listings` | Open listings, optional type/category filters and zero-based pagination |
+| GET | `/api/listings/{id}/photo` | Public photo of an Open report. Use `?preview=true` for a JPEG thumbnail with a maximum edge of 480 pixels. |
+| GET | `/api/listings/drafts/{id}/photo` | Returns the uploaded image to the draft owner. |
+| DELETE | `/api/listings/drafts/{id}` | Deletes an owned draft and its uploaded photo. Returns 204. |
 | GET / PATCH | `/api/listings/drafts/{id}` | Owner reads or partially edits a private draft, including confirmed traits and categories. |
-| POST | `/api/listings/drafts/{id}/publish` | Owner publishes the reviewed revision. |
+| POST | `/api/listings/drafts/{id}/publish` | Owner publishes the reviewed revision and creates or reuses its category atomically. [Category review in pgAdmin](src/Services/Listings/SmartLost.ListingsService.Infrastructure/README.md#category-review) |
 | POST | `/api/listings/{id}/withdraw` | Owner closes an Open listing without a recovery award. |
 | POST | `/api/listings/{lostId}/match-decisions` | Lost owner accepts or rejects a manually identified Found listing at the reviewed revisions. |
 | POST | `/api/match-decisions/{id}/cancel-acceptance` or `/api/match-decisions/{id}/confirm-recovery` | Release the reservation or record the recovery and one finder award. [Swagger walkthrough](src/Services/Listings/SmartLost.ListingsService.Api/README.md#publish-and-recover-from-swagger) |
@@ -750,8 +762,7 @@ Listings exposes draft uploads and public reads.
 | GET | `/api/listings/{id:guid}` | Open listing details and safe optional photo metadata; hidden/missing records return 404 |
 
 `pageIndex` defaults to 0 and `pageSize` to 10 (1..100); optional `type=Lost`/`Found`
-and `categoryId=<guid>` combine with AND. Validation failures return 400. No BlobKey,
-image URL or bytes are returned. Public GETs require no JWT. Matching can read an exact uploaded revision through a separate internal listener. GET /api/categories
+and `categoryId=<guid>` combine with AND. Validation failures return 400. The list and detail JSON contain photo metadata. Image bytes are available from the separate photo route. Public GETs require no JWT. Matching can read an exact uploaded revision through a separate internal listener. GET /api/categories
 uses a 300-second MediatR cache in Redis (Compose/Kind), shared by all replicas; failures/cancellation are not stored. Development-only OpenAPI/Swagger and
 [full HTTP examples](src/Services/Listings/SmartLost.ListingsService.Api/README.md) are documented separately.
 
@@ -779,6 +790,8 @@ See the [Matching README](src/Services/Matching/README.md#test-endpoints-develop
 [test requests](src/Services/Matching/SmartLost.MatchingService.Api/MatchingService.Api.http).
 
 ## Quality and CI
+
+Container validation also builds the Angular production bundle from the npm lockfile and scans the resulting Nginx image.
 
 | Area | Current configuration |
 | --- | --- |
